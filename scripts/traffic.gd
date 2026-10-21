@@ -54,6 +54,7 @@ func _spawn() -> Dictionary:
 	_next_id += 1
 	var v := {
 		"id": _next_id, "node": node, "along_z": along_z, "road": road, "dir": dir,
+		"kind": ("auto" if is_auto else "car"),
 		"t": _rng.randf_range(-_world / 2.0, _world / 2.0),
 		"speed": cruise, "cruise": cruise,
 	}
@@ -114,6 +115,33 @@ func _traffic_limit(v: Dictionary) -> float:
 		if gap > 0.5 and gap < 12.0:
 			limit = minf(limit, w.speed * clampf(gap / 12.0, 0.0, 1.0))
 	return limit
+
+
+func nearest_enterable(pos: Vector3, max_dist: float) -> Dictionary:
+	## Closest ambient traffic vehicle within max_dist, as a takeover spec
+	## (id, kind, pos, heading). Empty dict when nothing is in range.
+	var best := {}
+	var best_d := max_dist * max_dist
+	for v in _vehicles:
+		var dx: float = v.node.position.x - pos.x
+		var dz: float = v.node.position.z - pos.z
+		if dx * dx + dz * dz < best_d:
+			best_d = dx * dx + dz * dz
+			best = {"id": v.id, "kind": v.kind,
+				"pos": v.node.position + Vector3(0.0, 1.0, 0.0),
+				"heading": v.node.rotation.y}
+	return best
+
+
+func take_vehicle(id: int) -> void:
+	## Remove a traffic vehicle (the player took it over) and spawn a
+	## replacement so street density stays constant.
+	for i in range(_vehicles.size()):
+		if _vehicles[i].id == id:
+			_vehicles[i].node.queue_free()
+			_vehicles.remove_at(i)
+			_vehicles.append(_spawn())
+			return
 
 
 func worst_hazard_speed(pos: Vector3) -> float:
