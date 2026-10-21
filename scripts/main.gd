@@ -13,6 +13,7 @@ const AutoScript := preload("res://scripts/auto.gd")
 const TrafficScript := preload("res://scripts/traffic.gd")
 const PedestrianScript := preload("res://scripts/pedestrians.gd")
 const HealthScript := preload("res://scripts/health.gd")
+const PoliceScript := preload("res://scripts/police.gd")
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
@@ -46,6 +47,9 @@ var _impact_cd := 0.0
 var _hud_hp_bg: ColorRect
 var _hud_hp_fill: ColorRect
 var _hud_hp_text: Label
+var _hud_stars: Label
+var _police: Node
+var _chaos_cd := 0.0
 var _flash: ColorRect
 var _fade: ColorRect
 var _hud_msg: Label
@@ -319,6 +323,12 @@ func _build_hud() -> void:
 	_hud_hp_text.add_theme_font_size_override("font_size", 13)
 	_hud_hp_text.visible = false
 	layer.add_child(_hud_hp_text)
+	_hud_stars = Label.new()
+	_hud_stars.position = Vector2(1004, 14)
+	_hud_stars.add_theme_font_size_override("font_size", 24)
+	_hud_stars.add_theme_color_override("font_color", Color(1.0, 0.83, 0.25))
+	_hud_stars.visible = false
+	layer.add_child(_hud_stars)
 	_flash = ColorRect.new()
 	_flash.color = Color(0.8, 0.05, 0.05, 0.0)
 	_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -390,6 +400,11 @@ func _start_game(def: Dictionary) -> void:
 	add_child(player)
 	_traffic.register_player(player)
 	_peds.register_player(player)
+	_police = PoliceScript.new()
+	add_child(_police)
+	_police.setup(WORLD, PITCH, ROAD, GRID + 1)
+	_police.register_player(player)
+	_police.stars_changed.connect(_on_stars_changed)
 	player.landed_hard.connect(_on_landed_hard)
 	_health = HealthScript.new()
 	add_child(_health)
@@ -425,6 +440,7 @@ func _process(delta: float) -> void:
 	if not _playing:
 		return
 	_impact_cd = maxf(_impact_cd - delta, 0.0)
+	_chaos_cd = maxf(_chaos_cd - delta, 0.0)
 	if not _dead:
 		if Input.is_action_just_pressed("interact"):
 			_toggle_vehicle()
@@ -440,6 +456,14 @@ func _process(delta: float) -> void:
 	if current_auto != null:
 		current_auto.drive(delta)
 		player.global_position = current_auto.global_position
+		if _chaos_cd <= 0.0 and current_auto.current_speed() > 3.0:
+			var struck: int = _peds.vehicle_strike(current_auto.global_position, 2.4)
+			if struck > 0:
+				_police.chaos_peds(struck)
+				_chaos_cd = 0.5
+			elif _traffic.ram_speed_at(current_auto.global_position) > 3.0:
+				_police.chaos_ram()
+				_chaos_cd = 0.5
 	_update_camera(delta)
 
 
@@ -505,6 +529,14 @@ func _on_health_changed(hp: float, max_hp: float) -> void:
 	_hud_hp_text.text = "HP %d" % int(ceilf(hp))
 
 
+func _on_stars_changed(s: int) -> void:
+	if s <= 0:
+		_hud_stars.visible = false
+		return
+	_hud_stars.visible = true
+	_hud_stars.text = "WANTED  " + "*".repeat(s)
+
+
 func _on_health_damaged(_amount: float) -> void:
 	if _flash_tween != null and _flash_tween.is_valid():
 		_flash_tween.kill()
@@ -540,6 +572,8 @@ func _nearest_landmark(pos: Vector3) -> Dictionary:
 
 func _on_died() -> void:
 	_dead = true
+	if _police != null:
+		_police.reset()
 	if current_auto != null:
 		current_auto.driver_inside = false
 		current_auto = null

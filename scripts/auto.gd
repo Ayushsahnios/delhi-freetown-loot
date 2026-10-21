@@ -69,6 +69,10 @@ func _physics_process(_delta: float) -> void:
 		return
 
 
+func current_speed() -> float:
+	return absf(_speed)
+
+
 func drive(delta: float) -> void:
 	## Called by Main while this auto is the active vehicle.
 	var accel := 0.0
