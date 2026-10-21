@@ -12,6 +12,7 @@ config/features=PackedStringArray("4.7")
 [autoload]
 
 Game="*res://scripts/game.gd"
+SaveGame="*res://scripts/save.gd"
 
 [display]
 
