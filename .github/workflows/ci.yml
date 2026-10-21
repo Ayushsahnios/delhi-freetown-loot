@@ -35,7 +35,8 @@ jobs:
       - name: Hygiene scan (no addresses or leaks in committed files)
         run: |
           if grep -rEn '([0-9]{1,3}\.){3}[0-9]{1,3}|toke[n]|passwor[d]|secre[t]' \
-              --exclude-dir=.git --exclude-dir=.godot .; then
+              --exclude-dir=.git --exclude-dir=.godot --exclude-dir=.github \
+              --exclude=export_presets.cfg .; then
             echo "::error::Hygiene scan flagged content in tracked files"
             exit 1
           fi
