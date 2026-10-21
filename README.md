@@ -1,36 +1,45 @@
-# Delhi Stories 🪯🛺 — Godot build
+# Delhi Mafia 🪯🛺
 
-A GTA–San-Andreas-inspired **free-roam game set in Delhi**, built from scratch
-on **Godot 4** (MIT-licensed engine). 100% original code and assets — everything
-procedural, nothing reverse-engineered, nothing licensed.
+**An indie free-roam crime game set in Delhi** — GTA–San-Andreas-inspired
+open world, built 100% from scratch on [Godot 4](https://godotengine.org)
+(MIT-licensed engine). Original code, original procedural assets, nothing
+reverse-engineered, nothing licensed.
 
-## Characters
+## The city
+Free-roam a stylized low-poly Delhi from minute one — India Gate, Connaught
+Place roundabout, Purani Dilli's red fort and dome, parks, and an elevated
+metro line overhead. Day/night cycle, drivable auto-rickshaws, more coming
+every milestone.
+
+## The legends
 - **Jaspreet "Sardar Ji" Singh** — auto-rickshaw legend of Connaught Place
 - **Riya Sharma** — delivery rider, fastest lanes in the city
 - **Monty "Dilli ka Don" Malhotra** — Connaught Place hustler
 
 ## Controls
-WASD / arrows — move · Shift — run · E — enter/exit vehicle · H — horn (planned)
+WASD / arrows — move · Shift — run · E — enter/exit vehicle
 
 ## Run it
-Open this project folder in **Godot 4.7+** and press F5. Or headless:
+Open this folder in **Godot 4.7+** and press F5, or headless:
 
 ```bash
-godot --headless --import   # verify the project parses
-godot --path .              # run
+godot --headless --import
+godot --path .
 ```
 
-Web export (hostable on any static file server):
+Web export (any static host):
 
 ```bash
 godot --headless --export-release "Web" build/index.html
 ```
 
-## Status
-v0.1 skeleton — character select, free-roam city grid (India Gate, CP
-roundabout, Purani Dilli, metro line), drivable auto-rickshaws, day/night
-cycle, chase camera. Roadmap and process: [PLAN.md](PLAN.md)
+## Roadmap
+v0.2 Streets Alive (traffic AI, pedestrians, minimap, audio) →
+v0.3 Wanted (police, heat) → v0.4 Paisa (missions, economy) →
+v0.5 Kahani (three story arcs, character switching) →
+v1.0 (Chandni Chowk, monsoon, radio). Full plan: [PLAN.md](PLAN.md)
 
 ## Legal
-Original work. Game *mechanics* inspired by the open-world genre; no code,
-assets, audio, names, or trademarks from any commercial game are used.
+Original work. Game *mechanics* take inspiration from the open-world genre;
+no code, assets, audio, names, or trademarks from any commercial game are
+used anywhere in this project.

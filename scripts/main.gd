@@ -296,12 +296,12 @@ func _build_select_ui() -> void:
 	center.add_child(box)
 
 	var title := Label.new()
-	title.text = "DELHI STORIES"
+	title.text = "DELHI MAFIA"
 	title.add_theme_font_size_override("font_size", 44)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 	var sub := Label.new()
-	sub.text = "Free-roam the capital. Pick your legend."
+	sub.text = "An indie free-roam crime game. Pick your legend."
 	sub.add_theme_font_size_override("font_size", 15)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sub)
