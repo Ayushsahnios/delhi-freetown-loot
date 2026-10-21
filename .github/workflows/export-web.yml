@@ -20,20 +20,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache Godot engine
+      - name: Cache Godot engine and export templates
         id: godot
         uses: actions/cache@v4
         with:
-          path: /home/runner/godot
-          key: godot-4.7.2-linux-x86_64
+          path: |
+            /home/runner/godot
+            /home/runner/.local/share/godot/export_templates
+          key: godot-4.7.2-engine-templates
 
-      - name: Fetch Godot 4.7.2
+      - name: Fetch Godot 4.7.2 and export templates
         if: steps.godot.outputs.cache-hit != 'true'
         run: |
-          mkdir -p /home/runner/godot
+          mkdir -p /home/runner/godot /home/runner/.local/share/godot/export_templates/4.7.2.stable
           curl -sL https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip -o /tmp/godot.zip
           python3 -m zipfile -e /tmp/godot.zip /home/runner/godot
           chmod +x /home/runner/godot/Godot_v4.7.2-stable_linux.x86_64
+          curl -sL https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz -o /tmp/templates.tpz
+          python3 -m zipfile -e /tmp/templates.tpz /tmp/templates
+          mv /tmp/templates/templates/* /home/runner/.local/share/godot/export_templates/4.7.2.stable/
 
       - name: Export web build
         run: |
