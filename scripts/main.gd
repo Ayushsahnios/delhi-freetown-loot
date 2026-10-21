@@ -15,6 +15,7 @@ const PedestrianScript := preload("res://scripts/pedestrians.gd")
 const HealthScript := preload("res://scripts/health.gd")
 const PoliceScript := preload("res://scripts/police.gd")
 const MissionScript := preload("res://scripts/missions.gd")
+const AudioScript := preload("res://scripts/audio.gd")
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
@@ -45,6 +46,7 @@ var _health: Node
 var _landmarks: Array[Dictionary] = []
 var _dead := false
 var _impact_cd := 0.0
+var _audio: Node
 var _hud_hp_bg: ColorRect
 var _hud_hp_fill: ColorRect
 var _hud_hp_text: Label
@@ -71,6 +73,9 @@ func _ready() -> void:
 	_peds = PedestrianScript.new()
 	add_child(_peds)
 	_peds.setup(WORLD, PITCH, ROAD, GRID + 1)
+	_audio = AudioScript.new()
+	add_child(_audio)
+	_audio.setup()
 	camera = Camera3D.new()
 	add_child(camera)
 	_build_hud()
@@ -453,6 +458,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	add_child(_missions)
 	_missions.register_player(player)
 	_cam_anchor = player.position
+	_audio.start_ambient()
 
 	var spots := [
 		[Vector3(ROAD / 2.0 + 1.5, 1.0, 2.0 * PITCH - BLOCK - 12.0), 0.0],
@@ -483,6 +489,8 @@ func _process(delta: float) -> void:
 	if not _dead:
 		if Input.is_action_just_pressed("interact"):
 			_toggle_vehicle()
+		if Input.is_action_just_pressed("horn"):
+			_audio.horn()
 		if Input.is_action_just_pressed("debug_hurt"):
 			_health.damage(25.0)
 		if current_auto == null and Input.is_action_just_pressed("debug_fall"):
