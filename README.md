@@ -11,7 +11,9 @@ Place roundabout, Purani Dilli's red fort and dome, parks, and an elevated
 metro line overhead. Day/night cycle, drivable auto-rickshaws, living
 traffic and pedestrians, player health with landmark respawns, and a
 wanted system — cause chaos and police jeeps hunt you through the grid;
-lose them and the heat cools. More coming every milestone.
+lose them and the heat cools. Glowing street markers hand out missions
+with reach and timed-delivery objectives for cash. More coming every
+milestone.
 
 ## The legends
 - **Jaspreet "Sardar Ji" Singh** — auto-rickshaw legend of Connaught Place
@@ -19,8 +21,8 @@ lose them and the heat cools. More coming every milestone.
 - **Monty "Dilli ka Don" Malhotra** — Connaught Place hustler
 
 ## Controls
-WASD / arrows — move · Shift — run · E — enter/exit vehicle · H — horn ·
-X — debug hurt · C — debug drop (fall damage)
+WASD / arrows — move · Shift — run · E — enter/exit vehicle · F — accept
+mission · H — horn · X — debug hurt · C — debug drop (fall damage)
 
 ## Run it
 Open this folder in **Godot 4.7+** and press F5, or headless:
