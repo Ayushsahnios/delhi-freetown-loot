@@ -16,6 +16,7 @@ const HealthScript := preload("res://scripts/health.gd")
 const PoliceScript := preload("res://scripts/police.gd")
 const MissionScript := preload("res://scripts/missions.gd")
 const AudioScript := preload("res://scripts/audio.gd")
+const MiniMapScript := preload("res://scripts/minimap.gd")
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
@@ -47,6 +48,7 @@ var _landmarks: Array[Dictionary] = []
 var _dead := false
 var _impact_cd := 0.0
 var _audio: Node
+var _minimap: Control
 var _hud_hp_bg: ColorRect
 var _hud_hp_fill: ColorRect
 var _hud_hp_text: Label
@@ -367,6 +369,9 @@ func _build_hud() -> void:
 	_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toast.visible = false
 	layer.add_child(_toast)
+	_minimap = MiniMapScript.new()
+	_minimap.setup(WORLD, PITCH, ROAD, GRID + 1, _landmarks)
+	layer.add_child(_minimap)
 
 
 func _build_select_ui() -> void:
@@ -459,6 +464,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_missions.register_player(player)
 	_cam_anchor = player.position
 	_audio.start_ambient()
+	_minimap.visible = true
 
 	var spots := [
 		[Vector3(ROAD / 2.0 + 1.5, 1.0, 2.0 * PITCH - BLOCK - 12.0), 0.0],
@@ -514,6 +520,11 @@ func _process(delta: float) -> void:
 				_police.chaos_ram()
 				_chaos_cd = 0.5
 	_update_camera(delta)
+	if _minimap.visible:
+		var focus: Node3D = current_auto if current_auto != null else player
+		_minimap.track(focus.global_position, focus.rotation.y)
+		_minimap.set_mission_target(_missions.active_target())
+		_minimap.set_police(_police.jeep_positions())
 
 
 func _toggle_vehicle() -> void:
@@ -579,6 +590,7 @@ func _on_health_changed(hp: float, max_hp: float) -> void:
 
 
 func _on_stars_changed(s: int) -> void:
+	_minimap.set_wanted(s)
 	if s <= 0:
 		_hud_stars.visible = false
 		return
