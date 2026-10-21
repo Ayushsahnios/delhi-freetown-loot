@@ -8,7 +8,8 @@ reverse-engineered, nothing licensed.
 ## The city
 Free-roam a stylized low-poly Delhi from minute one — India Gate, Connaught
 Place roundabout, Purani Dilli's red fort and dome, parks, and an elevated
-metro line overhead. Day/night cycle, drivable auto-rickshaws, more coming
+metro line overhead. Day/night cycle, drivable auto-rickshaws, living
+traffic and pedestrians, player health with landmark respawns — more coming
 every milestone.
 
 ## The legends
@@ -17,7 +18,8 @@ every milestone.
 - **Monty "Dilli ka Don" Malhotra** — Connaught Place hustler
 
 ## Controls
-WASD / arrows — move · Shift — run · E — enter/exit vehicle
+WASD / arrows — move · Shift — run · E — enter/exit vehicle · H — horn ·
+X — debug hurt · C — debug drop (fall damage)
 
 ## Run it
 Open this folder in **Godot 4.7+** and press F5, or headless:

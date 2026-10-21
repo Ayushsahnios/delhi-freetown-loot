@@ -12,6 +12,7 @@ const PlayerScript := preload("res://scripts/player.gd")
 const AutoScript := preload("res://scripts/auto.gd")
 const TrafficScript := preload("res://scripts/traffic.gd")
 const PedestrianScript := preload("res://scripts/pedestrians.gd")
+const HealthScript := preload("res://scripts/health.gd")
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
@@ -38,12 +39,24 @@ var _hud_clock: Label
 var _hud_day: Label
 var _select_layer: CanvasLayer
 var _cam_anchor := Vector3.ZERO
+var _health: Node
+var _landmarks: Array[Dictionary] = []
+var _dead := false
+var _impact_cd := 0.0
+var _hud_hp_bg: ColorRect
+var _hud_hp_fill: ColorRect
+var _hud_hp_text: Label
+var _flash: ColorRect
+var _fade: ColorRect
+var _hud_msg: Label
+var _flash_tween: Tween
 
 
 func _ready() -> void:
 	_rng.randomize()
 	_build_environment()
 	_build_city()
+	_build_landmarks()
 	_traffic = TrafficScript.new()
 	add_child(_traffic)
 	_traffic.setup(WORLD, PITCH, ROAD, GRID + 1)
@@ -289,6 +302,42 @@ func _build_hud() -> void:
 	_hud_day.add_theme_font_size_override("font_size", 13)
 	layer.add_child(_hud_day)
 
+	_hud_hp_bg = ColorRect.new()
+	_hud_hp_bg.color = Color(0.0, 0.0, 0.0, 0.55)
+	_hud_hp_bg.position = Vector2(16, 96)
+	_hud_hp_bg.size = Vector2(220, 14)
+	_hud_hp_bg.visible = false
+	layer.add_child(_hud_hp_bg)
+	_hud_hp_fill = ColorRect.new()
+	_hud_hp_fill.color = Color(0.25, 0.85, 0.3)
+	_hud_hp_fill.position = Vector2(19, 99)
+	_hud_hp_fill.size = Vector2(214, 8)
+	_hud_hp_fill.visible = false
+	layer.add_child(_hud_hp_fill)
+	_hud_hp_text = Label.new()
+	_hud_hp_text.position = Vector2(242, 93)
+	_hud_hp_text.add_theme_font_size_override("font_size", 13)
+	_hud_hp_text.visible = false
+	layer.add_child(_hud_hp_text)
+	_flash = ColorRect.new()
+	_flash.color = Color(0.8, 0.05, 0.05, 0.0)
+	_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(_flash)
+	_fade = ColorRect.new()
+	_fade.color = Color(0.0, 0.0, 0.0, 0.0)
+	_fade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(_fade)
+	_hud_msg = Label.new()
+	_hud_msg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_hud_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hud_msg.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_hud_msg.add_theme_font_size_override("font_size", 40)
+	_hud_msg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_msg.visible = false
+	layer.add_child(_hud_msg)
+
 
 func _build_select_ui() -> void:
 	_select_layer = CanvasLayer.new()
@@ -324,7 +373,7 @@ func _build_select_ui() -> void:
 		box.add_child(btn)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift run · E vehicle · free roam"
+	hint.text = "WASD move · Shift run · E vehicle · H horn · X debug hurt · C debug drop"
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
@@ -341,6 +390,16 @@ func _start_game(def: Dictionary) -> void:
 	add_child(player)
 	_traffic.register_player(player)
 	_peds.register_player(player)
+	player.landed_hard.connect(_on_landed_hard)
+	_health = HealthScript.new()
+	add_child(_health)
+	_health.changed.connect(_on_health_changed)
+	_health.damaged.connect(_on_health_damaged)
+	_health.died.connect(_on_died)
+	_hud_hp_bg.visible = true
+	_hud_hp_fill.visible = true
+	_hud_hp_text.visible = true
+	_on_health_changed(_health.hp, _health.MAX_HP)
 	_cam_anchor = player.position
 
 	var spots := [
@@ -365,8 +424,19 @@ func _process(delta: float) -> void:
 	_update_day(delta)
 	if not _playing:
 		return
-	if Input.is_action_just_pressed("interact"):
-		_toggle_vehicle()
+	_impact_cd = maxf(_impact_cd - delta, 0.0)
+	if not _dead:
+		if Input.is_action_just_pressed("interact"):
+			_toggle_vehicle()
+		if Input.is_action_just_pressed("debug_hurt"):
+			_health.damage(25.0)
+		if current_auto == null and Input.is_action_just_pressed("debug_fall"):
+			player.global_position += Vector3(0.0, 22.0, 0.0)
+		if current_auto == null and _impact_cd <= 0.0:
+			var hazard: float = _traffic.worst_hazard_speed(player.global_position)
+			if hazard > 2.5:
+				_health.damage(clampf(4.0 + hazard * 1.4, 8.0, 35.0))
+				_impact_cd = 0.8
 	if current_auto != null:
 		current_auto.drive(delta)
 		player.global_position = current_auto.global_position
@@ -424,3 +494,85 @@ func _update_day(delta: float) -> void:
 		var mm := int((hours - hh) * 60.0)
 		_hud_clock.text = "%02d:%02d" % [hh, mm]
 		_hud_day.text = "Delhi \u00b7 " + ("Day" if daylight > 0.55 else ("Golden hour" if daylight > 0.2 else "Night"))
+
+
+# ---------------------------------------------------------------- health
+
+func _on_health_changed(hp: float, max_hp: float) -> void:
+	var ratio: float = hp / max_hp
+	_hud_hp_fill.size.x = 214.0 * ratio
+	_hud_hp_fill.color = Color(1.0, 0.25, 0.2).lerp(Color(0.25, 0.85, 0.3), ratio)
+	_hud_hp_text.text = "HP %d" % int(ceilf(hp))
+
+
+func _on_health_damaged(_amount: float) -> void:
+	if _flash_tween != null and _flash_tween.is_valid():
+		_flash_tween.kill()
+	_flash.color.a = 0.45
+	_flash_tween = create_tween()
+	_flash_tween.tween_property(_flash, "color:a", 0.0, 0.4)
+
+
+func _on_landed_hard(impact: float) -> void:
+	if _health != null and not _dead:
+		_health.damage(clampf((impact - 14.0) * 3.0, 5.0, 50.0))
+
+
+func _build_landmarks() -> void:
+	_landmarks = [
+		{"name": "Connaught Place", "center": _block_center(5, 5), "spawn": _block_center(5, 5) + Vector3(14.0, 1.0, 14.0)},
+		{"name": "India Gate", "center": _block_center(5, 3), "spawn": _block_center(5, 3) + Vector3(0.0, 1.0, 10.0)},
+		{"name": "Purani Dilli Fort", "center": _block_center(3, 7), "spawn": _block_center(3, 7) + Vector3(0.0, 1.0, 12.0)},
+		{"name": "Neighbourhood Park", "center": _block_center(8, 2), "spawn": _block_center(8, 2) + Vector3(0.0, 1.0, 12.0)},
+	]
+
+
+func _nearest_landmark(pos: Vector3) -> Dictionary:
+	var best: Dictionary = _landmarks[0]
+	var best_d := INF
+	for lm in _landmarks:
+		var flat := Vector2(pos.x - lm.center.x, pos.z - lm.center.z)
+		if flat.length() < best_d:
+			best_d = flat.length()
+			best = lm
+	return best
+
+
+func _on_died() -> void:
+	_dead = true
+	if current_auto != null:
+		current_auto.driver_inside = false
+		current_auto = null
+		player.visible = true
+	player.controls_enabled = false
+	var lm := _nearest_landmark(player.global_position)
+	_hud_msg.text = "DOWN & OUT"
+	_hud_msg.visible = true
+	var tw := create_tween()
+	tw.tween_property(_fade, "color:a", 1.0, 0.7)
+	tw.tween_callback(_do_respawn.bind(lm))
+	tw.tween_interval(1.0)
+	tw.tween_property(_fade, "color:a", 0.0, 0.9)
+	tw.tween_callback(_respawn_done)
+	tw.tween_interval(1.5)
+	tw.tween_callback(_clear_invuln)
+
+
+func _do_respawn(lm: Dictionary) -> void:
+	_health.invulnerable = true
+	_health.respawn_reset()
+	player.global_position = lm.spawn
+	player.velocity = Vector3.ZERO
+	_cam_anchor = player.global_position + player.global_transform.basis.z * 10.0 + Vector3(0, 6, 0)
+	_hud_msg.text = "Back on your feet \u00b7 " + String(lm.name)
+
+
+func _respawn_done() -> void:
+	_hud_msg.visible = false
+	_dead = false
+	player.controls_enabled = true
+
+
+func _clear_invuln() -> void:
+	if _health != null:
+		_health.invulnerable = false
