@@ -1,4 +1,4 @@
-# DELHI MAFIA — Project Plan (Godot edition)
+# DELHI FREETOWN LOOT — Project Plan (Godot edition)
 
 > GTA–San-Andreas-inspired free-roam game, Delhi-themed, built from scratch.
 > Lead developer: OpenClaw agent · Product owner/reviewer: Ayush Sahni

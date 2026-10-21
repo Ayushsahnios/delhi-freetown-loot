@@ -1,11 +1,11 @@
 ; Engine configuration file.
-; Delhi Mafia — from-scratch Godot 4 build.
+; Delhi Freetown Loot — from-scratch Godot 4 build.
 
 config_version=5
 
 [application]
 
-config/name="Delhi Mafia"
+config/name="Delhi Freetown Loot"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7")
 

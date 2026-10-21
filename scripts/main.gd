@@ -1,5 +1,5 @@
 extends Node3D
-## Delhi Mafia — from-scratch build. All content procedural, no assets.
+## Delhi Freetown Loot — from-scratch build. All content procedural, no assets.
 
 const BLOCK := 34.0
 const ROAD := 12.0
@@ -296,12 +296,12 @@ func _build_select_ui() -> void:
 	center.add_child(box)
 
 	var title := Label.new()
-	title.text = "DELHI MAFIA"
+	title.text = "DELHI FREETOWN LOOT"
 	title.add_theme_font_size_override("font_size", 44)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 	var sub := Label.new()
-	sub.text = "An indie free-roam crime game. Pick your legend."
+	sub.text = "An indie free-roam loot game. Pick your legend."
 	sub.add_theme_font_size_override("font_size", 15)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sub)
