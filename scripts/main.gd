@@ -14,6 +14,7 @@ const TrafficScript := preload("res://scripts/traffic.gd")
 const PedestrianScript := preload("res://scripts/pedestrians.gd")
 const HealthScript := preload("res://scripts/health.gd")
 const PoliceScript := preload("res://scripts/police.gd")
+const MissionScript := preload("res://scripts/missions.gd")
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
@@ -49,6 +50,7 @@ var _hud_hp_fill: ColorRect
 var _hud_hp_text: Label
 var _hud_stars: Label
 var _police: Node
+var _missions: Node
 var _chaos_cd := 0.0
 var _flash: ColorRect
 var _fade: ColorRect
@@ -383,7 +385,7 @@ func _build_select_ui() -> void:
 		box.add_child(btn)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift run · E vehicle · H horn · X debug hurt · C debug drop"
+	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · X debug hurt · C debug drop"
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
@@ -415,6 +417,9 @@ func _start_game(def: Dictionary) -> void:
 	_hud_hp_fill.visible = true
 	_hud_hp_text.visible = true
 	_on_health_changed(_health.hp, _health.MAX_HP)
+	_missions = MissionScript.new()
+	add_child(_missions)
+	_missions.register_player(player)
 	_cam_anchor = player.position
 
 	var spots := [
@@ -574,6 +579,8 @@ func _on_died() -> void:
 	_dead = true
 	if _police != null:
 		_police.reset()
+	if _missions != null:
+		_missions.abort_active("You went down")
 	if current_auto != null:
 		current_auto.driver_inside = false
 		current_auto = null
@@ -605,6 +612,8 @@ func _respawn_done() -> void:
 	_hud_msg.visible = false
 	_dead = false
 	player.controls_enabled = true
+	if _missions != null:
+		_missions.resume()
 
 
 func _clear_invuln() -> void:
