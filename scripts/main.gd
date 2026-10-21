@@ -56,6 +56,8 @@ var _flash: ColorRect
 var _fade: ColorRect
 var _hud_msg: Label
 var _flash_tween: Tween
+var _toast: Label
+var _toast_tween: Tween
 
 
 func _ready() -> void:
@@ -73,6 +75,7 @@ func _ready() -> void:
 	add_child(camera)
 	_build_hud()
 	_build_select_ui()
+	get_tree().root.close_requested.connect(_save_game)
 
 
 # ---------------------------------------------------------------- environment
@@ -349,6 +352,16 @@ func _build_hud() -> void:
 	_hud_msg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_msg.visible = false
 	layer.add_child(_hud_msg)
+	_toast = Label.new()
+	_toast.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_toast.offset_bottom = -46.0
+	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	_toast.add_theme_font_size_override("font_size", 20)
+	_toast.add_theme_color_override("font_color", Color(0.85, 1.0, 0.9))
+	_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_toast.visible = false
+	layer.add_child(_toast)
 
 
 func _build_select_ui() -> void:
@@ -377,6 +390,25 @@ func _build_select_ui() -> void:
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sub)
 
+	var saved := SaveGame.read()
+	if not saved.is_empty():
+		var cont_def := _character_by_id(String(saved.get("character", "")))
+		if not cont_def.is_empty():
+			var runs := 0
+			for id in saved.get("missions_completed", {}):
+				runs += int(saved["missions_completed"][id])
+			var cont := Button.new()
+			cont.text = "CONTINUE  ·  %s\nRs %d  ·  %d missions run" % [
+					String(cont_def["name"]), int(saved.get("cash", 0)), runs]
+			cont.custom_minimum_size = Vector2(460, 0)
+			cont.pressed.connect(_start_game.bind(cont_def, saved))
+			box.add_child(cont)
+			var fresh := Label.new()
+			fresh.text = "— or start fresh below —"
+			fresh.add_theme_font_size_override("font_size", 12)
+			fresh.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			box.add_child(fresh)
+
 	for def in Game.CHARACTERS:
 		var btn := Button.new()
 		btn.text = "%s\n%s" % [def["name"], def["role"]]
@@ -385,13 +417,13 @@ func _build_select_ui() -> void:
 		box.add_child(btn)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · X debug hurt · C debug drop"
+	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · F9 save · X debug hurt · C debug drop"
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
 
 
-func _start_game(def: Dictionary) -> void:
+func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	Game.selected_character = def
 	_select_layer.visible = false
 	_hud_name.text = String(def["name"])
@@ -436,6 +468,8 @@ func _start_game(def: Dictionary) -> void:
 		_autos.append(a)
 
 	_playing = true
+	if not save.is_empty():
+		_apply_save(save)
 
 
 # ---------------------------------------------------------------- loop
@@ -453,6 +487,8 @@ func _process(delta: float) -> void:
 			_health.damage(25.0)
 		if current_auto == null and Input.is_action_just_pressed("debug_fall"):
 			player.global_position += Vector3(0.0, 22.0, 0.0)
+		if Input.is_action_just_pressed("save"):
+			_save_game()
 		if current_auto == null and _impact_cd <= 0.0:
 			var hazard: float = _traffic.worst_hazard_speed(player.global_position)
 			if hazard > 2.5:
@@ -619,3 +655,82 @@ func _respawn_done() -> void:
 func _clear_invuln() -> void:
 	if _health != null:
 		_health.invulnerable = false
+
+
+# ---------------------------------------------------------------- save/load
+
+func _save_game() -> void:
+	var data := _collect_save()
+	if data.is_empty():
+		return
+	_show_toast("GAME SAVED" if SaveGame.write(data) else "SAVE FAILED")
+
+
+func _collect_save() -> Dictionary:
+	if not _playing or player == null or not is_instance_valid(player) \
+			or _health == null or _missions == null:
+		return {}
+	# Local transform == world transform here (main sits at the origin),
+	# and .position stays readable during teardown, unlike the global_
+	# getters which error out on the quit-time save path.
+	var pos := player.position
+	var heading := player.rotation.y
+	if current_auto != null:
+		pos = current_auto.position
+		heading = current_auto.rotation.y
+	return {
+		"character": String(Game.selected_character.get("id", "")),
+		"cash": _missions.cash,
+		"hp": _health.hp,
+		"pos": [pos.x, pos.y, pos.z],
+		"heading": heading,
+		"day_t": day_t,
+		"missions_completed": _missions.completed,
+	}
+
+
+func _apply_save(save: Dictionary) -> void:
+	day_t = clampf(float(save.get("day_t", day_t)), 0.0, 1.0)
+	_health.restore(float(save.get("hp", 100.0)))
+	var missions_done = save.get("missions_completed", {})
+	if typeof(missions_done) != TYPE_DICTIONARY:
+		missions_done = {}
+	_missions.restore(int(save.get("cash", 0)), missions_done)
+	var pos := player.global_position
+	var raw = save.get("pos", [])
+	if typeof(raw) == TYPE_ARRAY and raw.size() == 3:
+		pos = Vector3(float(raw[0]), maxf(float(raw[1]), 1.0), float(raw[2]))
+	player.global_position = pos
+	player.rotation.y = float(save.get("heading", 0.0))
+	player.velocity = Vector3.ZERO
+	_cam_anchor = player.global_position + player.global_transform.basis.z * 10.0 + Vector3(0, 6, 0)
+	_show_toast("WELCOME BACK  ·  GAME LOADED")
+
+
+func _exit_tree() -> void:
+	## Last-resort save when the process ends without a window-close
+	## signal (belt-and-braces alongside close_requested).
+	var data := _collect_save()
+	if not data.is_empty():
+		SaveGame.write(data)
+
+
+func _show_toast(text: String) -> void:
+	if _toast == null:
+		return
+	if _toast_tween != null and _toast_tween.is_valid():
+		_toast_tween.kill()
+	_toast.text = text
+	_toast.visible = true
+	_toast.modulate.a = 1.0
+	_toast_tween = create_tween()
+	_toast_tween.tween_interval(1.4)
+	_toast_tween.tween_property(_toast, "modulate:a", 0.0, 0.5)
+	_toast_tween.tween_callback(func() -> void: _toast.visible = false)
+
+
+func _character_by_id(id: String) -> Dictionary:
+	for def in Game.CHARACTERS:
+		if String(def["id"]) == id:
+			return def
+	return {}

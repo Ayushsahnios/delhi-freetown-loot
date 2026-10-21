@@ -52,6 +52,7 @@ func _setup_inputs() -> void:
 	_add_keys("horn", [KEY_H])
 	_add_keys("debug_hurt", [KEY_X])
 	_add_keys("debug_fall", [KEY_C])
+	_add_keys("save", [KEY_F9])
 
 
 func _add_keys(action: String, keycodes: Array) -> void:

@@ -14,6 +14,8 @@ const MARKER_CD := 4.0
 
 var cash := 0
 var enabled := true
+## Mission id -> times completed; persisted in the save file.
+var completed := {}
 
 var _player: CharacterBody3D = null
 var _defs: Array[Dictionary] = []
@@ -72,6 +74,22 @@ func abort_active(reason: String) -> void:
 
 func resume() -> void:
 	enabled = true
+
+
+func restore(saved_cash: int, saved_completed: Dictionary) -> void:
+	## Load-from-save entry point: cash, HUD, completion records.
+	## Repeatable missions stay at their markers; any one-shot mission
+	## completed in a past session stays done and hidden.
+	cash = maxi(saved_cash, 0)
+	_cash_hud.text = "Rs %d" % cash
+	completed = {}
+	for key in saved_completed:
+		completed[String(key)] = maxi(int(saved_completed[key]), 0)
+	for def in _defs:
+		var id := String(def["id"])
+		if int(completed.get(id, 0)) > 0 and not bool(def.get("repeatable", false)):
+			_states[id] = "done"
+			_show_giver(id, false)
 
 
 # ---------------------------------------------------------------- data
@@ -288,6 +306,8 @@ func _complete_mission() -> void:
 	var reward := int(def["reward"])
 	cash += reward
 	_cash_hud.text = "Rs %d" % cash
+	var id := String(def["id"])
+	completed[id] = int(completed.get(id, 0)) + 1
 	_toast.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55))
 	_toast.text = "MISSION COMPLETE  ·  + Rs %d" % reward
 	_toast.visible = true

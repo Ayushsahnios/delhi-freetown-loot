@@ -47,6 +47,14 @@ func respawn_reset() -> void:
 	changed.emit(hp, MAX_HP)
 
 
+func restore(saved_hp: float) -> void:
+	## Load-from-save entry point: never restore a dead state.
+	hp = clampf(saved_hp, 1.0, MAX_HP)
+	_dead = false
+	_since_hit = 0.0
+	changed.emit(hp, MAX_HP)
+
+
 func _process(delta: float) -> void:
 	if _dead or hp >= MAX_HP:
 		return
