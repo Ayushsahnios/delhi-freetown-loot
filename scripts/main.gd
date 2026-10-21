@@ -10,6 +10,7 @@ const DAY_LEN := 240.0
 
 const PlayerScript := preload("res://scripts/player.gd")
 const AutoScript := preload("res://scripts/auto.gd")
+const TrafficScript := preload("res://scripts/traffic.gd")
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
@@ -29,6 +30,7 @@ var current_auto: CharacterBody3D = null
 var _autos: Array[CharacterBody3D] = []
 var _rng := RandomNumberGenerator.new()
 var _playing := false
+var _traffic: Node
 var _hud_name: Label
 var _hud_clock: Label
 var _hud_day: Label
@@ -40,6 +42,9 @@ func _ready() -> void:
 	_rng.randomize()
 	_build_environment()
 	_build_city()
+	_traffic = TrafficScript.new()
+	add_child(_traffic)
+	_traffic.setup(WORLD, PITCH, ROAD, GRID + 1)
 	camera = Camera3D.new()
 	add_child(camera)
 	_build_hud()
@@ -329,6 +334,7 @@ func _start_game(def: Dictionary) -> void:
 	player.setup(def)
 	player.position = Vector3(ROAD / 2.0 + 2.0, 1.0, 2.0 * PITCH - BLOCK)
 	add_child(player)
+	_traffic.register_player(player)
 	_cam_anchor = player.position
 
 	var spots := [
