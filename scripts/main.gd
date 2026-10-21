@@ -1,5 +1,5 @@
 extends Node3D
-## Delhi Stories — from-scratch build. All content procedural, no assets.
+## Delhi Mafia — from-scratch build. All content procedural, no assets.
 
 const BLOCK := 34.0
 const ROAD := 12.0
