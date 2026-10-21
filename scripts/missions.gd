@@ -64,6 +64,15 @@ func register_player(p: CharacterBody3D) -> void:
 	_player = p
 
 
+func active_target() -> Vector3:
+	## World position of the current objective marker, for the minimap.
+	## Vector3.INF when no mission is running.
+	if _active.is_empty():
+		return Vector3.INF
+	var objs: Array = _active["def"]["objs"]
+	return objs[int(_active["stage"])]["pos"]
+
+
 func abort_active(reason: String) -> void:
 	## Called by the main scene when the player goes down: fail any
 	## running mission and pause new offers until respawn completes.

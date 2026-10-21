@@ -72,6 +72,14 @@ func stars() -> int:
 	return clampi(int(floor(heat + 0.001)), 0, MAX_STARS)
 
 
+func jeep_positions() -> Array[Vector3]:
+	## Live positions of the pursuing jeeps, for the minimap.
+	var pts: Array[Vector3] = []
+	for j in _jeeps:
+		pts.append(j.node.position)
+	return pts
+
+
 func _raise(amount: float) -> void:
 	heat = minf(heat + amount, MAX_HEAT)
 	_unseen = 0.0
