@@ -467,15 +467,17 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_minimap.visible = true
 
 	var spots := [
-		[Vector3(ROAD / 2.0 + 1.5, 1.0, 2.0 * PITCH - BLOCK - 12.0), 0.0],
-		[Vector3(-ROAD / 2.0 - 1.5, 1.0, -PITCH + 6.0), PI],
-		[Vector3(3.0 * PITCH - BLOCK, 1.0, ROAD / 2.0 + 1.5), PI / 2.0],
-		[Vector3(-2.0 * PITCH + 8.0, 1.0, ROAD / 2.0 + 1.5), PI / 2.0],
-		[Vector3(4.0 * PITCH - BLOCK + 20.0, 1.0, -ROAD / 2.0 - 1.5), -PI / 2.0],
+		[Vector3(ROAD / 2.0 + 1.5, 1.0, 2.0 * PITCH - BLOCK - 12.0), 0.0, "auto"],
+		[Vector3(-ROAD / 2.0 - 1.5, 1.0, -PITCH + 6.0), PI, "car"],
+		[Vector3(3.0 * PITCH - BLOCK, 1.0, ROAD / 2.0 + 1.5), PI / 2.0, "car"],
+		[Vector3(-2.0 * PITCH + 8.0, 1.0, ROAD / 2.0 + 1.5), PI / 2.0, "van"],
+		[Vector3(4.0 * PITCH - BLOCK + 20.0, 1.0, -ROAD / 2.0 - 1.5), -PI / 2.0, "auto"],
+		[Vector3(ROAD / 2.0 + 1.5, 1.0, -3.0 * PITCH + 8.0), 0.0, "car"],
+		[Vector3(-3.0 * PITCH + 4.0, 1.0, -ROAD / 2.0 - 1.5), -PI / 2.0, "van"],
 	]
 	for spot in spots:
 		var a := AutoScript.new()
-		a.setup(spot[0], spot[1])
+		a.setup(spot[0], spot[1], spot[2])
 		add_child(a)
 		_autos.append(a)
 
@@ -544,6 +546,20 @@ func _toggle_vehicle() -> void:
 			best = a
 	if best != null:
 		current_auto = best
+		current_auto.driver_inside = true
+		player.visible = false
+		return
+	# No parked vehicle nearby: take over the closest ambient traffic vehicle.
+	# Traffic brakes for the player standing in its lane, so the nearest one
+	# is usually stopped when you step in front of it.
+	var hit: Dictionary = _traffic.nearest_enterable(player.global_position, 7.0)
+	if not hit.is_empty():
+		var v := AutoScript.new()
+		v.setup(hit["pos"], hit["heading"], hit["kind"])
+		add_child(v)
+		_autos.append(v)
+		_traffic.take_vehicle(int(hit["id"]))
+		current_auto = v
 		current_auto.driver_inside = true
 		player.visible = false
 
