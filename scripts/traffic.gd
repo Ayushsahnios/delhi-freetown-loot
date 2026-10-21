@@ -130,6 +130,18 @@ func worst_hazard_speed(pos: Vector3) -> float:
 	return worst
 
 
+func ram_speed_at(pos: Vector3) -> float:
+	## Fastest traffic vehicle overlapping `pos`; main.gd turns this into
+	## wanted heat when the player's auto rams traffic.
+	var worst := 0.0
+	for v in _vehicles:
+		var dx: float = v.node.position.x - pos.x
+		var dz: float = v.node.position.z - pos.z
+		if dx * dx + dz * dz < 8.4:
+			worst = maxf(worst, absf(v.speed))
+	return worst
+
+
 # ---------------------------------------------------------------- visuals
 
 func _build_auto(parent: Node3D) -> void:

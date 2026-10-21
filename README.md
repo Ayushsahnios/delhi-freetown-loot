@@ -9,8 +9,9 @@ reverse-engineered, nothing licensed.
 Free-roam a stylized low-poly Delhi from minute one — India Gate, Connaught
 Place roundabout, Purani Dilli's red fort and dome, parks, and an elevated
 metro line overhead. Day/night cycle, drivable auto-rickshaws, living
-traffic and pedestrians, player health with landmark respawns — more coming
-every milestone.
+traffic and pedestrians, player health with landmark respawns, and a
+wanted system — cause chaos and police jeeps hunt you through the grid;
+lose them and the heat cools. More coming every milestone.
 
 ## The legends
 - **Jaspreet "Sardar Ji" Singh** — auto-rickshaw legend of Connaught Place

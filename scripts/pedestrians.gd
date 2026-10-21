@@ -142,6 +142,26 @@ func _scatter(origin: Vector3) -> void:
 		v.panic_dir = away.normalized().rotated(Vector3.UP, _rng.randf_range(-0.6, 0.6))
 
 
+func vehicle_strike(pos: Vector3, radius: float) -> int:
+	## Player auto plowed into the crowd: stricken NPCs bolt away and the
+	## count feeds the wanted system (main.gd).
+	var n := 0
+	for v in _peds:
+		var p: Vector3 = v.node.position
+		var away := Vector2(p.x - pos.x, p.z - pos.z)
+		if away.length() > radius:
+			continue
+		n += 1
+		var dir := Vector3(away.x, 0.0, away.y)
+		if away.length() < 0.05:
+			dir = Vector3(_rng.randf_range(-1.0, 1.0), 0.0, _rng.randf_range(-1.0, 1.0))
+		v.panic = PANIC_TIME
+		v.rejoin = 0.0
+		v.cd = 1.0
+		v.panic_dir = dir.normalized().rotated(Vector3.UP, _rng.randf_range(-0.5, 0.5))
+	return n
+
+
 func _flee_tick(v: Dictionary, delta: float) -> void:
 	if v.rejoin > 0.0:
 		v.rejoin += delta
