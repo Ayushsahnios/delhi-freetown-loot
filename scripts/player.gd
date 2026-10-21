@@ -4,12 +4,18 @@ extends CharacterBody3D
 
 const WALK_SPEED := 6.5
 const RUN_SPEED := 11.5
+const FALL_SAFE_SPEED := 14.0
+
+signal landed_hard(impact_speed: float)
 
 var run_boost := 1.0
+var controls_enabled := true
 
 var _legs: Array[MeshInstance3D] = []
 var _arms: Array[MeshInstance3D] = []
 var _walk_phase := 0.0
+var _air_vy := 0.0
+var _was_on_floor := true
 
 
 func setup(def: Dictionary) -> void:
@@ -76,11 +82,13 @@ func _box(size: Vector3, color: Color) -> MeshInstance3D:
 func _physics_process(delta: float) -> void:
 	if not is_inside_tree():
 		return
-	var input := Vector3(
-		Input.get_action_strength("move_right") - Input.get_action_strength("move_left"),
-		0.0,
-		Input.get_action_strength("move_back") - Input.get_action_strength("move_forward")
-	)
+	var input := Vector3.ZERO
+	if controls_enabled:
+		input = Vector3(
+			Input.get_action_strength("move_right") - Input.get_action_strength("move_left"),
+			0.0,
+			Input.get_action_strength("move_back") - Input.get_action_strength("move_forward")
+		)
 	var moving := input.length() > 0.05
 	if moving:
 		var speed: float = WALK_SPEED
@@ -100,8 +108,16 @@ func _physics_process(delta: float) -> void:
 		velocity.y = 0.0
 	else:
 		velocity.y -= 25.0 * delta
+		_air_vy = minf(_air_vy, velocity.y)
 
 	move_and_slide()
+
+	if is_on_floor() and not _was_on_floor:
+		var impact := -_air_vy
+		if impact > FALL_SAFE_SPEED:
+			landed_hard.emit(impact)
+		_air_vy = 0.0
+	_was_on_floor = is_on_floor()
 
 	var amp := (0.55 if moving else 0.0)
 	var s := sin(_walk_phase) * amp

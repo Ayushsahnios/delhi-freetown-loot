@@ -116,6 +116,20 @@ func _traffic_limit(v: Dictionary) -> float:
 	return limit
 
 
+func worst_hazard_speed(pos: Vector3) -> float:
+	## Fastest traffic vehicle overlapping `pos`; main.gd turns this into
+	## on-foot impact damage. Kinematic movers, so no physics events exist.
+	var worst := 0.0
+	for v in _vehicles:
+		if v.speed <= 2.5:
+			continue
+		var dx: float = v.node.position.x - pos.x
+		var dz: float = v.node.position.z - pos.z
+		if dx * dx + dz * dz < 5.29:
+			worst = maxf(worst, v.speed)
+	return worst
+
+
 # ---------------------------------------------------------------- visuals
 
 func _build_auto(parent: Node3D) -> void:
