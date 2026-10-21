@@ -1,7 +1,9 @@
 extends Node
-## Mission system skeleton: data-driven mission table, glowing street
-## markers, approach briefs, reach / timed-deliver objectives, fail flow,
-## cash rewards. All visuals procedural — zero assets.
+## Mission system: data-driven mission table, glowing street markers,
+## approach briefs, multi-stage reach / timed-delivery objectives, rival
+## racers, fail flow, cash rewards. All visuals procedural — zero assets.
+## First two real jobs: the chai run (three stops before it cools) and
+## the CP ring race (checkpoints against two AI rickshaws).
 
 signal mission_completed(title: String, reward: int)
 signal mission_failed(title: String)
@@ -34,10 +36,21 @@ var _toast: Label
 var _cash_hud: Label
 var _obj_ring: MeshInstance3D = null
 var _obj_beam: MeshInstance3D = null
+var _racers: Array[Dictionary] = []
+const RACER_CANOPIES := [Color(0.95, 0.35, 0.15), Color(0.25, 0.55, 0.95)]
 
 
 func _ready() -> void:
 	_build_defs()
+	for def in _defs:
+		if def.has("objectives"):
+			def["objs"] = def["objectives"]
+			if not def.has("time"):
+				def["time"] = 0.0
+		else:
+			def["objs"] = [def["objective"]]
+			if not def.has("time"):
+				def["time"] = float(def["objective"].get("time", 0.0))
 	_build_ui()
 	for def in _defs:
 		_spawn_giver(def)
@@ -95,6 +108,84 @@ func _build_defs() -> void:
 			"reward": 400,
 			"repeatable": true,
 		},
+		{
+			"id": "chai_run",
+			"title": "Chai run: three cups, one flask",
+			"brief": "Chotu called in sick and the flask is full. Run three cups across town — the guard at India Gate, the chowkidar at Purani Dilli, the joggers at Neighbourhood Park — before the chai cools. An auto strongly advised.",
+			"giver": Vector3(6.0, 0.0, -16.0),
+			"objectives": [
+				{
+					"kind": "deliver",
+					"label": "Cup 1 — the guard at India Gate",
+					"pos": Vector3(0.0, 0.0, -82.0),
+					"radius": 8.0,
+				},
+				{
+					"kind": "deliver",
+					"label": "Cup 2 — the chowkidar at Purani Dilli",
+					"pos": Vector3(-92.0, 0.0, 104.0),
+					"radius": 8.0,
+				},
+				{
+					"kind": "deliver",
+					"label": "Cup 3 — the joggers at Neighbourhood Park",
+					"pos": Vector3(138.0, 0.0, -126.0),
+					"radius": 8.0,
+				},
+			],
+			"time": 130.0,
+			"reward": 500,
+			"repeatable": true,
+		},
+		{
+			"id": "cp_race",
+			"title": "CP ring race: rickshaw rally",
+			"brief": "Two rival pullers talk big around the Connaught Place ring. Grab an auto, tag the start line on the west road, and lap the ring through all four crossings before they do. Mind the traffic.",
+			"giver": Vector3(-30.0, 0.0, 6.0),
+			"objectives": [
+				{
+					"kind": "reach",
+					"label": "Tag the start line",
+					"pos": Vector3(-40.0, 0.0, 6.0),
+					"radius": 8.0,
+				},
+				{
+					"kind": "reach",
+					"label": "Checkpoint — north-west crossing",
+					"pos": Vector3(-40.0, 0.0, -40.0),
+					"radius": 8.0,
+				},
+				{
+					"kind": "reach",
+					"label": "Checkpoint — north-east crossing",
+					"pos": Vector3(6.0, 0.0, -40.0),
+					"radius": 8.0,
+				},
+				{
+					"kind": "reach",
+					"label": "Checkpoint — south-east crossing",
+					"pos": Vector3(6.0, 0.0, 6.0),
+					"radius": 8.0,
+				},
+				{
+					"kind": "reach",
+					"label": "Finish — back to the start line",
+					"pos": Vector3(-40.0, 0.0, 6.0),
+					"radius": 8.0,
+				},
+			],
+			"race": {
+				"corners": [
+					Vector3(-40.0, 0.0, 6.0),
+					Vector3(-40.0, 0.0, -40.0),
+					Vector3(6.0, 0.0, -40.0),
+					Vector3(6.0, 0.0, 6.0),
+					],
+				"rivals": [13.5, 15.0],
+			},
+			"reward": 600,
+			"repeatable": true,
+		},
 	]
 
 
@@ -143,19 +234,28 @@ func _process(delta: float) -> void:
 
 func _tick_active(delta: float) -> void:
 	var def: Dictionary = _active["def"]
-	var obj: Dictionary = def["objective"]
-	if float(obj["time"]) > 0.0:
+	var objs: Array = def["objs"]
+	var stage := int(_active["stage"])
+	var obj: Dictionary = objs[stage]
+	if float(_active["time"]) > 0.0:
 		_active["left"] = float(_active["left"]) - delta
 		if float(_active["left"]) <= 0.0:
-			_fail_mission("too slow")
+			_fail_mission("the chai went cold")
+			return
+	if def.has("race"):
+		if _tick_racers(delta):
+			_fail_mission("a rival crossed the line first")
 			return
 	var d := _flat_dist(_player.global_position, obj["pos"])
-	var txt := "> " + String(obj["label"]) + "  ·  %d m" % int(round(d))
-	if float(obj["time"]) > 0.0:
+	var txt := "> %s  (%d/%d)  ·  %d m" % [String(obj["label"]), stage + 1, objs.size(), int(round(d))]
+	if float(_active["time"]) > 0.0:
 		txt += "  ·  " + _fmt_time(float(_active["left"]))
 	_obj_hud.text = txt
 	if d <= float(obj["radius"]):
-		_complete_mission()
+		if stage == objs.size() - 1:
+			_complete_mission()
+		else:
+			_advance_stage(objs, stage)
 
 
 # ---------------------------------------------------------------- flow
@@ -164,9 +264,23 @@ func _start_mission(def: Dictionary) -> void:
 	var id := String(def["id"])
 	_states[id] = "active"
 	_show_giver(id, false)
-	_active = {"def": def, "left": float(def["objective"]["time"])}
-	_spawn_objective(def["objective"])
+	_active = {"def": def, "stage": 0, "time": float(def["time"]), "left": float(def["time"])}
+	if def.has("race"):
+		_spawn_racers(def)
+	_spawn_objective(def["objs"][0])
 	_obj_hud.visible = true
+
+
+func _advance_stage(objs: Array, stage: int) -> void:
+	_active["stage"] = stage + 1
+	_spawn_objective(objs[stage + 1])
+	_toast.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55))
+	if _active["def"].has("race"):
+		_toast.text = "CHECKPOINT %d/%d" % [stage + 1, objs.size() - 1]
+	else:
+		_toast.text = "DELIVERED  ·  %d of %d cups" % [stage + 1, objs.size()]
+	_toast.visible = true
+	_toast_t = 1.2
 
 
 func _complete_mission() -> void:
@@ -194,12 +308,10 @@ func _fail_mission(reason: String) -> void:
 
 func _end_mission(def: Dictionary) -> void:
 	var id := String(def["id"])
-	if _obj_ring != null:
-		_obj_ring.queue_free()
-		_obj_ring = null
-	if _obj_beam != null:
-		_obj_beam.queue_free()
-		_obj_beam = null
+	_clear_marker()
+	for r in _racers:
+		r["node"].queue_free()
+	_racers.clear()
 	_obj_hud.visible = false
 	_active = {}
 	if bool(def.get("repeatable", false)):
@@ -237,6 +349,7 @@ func _spawn_giver(def: Dictionary) -> void:
 
 
 func _spawn_objective(obj: Dictionary) -> void:
+	_clear_marker()
 	var pos: Vector3 = obj["pos"]
 	var radius := float(obj["radius"])
 	_obj_ring = MeshInstance3D.new()
@@ -257,6 +370,105 @@ func _spawn_objective(obj: Dictionary) -> void:
 	_obj_beam.mesh = bm
 	_obj_beam.position = pos + Vector3(0.0, 30.0, 0.0)
 	add_child(_obj_beam)
+
+
+func _clear_marker() -> void:
+	if _obj_ring != null:
+		_obj_ring.queue_free()
+		_obj_ring = null
+	if _obj_beam != null:
+		_obj_beam.queue_free()
+		_obj_beam = null
+
+
+func _spawn_racers(def: Dictionary) -> void:
+	## Two rival rickshaws lap the circuit analytically, corner to corner
+	## along the road ring — kinematic, like traffic, so they never get
+	## stuck on geometry.
+	var race: Dictionary = def["race"]
+	var corners: Array = race["corners"]
+	var from: Vector3 = corners[0]
+	var to: Vector3 = corners[1]
+	var lane := (to - from).normalized().cross(Vector3.UP)
+	for i in range(race["rivals"].size()):
+		var node := Node3D.new()
+		_build_racer_visual(node, RACER_CANOPIES[i % RACER_CANOPIES.size()])
+		add_child(node)
+		node.position = from + lane * (2.8 * i - 1.4)
+		node.look_at(node.position + (to - from), Vector3.UP)
+		_racers.append({
+			"node": node,
+			"corners": corners,
+			"at": 0,
+			"remain": from.distance_to(to),
+			"speed": float(race["rivals"][i]),
+			"legs": 0,
+		})
+
+
+func _tick_racers(delta: float) -> bool:
+	## Advances every rival; returns true once one has finished the lap.
+	var won := false
+	for r in _racers:
+		if bool(r.get("done", false)):
+			continue
+		r["remain"] = float(r["remain"]) - float(r["speed"]) * delta
+		var corners: Array = r["corners"]
+		var at := int(r["at"])
+		var from: Vector3 = corners[at]
+		var to: Vector3 = corners[(at + 1) % corners.size()]
+		var dir := (to - from).normalized()
+		r["node"].position = to - dir * maxf(float(r["remain"]), 0.0)
+		r["node"].look_at(r["node"].position + dir, Vector3.UP)
+		while float(r["remain"]) <= 0.0:
+			r["legs"] = int(r["legs"]) + 1
+			if int(r["legs"]) >= corners.size():
+				r["done"] = true
+				r["node"].position = to
+				won = true
+				break
+			var overshoot := -float(r["remain"])
+			r["at"] = (at + 1) % corners.size()
+			from = corners[int(r["at"])]
+			to = corners[(int(r["at"]) + 1) % corners.size()]
+			r["remain"] = from.distance_to(to) - overshoot
+			dir = (to - from).normalized()
+			r["node"].position = to - dir * maxf(float(r["remain"]), 0.0)
+			r["node"].look_at(r["node"].position + dir, Vector3.UP)
+	return won
+
+
+func _build_racer_visual(parent: Node3D, canopy: Color) -> void:
+	parent.add_child(_rbox(Vector3(2.4, 1.3, 3.4), Color(0.18, 0.55, 0.20), Vector3(0, 1.0, 0)))
+	parent.add_child(_rbox(Vector3(2.4, 1.4, 2.2), canopy, Vector3(0, 2.2, 0.2)))
+	parent.add_child(_rbox(Vector3(1.6, 1.1, 0.9), canopy, Vector3(0, 1.35, -1.9)))
+	for spec in [Vector3(-1.05, 0.55, -1.6), Vector3(1.05, 0.55, -1.6), Vector3(0, 0.55, 1.5)]:
+		var w := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.55
+		cm.bottom_radius = 0.55
+		cm.height = 0.4
+		cm.material = _omat(Color(0.1, 0.11, 0.13))
+		w.mesh = cm
+		w.rotation.z = PI / 2.0
+		w.position = spec
+		parent.add_child(w)
+
+
+func _rbox(size: Vector3, color: Color, pos: Vector3) -> MeshInstance3D:
+	var m := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	bm.material = _omat(color)
+	m.mesh = bm
+	m.position = pos
+	return m
+
+
+func _omat(color: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	return m
 
 
 func _show_giver(id: String, on: bool) -> void:
@@ -357,10 +569,16 @@ func _build_ui() -> void:
 func _show_brief(def: Dictionary) -> void:
 	_brief_title.text = String(def["title"])
 	_brief_body.text = String(def["brief"])
-	var obj: Dictionary = def["objective"]
-	var line := String(obj["label"])
-	if float(obj["time"]) > 0.0:
-		line += " · %d s" % int(obj["time"])
-	line += " · pays Rs %d" % int(def["reward"])
+	var objs: Array = def["objs"]
+	var line := ""
+	if def.has("race"):
+		line = "%d checkpoints + finish  ·  %d rivals" % [objs.size() - 1, def["race"]["rivals"].size()]
+	elif objs.size() > 1:
+		line = "%d stops across town" % objs.size()
+	else:
+		line = String(objs[0]["label"])
+	if float(def["time"]) > 0.0:
+		line += "  ·  %d s" % int(def["time"])
+	line += "  ·  pays Rs %d" % int(def["reward"])
 	_brief_obj.text = line
 	_brief.visible = true
