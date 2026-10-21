@@ -22,7 +22,12 @@ every milestone.
 - **Monty "Dilli ka Don" Malhotra** — Connaught Place hustler
 
 ## Controls
-WASD / arrows — move · Shift — run · E — enter/exit vehicle · F — accept
+WASD / arrows — move · Shift — run · E — enter/exit vehicle
+
+## ▶ Play in browser
+**https://ayushsahnios.github.io/delhi-freetown-loot/** — deployed
+automatically from master (single-threaded web export, works on plain
+static hosting). · F — accept
 mission · H — horn · X — debug hurt · C — debug drop (fall damage)
 
 ## Run it
