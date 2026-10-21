@@ -12,7 +12,8 @@ var _speed := 0.0
 
 
 func setup(pos: Vector3, heading: float) -> void:
-	global_position = pos
+	# Local transform: this node may not be in the tree yet when spawned.
+	position = pos
 	rotation.y = heading
 
 	var chassis := _box(Vector3(2.4, 1.3, 3.4), Color(0.18, 0.55, 0.20))
