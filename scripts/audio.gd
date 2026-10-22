@@ -43,6 +43,10 @@ func setup() -> void:
 	_thunder_player = AudioStreamPlayer.new()
 	_thunder_player.stream = _make_thunder()
 	add_child(_thunder_player)
+	# Settings sliders scale the Ambient bus, never these players directly.
+	for p in [_horn_player, _ambient_player, _rain_player, _thunder_player] \
+			+ _distant_players:
+		p.bus = "Ambient"
 
 
 func horn() -> void:

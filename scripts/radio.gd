@@ -28,6 +28,7 @@ func setup() -> void:
 	_player = AudioStreamPlayer.new()
 	_player.stream = _loops[0]
 	_player.volume_db = -6.0
+	_player.bus = "Radio"
 	add_child(_player)
 
 

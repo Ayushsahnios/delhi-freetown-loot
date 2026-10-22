@@ -59,6 +59,7 @@ func _build() -> void:
 	rows.add_child(top)
 	top.add_child(_make_button("RADIO", ["radio"], 72.0))
 	top.add_child(_make_button("HORN", ["horn"], 72.0))
+	top.add_child(_make_button("PAUSE", ["pause"], 72.0))
 
 	var bottom := HBoxContainer.new()
 	bottom.alignment = BoxContainer.ALIGNMENT_END
