@@ -50,6 +50,8 @@ func _build_look(def: Dictionary) -> void:
 	var model := _chars.spawn(path, MODEL_HEIGHT)
 	_chars.tint(model, def.get("shirt", Color.WHITE), def.get("pants", Color.BLACK),
 			def.get("skin", Color.WHITE))
+	if def.get("sardar", false):
+		_chars.attach_sardar(model, def.get("turban", Color(1.0, 0.56, 0.12)))
 	_ap = _chars.get_player(model)
 	_anims = _chars.anim_names(model)
 	_chars.play(_anims, _ap, "idle", 1.0)

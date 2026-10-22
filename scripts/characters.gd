@@ -125,6 +125,94 @@ func tint(holder: Node3D, shirt: Color, pants: Color, skin: Color) -> void:
 			mi.mesh = mesh
 
 
+## Sardar identity kit, bound to the head bone so it rides every
+## idle/walk/run nod: a stylized cloth-wrap dastaar — stacked flattened
+## torus wraps tapering to a dome with a front peak — plus a swept beard
+## and mustache. All procedural primitives sized off the skeleton span,
+## so it fits any rigged model.
+func attach_sardar(holder: Node3D, turban: Color, beard: Color = Color(0.13, 0.08, 0.05)) -> void:
+	var skel: Skeleton3D = null
+	for skel_node in holder.find_children("*", "Skeleton3D", true, false):
+		skel = skel_node
+		break
+	if skel == null:
+		return
+	var head := -1
+	for i in skel.get_bone_count():
+		if skel.get_bone_name(i).to_lower() == "head":
+			head = i
+			break
+	if head < 0:
+		return
+	var head_xf: Transform3D = skel.get_bone_global_rest(head)
+	var top := -INF
+	var bottom := INF
+	for i in skel.get_bone_count():
+		var p := skel.get_bone_global_rest(i).origin
+		top = maxf(top, p.y)
+		bottom = minf(bottom, p.y)
+	var u: float = (top - bottom) * 0.155
+	var att := BoneAttachment3D.new()
+	att.bone_idx = head
+	skel.add_child(att)
+	# Wrap stack: [height above head bone, inner radius] in head units; each
+	# wrap is a flattened torus so the silhouette reads as layered cloth.
+	var wraps := [
+		[0.36, 0.56], [0.50, 0.60], [0.64, 0.52], [0.76, 0.42],
+	]
+	var mat := _solid(turban)
+	for w in wraps:
+		var ring := TorusMesh.new()
+		ring.inner_radius = float(w[1]) * u
+		ring.outer_radius = (float(w[1]) + 0.17) * u
+		ring.rings = 48
+		ring.ring_segments = 10
+		_bone_mesh(att, head_xf, ring, mat,
+				Transform3D(Basis().scaled(Vector3(1.0, 0.5, 1.0)),
+					Vector3(0.0, float(w[0]) * u, 0.0)))
+	var dome := SphereMesh.new()
+	dome.radius = 0.42 * u
+	dome.height = 0.84 * u
+	_bone_mesh(att, head_xf, dome, mat,
+			Transform3D(Basis().scaled(Vector3(1.0, 0.7, 1.0)), Vector3(0.0, 0.86 * u, 0.0)))
+	var peak := CylinderMesh.new()
+	peak.top_radius = 0.0
+	peak.bottom_radius = 0.15 * u
+	peak.height = 0.36 * u
+	_bone_mesh(att, head_xf, peak, mat,
+			Transform3D(Basis(Vector3(1.0, 0.0, 0.0), 0.45), Vector3(0.0, 0.92 * u, 0.34 * u)))
+	# Beard: a slab tucked under the chin and swept slightly forward, with
+	# a mustache bar on the lip. Reads clearly at gameplay scale.
+	var bmat := _solid(beard)
+	var chin := BoxMesh.new()
+	chin.size = Vector3(0.55 * u, 0.5 * u, 0.14 * u)
+	_bone_mesh(att, head_xf, chin, bmat,
+			Transform3D(Basis(Vector3(1.0, 0.0, 0.0), -0.28), Vector3(0.0, 0.14 * u, 0.46 * u)))
+	var stache := BoxMesh.new()
+	stache.size = Vector3(0.44 * u, 0.07 * u, 0.11 * u)
+	_bone_mesh(att, head_xf, stache, bmat,
+			Transform3D(Basis(), Vector3(0.0, 0.33 * u, 0.52 * u)))
+
+
+func _solid(color: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	m.roughness = 0.85
+	return m
+
+
+## Add `mesh` under `att`, placed at `desired` (a transform in skeleton
+## space) converted into the head bone's rest frame, so it lands exactly
+## in the rest pose and follows the bone rigidly through animation.
+func _bone_mesh(att: BoneAttachment3D, head_xf: Transform3D, mesh: PrimitiveMesh,
+		mat: StandardMaterial3D, desired: Transform3D) -> void:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.transform = head_xf.affine_inverse() * desired
+	att.add_child(mi)
+
+
 func _role(mat_name: String) -> String:
 	var n := mat_name.to_lower()
 	if n.begins_with("m_main") or n.contains("shirt") or n.contains("jacket"):
