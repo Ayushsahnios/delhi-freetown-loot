@@ -18,10 +18,14 @@ const MissionScript := preload("res://scripts/missions.gd")
 const AudioScript := preload("res://scripts/audio.gd")
 const MiniMapScript := preload("res://scripts/minimap.gd")
 const FoodScript := preload("res://scripts/food.gd")
+const WeatherScript := preload("res://scripts/weather.gd")
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
 const SKY_NIGHT := Color(0.04, 0.06, 0.19)
+const STORM_SKY := Color(0.22, 0.25, 0.30)
+const ROAD_DRY := Color(0.18, 0.19, 0.21)
+const ROAD_WET := Color(0.075, 0.085, 0.115)
 const PALETTE := [
 	Color(0.85, 0.78, 0.66), Color(0.79, 0.64, 0.48), Color(0.71, 0.72, 0.76),
 	Color(0.85, 0.56, 0.42), Color(0.62, 0.71, 0.78), Color(0.88, 0.84, 0.75),
@@ -68,11 +72,18 @@ var _char_states := {}
 var _switch_lock := 0.0
 var _switch_pending_release := false
 var _chandni_seen := false
+var _weather: WeatherScript
+var _road_mat: StandardMaterial3D
+var _applied_wet := -1.0
 
 
 func _ready() -> void:
 	_rng.randomize()
 	_build_environment()
+	_weather = WeatherScript.new()
+	add_child(_weather)
+	_weather.setup()
+	_weather.thunder_flash.connect(_on_thunder)
 	_build_city()
 	_build_landmarks()
 	_food = FoodScript.new()
@@ -129,11 +140,13 @@ func _build_city() -> void:
 	ground_body.add_child(ground_mesh)
 	add_child(ground_body)
 
-	# roads
+	# roads — one shared material so the whole network darkens as rain soaks in
+	_road_mat = StandardMaterial3D.new()
+	_road_mat.albedo_color = ROAD_DRY
 	for i in range(GRID + 1):
 		var pos := -WORLD / 2.0 + i * PITCH - BLOCK / 2.0
-		add_child(_flat(Vector3(WORLD, 0.08, ROAD), Vector3(0, 0.04, pos), Color(0.18, 0.19, 0.21)))
-		add_child(_flat(Vector3(ROAD, 0.08, WORLD), Vector3(pos, 0.04, 0), Color(0.18, 0.19, 0.21)))
+		add_child(_flat_mat(Vector3(WORLD, 0.08, ROAD), Vector3(0, 0.04, pos), _road_mat))
+		add_child(_flat_mat(Vector3(ROAD, 0.08, WORLD), Vector3(pos, 0.04, 0), _road_mat))
 		var s := -WORLD / 2.0 + 7.0
 		while s < WORLD / 2.0:
 			add_child(_flat(Vector3(5.0, 0.06, 0.45), Vector3(s, 0.09, pos), Color(0.96, 0.88, 0.30)))
@@ -203,6 +216,16 @@ func _mesh_box(size: Vector3, color: Color, offset := Vector3.ZERO) -> MeshInsta
 
 func _flat(size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
 	return _mesh_box(size, color, pos)
+
+
+func _flat_mat(size: Vector3, pos: Vector3, mat: StandardMaterial3D) -> MeshInstance3D:
+	var m := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	bm.material = mat
+	m.mesh = bm
+	m.position = pos
+	return m
 
 
 func _tree(pos: Vector3) -> void:
@@ -594,6 +617,14 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 
 func _process(delta: float) -> void:
 	_update_day(delta)
+	_weather.tick(delta, day_t, camera)
+	var grip := 1.0 - _weather.wetness * 0.55
+	if player != null and is_instance_valid(player):
+		player.grip = grip
+	if current_auto != null:
+		current_auto.grip = 1.0 - _weather.wetness * 0.5
+	_apply_wetness()
+	_audio.set_rain(_weather.intensity)
 	if not _playing:
 		return
 	_impact_cd = maxf(_impact_cd - delta, 0.0)
@@ -763,18 +794,43 @@ func _update_day(delta: float) -> void:
 	day_t = fmod(day_t + delta / DAY_LEN, 1.0)
 	var sun_angle: float = sin(day_t * TAU - PI / 2.0)
 	var daylight: float = clampf((sun_angle + 0.25) * 1.6, 0.0, 1.0)
-	sun.light_energy = 0.15 + daylight * 0.85
+	sun.light_energy = (0.15 + daylight * 0.85) * (1.0 - _weather.cloud * 0.5)
 	sun.rotation_degrees = Vector3(-30.0 - daylight * 45.0, 40.0, 0.0)
 	var sky := SKY_NIGHT.lerp(SKY_DAY, daylight)
 	var dusk: float = clampf(1.0 - absf(daylight - 0.5) * 2.0, 0.0, 1.0)
 	sky = sky.lerp(SKY_DUSK, dusk * 0.5)
+	sky = sky.lerp(STORM_SKY, _weather.cloud * 0.6)
 	world_env.environment.background_color = sky
 	if _playing:
 		var hours: float = fmod(day_t * 24.0 + 6.0, 24.0)
 		var hh := int(hours)
 		var mm := int((hours - hh) * 60.0)
 		_hud_clock.text = "%02d:%02d" % [hh, mm]
-		_hud_day.text = "Delhi \u00b7 " + ("Day" if daylight > 0.55 else ("Golden hour" if daylight > 0.2 else "Night"))
+		var phase := "Day" if daylight > 0.55 else ("Golden hour" if daylight > 0.2 else "Night")
+		_hud_day.text = "Delhi \u00b7 " + phase + " \u00b7 " + _weather.label
+
+
+func _apply_wetness() -> void:
+	## Storm-darkened, glossy asphalt as the streets soak; skipped when
+	## wetness has not moved enough to matter.
+	var w := _weather.wetness
+	if absf(w - _applied_wet) < 0.02:
+		return
+	_applied_wet = w
+	if _road_mat == null:
+		return
+	_road_mat.albedo_color = ROAD_DRY.lerp(ROAD_WET, w)
+	_road_mat.roughness = 1.0 - 0.62 * w
+	_road_mat.metallic = 0.28 * w
+
+
+func _on_thunder(strength: float) -> void:
+	if _flash_tween != null and _flash_tween.is_valid():
+		_flash_tween.kill()
+	_flash.color = Color(0.93, 0.96, 1.0, clampf(strength, 0.2, 0.7))
+	_flash_tween = create_tween()
+	_flash_tween.tween_property(_flash, "color:a", 0.0, 0.5)
+	get_tree().create_timer(0.6).timeout.connect(_audio.thunder)
 
 
 # ---------------------------------------------------------------- health
