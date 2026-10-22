@@ -51,6 +51,7 @@ func _setup_inputs() -> void:
 	_add_keys("horn", [KEY_H])
 	_add_keys("buy_chai", [KEY_Q])
 	_add_keys("buy_samosa", [KEY_R])
+	_add_keys("switch_character", [KEY_TAB])
 	_add_keys("debug_hurt", [KEY_X])
 	_add_keys("debug_fall", [KEY_C])
 	_add_keys("save", [KEY_F9])
