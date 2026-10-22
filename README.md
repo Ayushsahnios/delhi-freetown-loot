@@ -2,8 +2,7 @@
 
 **An indie free-roam loot game set in Delhi** — GTA–San-Andreas-inspired
 open world, built 100% from scratch on [Godot 4](https://godotengine.org)
-(MIT-licensed engine). Original code, original procedural assets, nothing
-reverse-engineered, nothing licensed.
+(MIT-licensed engine).
 
 **v1.0 is out** — read the [release notes](PLAN.md#8--changelog).
 
