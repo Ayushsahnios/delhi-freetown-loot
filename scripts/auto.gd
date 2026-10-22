@@ -13,6 +13,9 @@ const CAR_COLORS := [
 ]
 
 var driver_inside := false
+## Traction 0..1 — monsoon wetness lowers it: wider turns, longer
+## brake slides and momentum that keeps drifting through the turn.
+var grip := 1.0
 
 var _spec: Dictionary = KINDS["auto"]
 var _wheels: Array[MeshInstance3D] = []
@@ -86,12 +89,18 @@ func drive(delta: float) -> void:
 
 	_speed += accel * float(_spec["accel"]) * delta
 	if is_zero_approx(accel):
-		_speed *= pow(0.35, delta)
+		_speed *= pow(lerpf(0.65, 0.35, grip), delta)
 	_speed = clampf(_speed, -8.0, float(_spec["max_speed"]))
 
 	if absf(_speed) > 0.5:
-		rotate_y(steer * float(_spec["turn"]) * delta * _speed / float(_spec["max_speed"]))
-		velocity = -global_transform.basis.z * _speed
+		rotate_y(steer * float(_spec["turn"]) * lerpf(0.6, 1.0, grip) * delta * _speed / float(_spec["max_speed"]))
+		var fwd := -global_transform.basis.z * _speed
+		if grip >= 0.999:
+			velocity = fwd
+		else:
+			# Hydroplaning lite: heading swings over before momentum follows.
+			var follow: float = clampf(lerpf(2.2, 12.0, grip) * delta, 0.0, 1.0)
+			velocity = velocity.lerp(fwd, follow)
 	else:
 		velocity = Vector3.ZERO
 	move_and_slide()

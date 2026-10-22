@@ -4,12 +4,15 @@ extends Node
 
 const MIX_RATE := 22050
 const AMBIENT_SECONDS := 6.0
+const RAIN_SECONDS := 4.0
 const XFADE_SECONDS := 0.25
 const DISTANT_MIN_GAP := 5.0
 const DISTANT_MAX_GAP := 13.0
 
 var _horn_player: AudioStreamPlayer
 var _ambient_player: AudioStreamPlayer
+var _rain_player: AudioStreamPlayer
+var _thunder_player: AudioStreamPlayer
 var _distant_players: Array[AudioStreamPlayer] = []
 var _rng := RandomNumberGenerator.new()
 var _distant_cd := 3.0
@@ -33,6 +36,13 @@ func setup() -> void:
 	_ambient_player.stream = _make_ambient()
 	_ambient_player.volume_db = -7.0
 	add_child(_ambient_player)
+	_rain_player = AudioStreamPlayer.new()
+	_rain_player.stream = _make_rain()
+	_rain_player.volume_db = -60.0
+	add_child(_rain_player)
+	_thunder_player = AudioStreamPlayer.new()
+	_thunder_player.stream = _make_thunder()
+	add_child(_thunder_player)
 
 
 func horn() -> void:
@@ -44,6 +54,23 @@ func start_ambient() -> void:
 	if _ambient_player != null and not _ambient_on:
 		_ambient_on = true
 		_ambient_player.play()
+	if _rain_player != null and not _rain_player.playing:
+		_rain_player.play()
+
+
+func set_rain(level: float) -> void:
+	## Rain bed volume follows the weather intensity (silent when dry).
+	var l := clampf(level, 0.0, 1.0)
+	if _rain_player != null:
+		_rain_player.volume_db = -60.0 if l <= 0.03 else lerpf(-34.0, -9.0, l)
+
+
+func thunder() -> void:
+	if _thunder_player == null:
+		return
+	_thunder_player.pitch_scale = _rng.randf_range(0.8, 1.15)
+	_thunder_player.volume_db = _rng.randf_range(-10.0, -5.0)
+	_thunder_player.play()
 
 
 func _process(delta: float) -> void:
@@ -117,6 +144,53 @@ func _make_ambient() -> AudioStreamWAV:
 			v = raw[i] * w + raw[i + loop_len] * (1.0 - w)
 		bytes.encode_s16(i * 2, int(clampf(v * gain, -1.0, 1.0) * 32767.0))
 	return _wav(bytes, true)
+
+
+func _make_rain() -> AudioStreamWAV:
+	## Loopable downpour bed: soft broadband hiss with a slow shimmer.
+	## Head crossfades with tail material for a seamless loop.
+	var loop_len := int(MIX_RATE * RAIN_SECONDS)
+	var xfade := int(MIX_RATE * XFADE_SECONDS)
+	var raw := PackedFloat32Array()
+	raw.resize(loop_len + xfade)
+	var lp := 0.0
+	for i in raw.size():
+		var n := _rng.randf_range(-1.0, 1.0)
+		lp += (n - lp) * 0.3
+		var t := float(i) / MIX_RATE
+		var shimmer := 0.72 + 0.28 * sin(TAU * t / 2.9 + 0.4)
+		raw[i] = (n * 0.4 + lp * 0.6) * shimmer
+	var peak := 0.001
+	for v in raw:
+		peak = maxf(peak, absf(v))
+	var gain := 0.3 / peak
+	var bytes := PackedByteArray()
+	bytes.resize(loop_len * 2)
+	for i in loop_len:
+		var v: float = raw[i]
+		if i < xfade:
+			var w := float(i) / xfade
+			v = raw[i] * w + raw[i + loop_len] * (1.0 - w)
+		bytes.encode_s16(i * 2, int(clampf(v * gain, -1.0, 1.0) * 32767.0))
+	return _wav(bytes, true)
+
+
+func _make_thunder() -> AudioStreamWAV:
+	## One-shot rolling crack: brown-noise burst over a 50 Hz sub rumble.
+	var frames := int(MIX_RATE * 3.2)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var brown := 0.0
+	var attack := float(MIX_RATE * 0.03)
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		brown += _rng.randf_range(-1.0, 1.0) * 0.06
+		brown *= 0.994
+		var env: float = minf(i / attack, 1.0) * pow(maxf(1.0 - t / 3.2, 0.0), 2.3)
+		var sub := sin(TAU * 50.0 * t) * env * 0.5
+		var sample := int(clampf((brown * 2.2 + sub) * env * 0.5, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
 
 
 func _wav(bytes: PackedByteArray, loop: bool) -> AudioStreamWAV:

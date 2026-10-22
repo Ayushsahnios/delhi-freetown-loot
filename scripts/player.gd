@@ -10,6 +10,9 @@ signal landed_hard(impact_speed: float)
 
 var run_boost := 1.0
 var controls_enabled := true
+## Traction 0..1 — monsoon wetness lowers it, so momentum lags the
+## input direction and the character slides a little before gripping.
+var grip := 1.0
 
 var _legs: Array[MeshInstance3D] = []
 var _arms: Array[MeshInstance3D] = []
@@ -125,13 +128,21 @@ func _physics_process(delta: float) -> void:
 		if Input.is_action_pressed("run"):
 			speed = RUN_SPEED
 		speed *= run_boost
-		velocity.x = input.x * speed
-		velocity.z = input.z * speed
+		var target := Vector3(input.x * speed, 0.0, input.z * speed)
+		if grip >= 0.999:
+			velocity.x = target.x
+			velocity.z = target.z
+		else:
+			# Slick streets: the body turns while the feet keep sliding.
+			var follow: float = clampf(lerpf(3.5, 18.0, grip) * delta, 0.0, 1.0)
+			velocity.x = lerpf(velocity.x, target.x, follow)
+			velocity.z = lerpf(velocity.z, target.z, follow)
 		rotation.y = atan2(-input.x, -input.z)
 		_walk_phase += delta * speed * 1.6
 	else:
-		velocity.x = move_toward(velocity.x, 0.0, 60.0 * delta)
-		velocity.z = move_toward(velocity.z, 0.0, 60.0 * delta)
+		var stop: float = 60.0 * lerpf(0.3, 1.0, grip)
+		velocity.x = move_toward(velocity.x, 0.0, stop * delta)
+		velocity.z = move_toward(velocity.z, 0.0, stop * delta)
 		_walk_phase = lerpf(_walk_phase, 0.0, 0.12)
 
 	if is_on_floor():
