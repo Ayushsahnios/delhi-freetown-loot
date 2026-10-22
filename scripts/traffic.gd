@@ -3,6 +3,10 @@ extends Node
 ## Purely kinematic movers (no physics bodies): vehicles stay at road level
 ## on fixed lanes that never intersect building blocks, so nothing can fall
 ## through the ground or tunnel through geometry.
+## The whole fleet renders through a handful of MultiMeshes (one merged
+## mesh per vehicle style), so full traffic costs only a few draw calls.
+
+const MeshTools := preload("res://scripts/meshtools.gd")
 
 const COUNT := 22
 const LANE := 2.8
@@ -13,6 +17,10 @@ const CAR_COLORS := [
 	Color(0.75, 0.12, 0.12), Color(0.10, 0.22, 0.55), Color(0.85, 0.82, 0.78),
 	Color(0.12, 0.14, 0.16), Color(0.55, 0.52, 0.20), Color(0.20, 0.45, 0.28),
 ]
+const RICK_GREEN := Color(0.18, 0.55, 0.20)
+const RICK_YELLOW := Color(0.97, 0.77, 0.19)
+const CABIN := Color(0.55, 0.65, 0.75)
+const WHEEL := Color(0.1, 0.11, 0.13)
 
 var _vehicles: Array[Dictionary] = []
 var _player: Node3D = null
@@ -22,6 +30,10 @@ var _world := 0.0
 var _pitch := 0.0
 var _road_w := 0.0
 var _roads := 0
+var _auto_mm: MultiMesh = null
+var _car_mms: Array[MultiMesh] = []
+var _mm_used := {}
+var _mm_free := {}
 
 
 func setup(world_size: float, pitch: float, road_width: float, road_count: int) -> void:
@@ -30,6 +42,9 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 	_road_w = road_width
 	_roads = road_count
 	_rng.randomize()
+	_auto_mm = _new_mm(_auto_mesh())
+	for paint in CAR_COLORS:
+		_car_mms.append(_new_mm(_car_mesh(paint)))
 	for _i in range(COUNT):
 		_vehicles.append(_spawn())
 
@@ -45,15 +60,11 @@ func _spawn() -> Dictionary:
 	var dir := 1 if _rng.randf() < 0.5 else -1
 	var is_auto := _rng.randf() < 0.6
 	var cruise := _rng.randf_range(8.0, 11.0) if is_auto else _rng.randf_range(12.0, 15.0)
-	var node := Node3D.new()
-	if is_auto:
-		_build_auto(node)
-	else:
-		_build_car(node)
-	add_child(node)
+	var mm := _auto_mm if is_auto else _car_mms[_rng.randi_range(0, _car_mms.size() - 1)]
 	_next_id += 1
 	var v := {
-		"id": _next_id, "node": node, "along_z": along_z, "road": road, "dir": dir,
+		"id": _next_id, "mm": mm, "idx": _alloc(mm), "pos": Vector3.ZERO,
+		"heading": 0.0, "along_z": along_z, "road": road, "dir": dir,
 		"kind": ("auto" if is_auto else "car"),
 		"t": _rng.randf_range(-_world / 2.0, _world / 2.0),
 		"speed": cruise, "cruise": cruise,
@@ -79,11 +90,13 @@ func _physics_process(delta: float) -> void:
 
 func _apply_transform(v: Dictionary) -> void:
 	if v.along_z:
-		v.node.position = Vector3(v.road + LANE * v.dir, 0.0, v.t)
-		v.node.rotation.y = PI if v.dir > 0 else 0.0
+		v.pos = Vector3(v.road + LANE * v.dir, 0.0, v.t)
+		v.heading = PI if v.dir > 0 else 0.0
 	else:
-		v.node.position = Vector3(v.t, 0.0, v.road - LANE * v.dir)
-		v.node.rotation.y = -PI / 2.0 * v.dir
+		v.pos = Vector3(v.t, 0.0, v.road - LANE * v.dir)
+		v.heading = -PI / 2.0 * v.dir
+	v.mm.set_instance_transform(v.idx,
+			Transform3D(Basis(Vector3.UP, v.heading), v.pos))
 
 
 func _forward(v: Dictionary) -> Vector3:
@@ -94,7 +107,7 @@ func _player_limit(v: Dictionary) -> float:
 	## Brake when the player (on foot or driving) stands in our lane ahead.
 	if _player == null:
 		return v.cruise
-	var rel: Vector3 = _player.global_position - v.node.position
+	var rel: Vector3 = _player.global_position - v.pos
 	var fwd := _forward(v)
 	var along := rel.dot(fwd)
 	var lateral := (rel - fwd * along).length()
@@ -123,22 +136,24 @@ func nearest_enterable(pos: Vector3, max_dist: float) -> Dictionary:
 	var best := {}
 	var best_d := max_dist * max_dist
 	for v in _vehicles:
-		var dx: float = v.node.position.x - pos.x
-		var dz: float = v.node.position.z - pos.z
+		var dx: float = v.pos.x - pos.x
+		var dz: float = v.pos.z - pos.z
 		if dx * dx + dz * dz < best_d:
 			best_d = dx * dx + dz * dz
 			best = {"id": v.id, "kind": v.kind,
-				"pos": v.node.position + Vector3(0.0, 1.0, 0.0),
-				"heading": v.node.rotation.y}
+				"pos": v.pos + Vector3(0.0, 1.0, 0.0),
+				"heading": v.heading}
 	return best
 
 
 func take_vehicle(id: int) -> void:
 	## Remove a traffic vehicle (the player took it over) and spawn a
-	## replacement so street density stays constant.
+	## replacement so street density stays constant. The freed MultiMesh
+	## slot is parked below the world until reused.
 	for i in range(_vehicles.size()):
 		if _vehicles[i].id == id:
-			_vehicles[i].node.queue_free()
+			var dead: Dictionary = _vehicles[i]
+			_release(dead)
 			_vehicles.remove_at(i)
 			_vehicles.append(_spawn())
 			return
@@ -151,8 +166,8 @@ func worst_hazard_speed(pos: Vector3) -> float:
 	for v in _vehicles:
 		if v.speed <= 2.5:
 			continue
-		var dx: float = v.node.position.x - pos.x
-		var dz: float = v.node.position.z - pos.z
+		var dx: float = v.pos.x - pos.x
+		var dz: float = v.pos.z - pos.z
 		if dx * dx + dz * dz < 5.29:
 			worst = maxf(worst, v.speed)
 	return worst
@@ -163,53 +178,71 @@ func ram_speed_at(pos: Vector3) -> float:
 	## wanted heat when the player's auto rams traffic.
 	var worst := 0.0
 	for v in _vehicles:
-		var dx: float = v.node.position.x - pos.x
-		var dz: float = v.node.position.z - pos.z
+		var dx: float = v.pos.x - pos.x
+		var dz: float = v.pos.z - pos.z
 		if dx * dx + dz * dz < 8.4:
 			worst = maxf(worst, absf(v.speed))
 	return worst
 
 
+# ---------------------------------------------------------------- instancing
+
+func _new_mm(mesh: ArrayMesh) -> MultiMesh:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = COUNT
+	mm.visible_instance_count = 0
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	add_child(mmi)
+	return mm
+
+
+func _alloc(mm: MultiMesh) -> int:
+	## Reuse a released slot when one is free, else grow the visible range.
+	if _mm_free.has(mm) and not _mm_free[mm].is_empty():
+		return int(_mm_free[mm].pop_back())
+	var used: int = _mm_used.get(mm, 0)
+	_mm_used[mm] = used + 1
+	mm.visible_instance_count = used + 1
+	return used
+
+
+func _release(v: Dictionary) -> void:
+	v.mm.set_instance_transform(v.idx,
+			Transform3D(Basis(), Vector3(0.0, -500.0, 0.0)))
+	if not _mm_free.has(v.mm):
+		_mm_free[v.mm] = []
+	_mm_free[v.mm].append(v.idx)
+
+
 # ---------------------------------------------------------------- visuals
 
-func _build_auto(parent: Node3D) -> void:
-	parent.add_child(_box(Vector3(2.4, 1.3, 3.4), Color(0.18, 0.55, 0.20), Vector3(0, 1.0, 0)))
-	parent.add_child(_box(Vector3(2.4, 1.4, 2.2), Color(0.97, 0.77, 0.19), Vector3(0, 2.2, 0.2)))
-	parent.add_child(_box(Vector3(1.6, 1.1, 0.9), Color(0.97, 0.77, 0.19), Vector3(0, 1.35, -1.9)))
+func _auto_mesh() -> ArrayMesh:
+	## Whole rickshaw merged into one mesh (wheels included — they never
+	## animate separately), one surface per color.
+	var b := MeshTools.new()
+	b.add_box(Vector3(2.4, 1.3, 3.4), Vector3(0, 1.0, 0), RICK_GREEN)
+	b.add_box(Vector3(2.4, 1.4, 2.2), Vector3(0, 2.2, 0.2), RICK_YELLOW)
+	b.add_box(Vector3(1.6, 1.1, 0.9), Vector3(0, 1.35, -1.9), RICK_YELLOW)
 	for spec in [Vector3(-1.05, 0.55, -1.6), Vector3(1.05, 0.55, -1.6), Vector3(0, 0.55, 1.5)]:
-		parent.add_child(_wheel(spec, 0.55))
+		b.add_mesh(_wheel_mesh(0.55), Transform3D(Basis(Vector3(0, 0, 1), PI / 2.0), spec), WHEEL)
+	return b.build_mesh()
 
 
-func _build_car(parent: Node3D) -> void:
-	var paint: Color = CAR_COLORS[_rng.randi_range(0, CAR_COLORS.size() - 1)]
-	parent.add_child(_box(Vector3(2.0, 0.9, 4.2), paint, Vector3(0, 0.85, 0)))
-	parent.add_child(_box(Vector3(1.8, 0.8, 2.2), Color(0.55, 0.65, 0.75), Vector3(0, 1.7, 0.2)))
+func _car_mesh(paint: Color) -> ArrayMesh:
+	var b := MeshTools.new()
+	b.add_box(Vector3(2.0, 0.9, 4.2), Vector3(0, 0.85, 0), paint)
+	b.add_box(Vector3(1.8, 0.8, 2.2), Vector3(0, 1.7, 0.2), CABIN)
 	for spec in [Vector3(-1.0, 0.5, -1.4), Vector3(1.0, 0.5, -1.4), Vector3(-1.0, 0.5, 1.4), Vector3(1.0, 0.5, 1.4)]:
-		parent.add_child(_wheel(spec, 0.45))
+		b.add_mesh(_wheel_mesh(0.45), Transform3D(Basis(Vector3(0, 0, 1), PI / 2.0), spec), WHEEL)
+	return b.build_mesh()
 
 
-func _box(size: Vector3, color: Color, pos: Vector3) -> MeshInstance3D:
-	var m := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	bm.material = mat
-	m.mesh = bm
-	m.position = pos
-	return m
-
-
-func _wheel(pos: Vector3, radius: float) -> MeshInstance3D:
-	var m := MeshInstance3D.new()
+func _wheel_mesh(radius: float) -> CylinderMesh:
 	var cm := CylinderMesh.new()
 	cm.top_radius = radius
 	cm.bottom_radius = radius
 	cm.height = 0.4
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.1, 0.11, 0.13)
-	cm.material = mat
-	m.mesh = cm
-	m.rotation.z = PI / 2.0
-	m.position = pos
-	return m
+	return cm

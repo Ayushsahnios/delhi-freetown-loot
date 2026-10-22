@@ -21,6 +21,7 @@ const MiniMapScript := preload("res://scripts/minimap.gd")
 const FoodScript := preload("res://scripts/food.gd")
 const WeatherScript := preload("res://scripts/weather.gd")
 const TouchControlsScript := preload("res://scripts/touch_controls.gd")
+const MeshTools := preload("res://scripts/meshtools.gd")
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
@@ -80,6 +81,13 @@ var _weather: WeatherScript
 var _road_mat: StandardMaterial3D
 var _applied_wet := -1.0
 var _touch: CanvasLayer
+var _districts := {}
+var _cur_district: MeshTools = null
+var _dash_xfs: Array[Transform3D] = []
+var _tree_trunk_xfs: Array[Transform3D] = []
+var _tree_crown_xfs: Array[Transform3D] = []
+var _pillar_xfs: Array[Transform3D] = []
+var _metro_seg_xfs: Array[Transform3D] = []
 
 
 func _ready() -> void:
@@ -159,19 +167,21 @@ func _build_city() -> void:
 	# roads — one shared material so the whole network darkens as rain soaks in
 	_road_mat = StandardMaterial3D.new()
 	_road_mat.albedo_color = ROAD_DRY
+	var dash_spin := Basis(Vector3.UP, PI / 2.0)
 	for i in range(GRID + 1):
 		var pos := -WORLD / 2.0 + i * PITCH - BLOCK / 2.0
 		add_child(_flat_mat(Vector3(WORLD, 0.08, ROAD), Vector3(0, 0.04, pos), _road_mat))
 		add_child(_flat_mat(Vector3(ROAD, 0.08, WORLD), Vector3(pos, 0.04, 0), _road_mat))
 		var s := -WORLD / 2.0 + 7.0
 		while s < WORLD / 2.0:
-			add_child(_flat(Vector3(5.0, 0.06, 0.45), Vector3(s, 0.09, pos), Color(0.96, 0.88, 0.30)))
-			add_child(_flat(Vector3(0.45, 0.06, 5.0), Vector3(pos, 0.09, s), Color(0.96, 0.88, 0.30)))
+			_dash_xfs.append(Transform3D(Basis(), Vector3(s, 0.09, pos)))
+			_dash_xfs.append(Transform3D(dash_spin, Vector3(pos, 0.09, s)))
 			s += 14.0
 
-	# blocks
+	# blocks — static visuals accumulate into per-district merged meshes
 	for ix in range(GRID):
 		for iz in range(GRID):
+			_cur_district = _builder_for(ix, iz)
 			var c := _block_center(ix, iz)
 			if ix == 5 and iz == 5:
 				_build_cp(c.x, c.z)
@@ -197,12 +207,77 @@ func _build_city() -> void:
 							PALETTE[_rng.randi_range(0, PALETTE.size() - 1)])
 				_tree(Vector3(c.x - BLOCK / 2.0 + 2.0, 0, c.z - BLOCK / 2.0 + 2.0))
 
+	_cur_district = null
 	_build_metro(0.0, -WORLD / 2.0 + 4.0 * PITCH - BLOCK / 2.0)
+
+	# Commit: one merged mesh per district, one MultiMesh per repeated prop.
+	for key in _districts:
+		var node: MeshInstance3D = _districts[key].build_node()
+		if node != null:
+			add_child(node)
+	_commit_props()
 
 
 func _block_center(ix: int, iz: int) -> Vector3:
 	var half := (GRID - 1) / 2.0
 	return Vector3((ix - half) * PITCH, 0.0, (iz - half) * PITCH)
+
+
+func _builder_for(ix: int, iz: int) -> MeshTools:
+	## Districts are 3x3 block tiles: 16 merged meshes cover the whole city.
+	var key := Vector2i(int(ix / 3.0), int(iz / 3.0))
+	if not _districts.has(key):
+		_districts[key] = MeshTools.new()
+	return _districts[key]
+
+
+func _builder_at(p: Vector3) -> MeshTools:
+	var half := (GRID - 1) / 2.0
+	return _builder_for(clampi(roundi(p.x / PITCH + half), 0, GRID - 1),
+			clampi(roundi(p.z / PITCH + half), 0, GRID - 1))
+
+
+func _dist_box(size: Vector3, center: Vector3, color: Color) -> void:
+	## Static colored box folded into the current district's merged mesh.
+	if _cur_district == null:
+		_cur_district = _builder_at(center)
+	_cur_district.add_box(size, center, color)
+
+
+func _commit_props() -> void:
+	## Repeated props draw as one MultiMesh each: lane dashes, tree parts,
+	## metro pillars and deck segments.
+	var dash := BoxMesh.new()
+	dash.size = Vector3(5.0, 0.06, 0.45)
+	dash.material = MeshTools.shared_material(Color(0.96, 0.88, 0.30))
+	_add_mm(dash, _dash_xfs)
+	var trunk := CylinderMesh.new()
+	trunk.top_radius = 0.35
+	trunk.bottom_radius = 0.5
+	trunk.height = 2.6
+	trunk.material = MeshTools.shared_material(Color(0.42, 0.29, 0.17))
+	_add_mm(trunk, _tree_trunk_xfs)
+	var crown := SphereMesh.new()
+	crown.radius = 2.1
+	crown.height = 3.4
+	crown.material = MeshTools.shared_material(Color(0.18, 0.49, 0.20))
+	_add_mm(crown, _tree_crown_xfs)
+	var pillar := CylinderMesh.new()
+	pillar.top_radius = 0.8
+	pillar.bottom_radius = 1.0
+	pillar.height = 12.0
+	pillar.material = MeshTools.shared_material(Color(0.55, 0.58, 0.62))
+	_add_mm(pillar, _pillar_xfs)
+	var seg := BoxMesh.new()
+	seg.size = Vector3(ROAD - 2.0, 1.2, 22.0)
+	seg.material = MeshTools.shared_material(Color(0.32, 0.35, 0.42))
+	_add_mm(seg, _metro_seg_xfs)
+
+
+func _add_mm(mesh: PrimitiveMesh, xfs: Array[Transform3D]) -> void:
+	var node := MeshTools.make_multimesh(mesh, xfs)
+	if node != null:
+		add_child(node)
 
 
 func _add_building(pos: Vector3, size: Vector3, color: Color) -> void:
@@ -214,8 +289,8 @@ func _add_building(pos: Vector3, size: Vector3, color: Color) -> void:
 	shape.shape = box
 	shape.position.y = size.y / 2.0
 	body.add_child(shape)
-	body.add_child(_mesh_box(size, color, Vector3(0, size.y / 2.0, 0)))
 	add_child(body)
+	_dist_box(size, pos + Vector3(0, size.y / 2.0, 0), color)
 
 
 func _mesh_box(size: Vector3, color: Color, offset := Vector3.ZERO) -> MeshInstance3D:
@@ -230,10 +305,6 @@ func _mesh_box(size: Vector3, color: Color, offset := Vector3.ZERO) -> MeshInsta
 	return m
 
 
-func _flat(size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
-	return _mesh_box(size, color, pos)
-
-
 func _flat_mat(size: Vector3, pos: Vector3, mat: StandardMaterial3D) -> MeshInstance3D:
 	var m := MeshInstance3D.new()
 	var bm := BoxMesh.new()
@@ -245,46 +316,23 @@ func _flat_mat(size: Vector3, pos: Vector3, mat: StandardMaterial3D) -> MeshInst
 
 
 func _tree(pos: Vector3) -> void:
-	var trunk := MeshInstance3D.new()
-	var tmc := CylinderMesh.new()
-	tmc.top_radius = 0.35
-	tmc.bottom_radius = 0.5
-	tmc.height = 2.6
-	tmc.material = _mat(Color(0.42, 0.29, 0.17))
-	trunk.mesh = tmc
-	trunk.position = pos + Vector3(0, 1.3, 0)
-	add_child(trunk)
-	var crown := MeshInstance3D.new()
-	var cmc := SphereMesh.new()
-	cmc.radius = 2.1
-	cmc.height = 3.4
-	cmc.material = _mat(Color(0.18, 0.49, 0.20))
-	crown.mesh = cmc
-	crown.position = pos + Vector3(0, 4.1, 0)
-	add_child(crown)
-
-
-func _mat(color: Color) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = color
-	return m
+	## Trees are repeated props: collected here, drawn later as two
+	## MultiMeshes (trunks + crowns) in _commit_props().
+	_tree_trunk_xfs.append(Transform3D(Basis(), pos + Vector3(0, 1.3, 0)))
+	_tree_crown_xfs.append(Transform3D(Basis(), pos + Vector3(0, 4.1, 0)))
 
 
 func _grass(pos: Vector3) -> void:
-	add_child(_flat(Vector3(BLOCK - 2.0, 0.06, BLOCK - 2.0), pos + Vector3(0, 0.1, 0), Color(0.24, 0.48, 0.25)))
+	_dist_box(Vector3(BLOCK - 2.0, 0.06, BLOCK - 2.0), pos + Vector3(0, 0.1, 0), Color(0.24, 0.48, 0.25))
 
 
 func _build_cp(x: float, z: float) -> void:
 	_grass(Vector3(x, 0, z))
-	var park := MeshInstance3D.new()
 	var pm := CylinderMesh.new()
 	pm.top_radius = 11.0
 	pm.bottom_radius = 11.0
 	pm.height = 0.7
-	pm.material = _mat(Color(0.18, 0.56, 0.27))
-	park.mesh = pm
-	park.position = Vector3(x, 0.35, z)
-	add_child(park)
+	_cur_district.add_mesh(pm, Transform3D(Basis(), Vector3(x, 0.35, z)), Color(0.18, 0.56, 0.27))
 	_add_building(Vector3(x, 0, z), Vector3(18.0, 1.0, 18.0), Color(0.18, 0.56, 0.27))
 	for a in range(8):
 		var ang := TAU * a / 8.0
@@ -298,7 +346,7 @@ func _build_india_gate(x: float, z: float) -> void:
 	var stone := Color(0.54, 0.45, 0.33)
 	_add_building(Vector3(x - 6.0, 0, z), Vector3(3.0, 16.0, 5.0), stone)
 	_add_building(Vector3(x + 6.0, 0, z), Vector3(3.0, 16.0, 5.0), stone)
-	add_child(_mesh_box(Vector3(16.0, 4.0, 5.0), stone, Vector3(x, 16.5, z)))
+	_dist_box(Vector3(16.0, 4.0, 5.0), Vector3(x, 16.5, z), stone)
 	_tree(Vector3(x - 12, 0, z - 12))
 	_tree(Vector3(x + 12, 0, z + 12))
 
@@ -308,24 +356,17 @@ func _build_purani_dilli(x: float, z: float) -> void:
 	var red := Color(0.61, 0.24, 0.18)
 	_add_building(Vector3(x, 0, z - BLOCK / 2.0 + 2.0), Vector3(BLOCK - 4.0, 9.0, 3.0), red)
 	_add_building(Vector3(x, 0, z), Vector3(12.0, 12.0, 12.0), red)
-	var dome_base := MeshInstance3D.new()
 	var dbm := CylinderMesh.new()
 	dbm.top_radius = 3.4
 	dbm.bottom_radius = 4.2
 	dbm.height = 2.2
-	dbm.material = _mat(Color(0.85, 0.78, 0.66))
-	dome_base.mesh = dbm
-	dome_base.position = Vector3(x, 13.1, z)
-	add_child(dome_base)
-	var dome := MeshInstance3D.new()
+	_cur_district.add_mesh(dbm, Transform3D(Basis(), Vector3(x, 13.1, z)), Color(0.85, 0.78, 0.66))
 	var dm := SphereMesh.new()
 	dm.radius = 3.4
 	dm.height = 8.5
-	dm.material = _mat(Color(0.95, 0.92, 0.82))
-	dome.mesh = dm
-	dome.scale = Vector3(1, 1.25, 1)
-	dome.position = Vector3(x, 15.2, z)
-	add_child(dome)
+	_cur_district.add_mesh(dm,
+			Transform3D(Basis().scaled(Vector3(1, 1.25, 1)), Vector3(x, 15.2, z)),
+			Color(0.95, 0.92, 0.82))
 
 
 const AWNINGS := [
@@ -342,26 +383,26 @@ func _build_chandni_chowk(x: float, z: float) -> void:
 	## a signature red gate at the south entry, stalls with striped
 	## awnings and bunting on both sides, shop rows behind them, and a
 	## pedestrian crowd zone (pedestrians.gd) filling it with shoppers.
-	add_child(_flat(Vector3(BLOCK - 2.0, 0.06, BLOCK - 2.0), Vector3(x, 0.07, z),
-			Color(0.71, 0.62, 0.48)))
+	_dist_box(Vector3(BLOCK - 2.0, 0.06, BLOCK - 2.0), Vector3(x, 0.07, z),
+			Color(0.71, 0.62, 0.48))
 	var street := x + 6.0
 	var gate_z := z - 15.0
 	var red := Color(0.60, 0.25, 0.15)
 	var cream := Color(0.93, 0.88, 0.76)
 	_add_building(Vector3(street - 7.5, 0, gate_z), Vector3(2.6, 10.0, 2.6), red)
 	_add_building(Vector3(street + 7.5, 0, gate_z), Vector3(2.6, 10.0, 2.6), red)
-	add_child(_mesh_box(Vector3(16.6, 2.6, 2.8), red, Vector3(street, 10.8, gate_z)))
-	add_child(_mesh_box(Vector3(16.6, 0.5, 2.9), cream, Vector3(street, 9.5, gate_z)))
+	_dist_box(Vector3(16.6, 2.6, 2.8), Vector3(street, 10.8, gate_z), red)
+	_dist_box(Vector3(16.6, 0.5, 2.9), Vector3(street, 9.5, gate_z), cream)
 	for fx in [-6.0, 0.0, 6.0]:
-		add_child(_mesh_box(Vector3(0.7, 1.1, 0.7), cream, Vector3(street + fx, 12.6, gate_z)))
+		_dist_box(Vector3(0.7, 1.1, 0.7), Vector3(street + fx, 12.6, gate_z), cream)
 	var zeds := [z - 12.0, z - 6.5, z + 14.5]
 	for i in zeds.size():
 		_stall(Vector3(street - 9.0, 0, zeds[i]), 1.0, i)
 		_stall(Vector3(street + 9.0, 0, zeds[i]), -1.0, i + 3)
 	_add_building(Vector3(x - 11.5, 0, z - 8.0), Vector3(11.0, 7.0, 16.0), Color(0.82, 0.66, 0.45))
-	add_child(_mesh_box(Vector3(11.4, 0.7, 16.4), cream, Vector3(x - 11.5, 5.6, z - 8.0)))
+	_dist_box(Vector3(11.4, 0.7, 16.4), Vector3(x - 11.5, 5.6, z - 8.0), cream)
 	_add_building(Vector3(x - 9.0, 0, z + 14.5), Vector3(16.0, 5.5, 5.0), Color(0.75, 0.55, 0.35))
-	add_child(_mesh_box(Vector3(16.4, 0.6, 5.4), cream, Vector3(x - 9.0, 4.4, z + 14.5)))
+	_dist_box(Vector3(16.4, 0.6, 5.4), Vector3(x - 9.0, 4.4, z + 14.5), cream)
 	for bz in [z - 11.5, z - 4.0]:
 		_bunting(street, bz)
 
@@ -374,30 +415,30 @@ func _stall(pos: Vector3, face: float, idx: int) -> void:
 	_add_building(pos, Vector3(2.6, 2.2, 4.2), woods[idx % 3])
 	var ax := pos.x + 0.6 * face
 	var pair: Array = AWNINGS[idx % AWNINGS.size()]
-	add_child(_mesh_box(Vector3(3.4, 0.28, 2.5), pair[0], Vector3(ax, 5.6, pos.z - 1.25)))
-	add_child(_mesh_box(Vector3(3.4, 0.28, 2.5), pair[1], Vector3(ax, 5.6, pos.z + 1.25)))
+	_dist_box(Vector3(3.4, 0.28, 2.5), Vector3(ax, 5.6, pos.z - 1.25), pair[0])
+	_dist_box(Vector3(3.4, 0.28, 2.5), Vector3(ax, 5.6, pos.z + 1.25), pair[1])
 	for side in [-2.2, 2.2]:
-		add_child(_mesh_box(Vector3(0.22, 5.6, 0.22), Color(0.35, 0.25, 0.16),
-				Vector3(ax, 2.8, pos.z + side)))
+		_dist_box(Vector3(0.22, 5.6, 0.22), Vector3(ax, 2.8, pos.z + side),
+				Color(0.35, 0.25, 0.16))
 	var fruit := [Color(0.95, 0.55, 0.10), Color(0.25, 0.65, 0.25), Color(0.90, 0.20, 0.20), Color(0.95, 0.85, 0.30)]
 	for g in range(2):
-		add_child(_mesh_box(Vector3(1.1, 1.0, 1.3), fruit[(idx + g) % 4],
-				Vector3(pos.x, 2.75, pos.z + (1.0 if g == 0 else -1.0))))
+		_dist_box(Vector3(1.1, 1.0, 1.3), Vector3(pos.x, 2.75, pos.z + (1.0 if g == 0 else -1.0)),
+				fruit[(idx + g) % 4])
 
 
 func _bunting(street: float, bz: float) -> void:
 	## Festival flags strung across the market lane, hung between two
 	## poles with a gentle sag.
 	for side in [-7.2, 7.2]:
-		add_child(_mesh_box(Vector3(0.2, 6.2, 0.2), Color(0.30, 0.22, 0.15),
-				Vector3(street + side, 3.1, bz)))
+		_dist_box(Vector3(0.2, 6.2, 0.2), Vector3(street + side, 3.1, bz),
+				Color(0.30, 0.22, 0.15))
 	var cols := [Color(0.95, 0.45, 0.12), Color(0.85, 0.20, 0.45), Color(0.20, 0.60, 0.25),
 		Color(0.95, 0.85, 0.25), Color(0.25, 0.55, 0.90)]
 	for f in range(9):
 		var t := (f + 1) / 10.0
 		var fy := 6.1 - sin(PI * t) * 0.7
-		add_child(_mesh_box(Vector3(0.55, 0.7, 0.14), cols[f % 5],
-				Vector3(street - 7.2 + 14.4 * t, fy, bz)))
+		_dist_box(Vector3(0.55, 0.7, 0.14), Vector3(street - 7.2 + 14.4 * t, fy, bz),
+				cols[f % 5])
 
 
 func _build_park(x: float, z: float) -> void:
@@ -409,35 +450,29 @@ func _build_park(x: float, z: float) -> void:
 func _build_police_station(x: float, z: float) -> void:
 	## Thana on a full block: white hall with a navy band, entrance canopy,
 	## a watch tower with red/blue beacons. Busted players respawn here.
-	add_child(_flat(Vector3(BLOCK - 6.0, 0.06, BLOCK - 6.0), Vector3(x, 0.09, z), Color(0.60, 0.61, 0.64)))
+	_dist_box(Vector3(BLOCK - 6.0, 0.06, BLOCK - 6.0), Vector3(x, 0.09, z), Color(0.60, 0.61, 0.64))
 	var white := Color(0.92, 0.93, 0.95)
 	var navy := Color(0.10, 0.16, 0.35)
 	_add_building(Vector3(x, 0, z - 7.0), Vector3(20.0, 8.0, 9.0), white)
-	add_child(_mesh_box(Vector3(20.4, 1.1, 9.4), navy, Vector3(x, 6.2, z - 7.0)))
-	add_child(_mesh_box(Vector3(9.0, 0.5, 5.0), navy, Vector3(x, 4.6, z - 1.2)))
+	_dist_box(Vector3(20.4, 1.1, 9.4), Vector3(x, 6.2, z - 7.0), navy)
+	_dist_box(Vector3(9.0, 0.5, 5.0), Vector3(x, 4.6, z - 1.2), navy)
 	for s in [-4.4, 0.0, 4.4]:
-		add_child(_mesh_box(Vector3(0.45, 4.6, 0.45), white, Vector3(x + s, 2.3, z + 1.2)))
+		_dist_box(Vector3(0.45, 4.6, 0.45), Vector3(x + s, 2.3, z + 1.2), white)
 	_add_building(Vector3(x + 9.0, 0, z - 9.0), Vector3(3.2, 12.0, 3.2), navy)
-	add_child(_mesh_box(Vector3(0.9, 0.9, 0.9), Color(0.95, 0.08, 0.12), Vector3(x + 8.4, 12.6, z - 9.0)))
-	add_child(_mesh_box(Vector3(0.9, 0.9, 0.9), Color(0.10, 0.30, 0.98), Vector3(x + 9.6, 12.6, z - 9.0)))
+	_dist_box(Vector3(0.9, 0.9, 0.9), Vector3(x + 8.4, 12.6, z - 9.0), Color(0.95, 0.08, 0.12))
+	_dist_box(Vector3(0.9, 0.9, 0.9), Vector3(x + 9.6, 12.6, z - 9.0), Color(0.10, 0.30, 0.98))
 
 
 func _build_metro(x: float, z_line: float) -> void:
+	## Viaduct: repeated pillars and deck segments become MultiMeshes; the
+	## station hall merges into the district mesh at its position.
 	var s := -WORLD / 2.0 + 10.0
 	while s < WORLD / 2.0 - 10.0:
-		var p := MeshInstance3D.new()
-		var pcm := CylinderMesh.new()
-		pcm.top_radius = 0.8
-		pcm.bottom_radius = 1.0
-		pcm.height = 12.0
-		pcm.material = _mat(Color(0.55, 0.58, 0.62))
-		p.mesh = pcm
-		p.position = Vector3(x, 6.0, s)
-		add_child(p)
-		add_child(_mesh_box(Vector3(ROAD - 2.0, 1.2, 22.0), Color(0.32, 0.35, 0.42), Vector3(x, 12.4, s)))
+		_pillar_xfs.append(Transform3D(Basis(), Vector3(x, 6.0, s)))
+		_metro_seg_xfs.append(Transform3D(Basis(), Vector3(x, 12.4, s)))
 		s += 22.0
-	add_child(_mesh_box(Vector3(3.4, 3.2, 30.0), Color(0.85, 0.87, 0.90), Vector3(x, 14.6, -40.0)))
-	add_child(_mesh_box(Vector3(3.5, 0.7, 30.0), Color(0.18, 0.44, 0.70), Vector3(x, 14.0, -40.0)))
+	_dist_box(Vector3(3.4, 3.2, 30.0), Vector3(x, 14.6, -40.0), Color(0.85, 0.87, 0.90))
+	_dist_box(Vector3(3.5, 0.7, 30.0), Vector3(x, 14.0, -40.0), Color(0.18, 0.44, 0.70))
 
 
 # ---------------------------------------------------------------- UI
