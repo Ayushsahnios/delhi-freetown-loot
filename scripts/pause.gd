@@ -5,7 +5,7 @@ extends CanvasLayer
 ## volume logic is never touched; settings persist to user://settings.json.
 
 const SETTINGS_PATH := "user://settings.json"
-const DEFAULTS := {"master": 100.0, "ambient": 100.0, "radio": 100.0, "shadows": false}
+const DEFAULTS := {"master": 100.0, "ambient": 100.0, "radio": 100.0, "shadows": true}
 
 var _game: Node
 var _settings := {}
@@ -146,6 +146,9 @@ func _apply_setting(key: String, value) -> void:
 	write_settings(_settings)
 	apply_audio(_settings)
 	if key == "shadows" and _game != null and _game.sun != null:
+		# The day cycle re-evaluates this every tick (sun below the
+		# horizon suspends the shadow map), so only the want-flag is set.
+		_game._sun_shadows_wanted = bool(value)
 		_game.sun.shadow_enabled = bool(value)
 
 

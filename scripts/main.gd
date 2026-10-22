@@ -40,6 +40,7 @@ var player: CharacterBody3D
 var camera: Camera3D
 var sun: DirectionalLight3D
 var world_env: WorldEnvironment
+var _sun_shadows_wanted := true
 
 var day_t := 0.32
 var current_auto: CharacterBody3D = null
@@ -101,7 +102,8 @@ func _ready() -> void:
 	_build_environment()
 	var boot := PauseScript.load_settings()
 	PauseScript.apply_audio(boot)
-	sun.shadow_enabled = bool(boot.get("shadows", false))
+	_sun_shadows_wanted = bool(boot.get("shadows", true))
+	sun.shadow_enabled = _sun_shadows_wanted
 	_weather = WeatherScript.new()
 	add_child(_weather)
 	_weather.setup()
@@ -158,6 +160,15 @@ func _build_environment() -> void:
 	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-55, 40, 0)
 	sun.light_energy = 1.0
+	# Real-time sun shadows: two split bands (near actors + far buildings)
+	# tuned so the web/mobile renderers stay smooth and skin never acnes.
+	sun.shadow_enabled = true
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	sun.directional_shadow_blend_splits = true
+	sun.directional_shadow_max_distance = 120.0
+	sun.directional_shadow_fade_start = 0.85
+	sun.shadow_bias = 0.05
+	sun.shadow_normal_bias = 1.5
 	add_child(sun)
 
 
@@ -937,6 +948,12 @@ func _update_day(delta: float) -> void:
 	var daylight: float = clampf((sun_angle + 0.25) * 1.6, 0.0, 1.0)
 	sun.light_energy = (0.15 + daylight * 0.85) * (1.0 - _weather.cloud * 0.5)
 	sun.rotation_degrees = Vector3(-30.0 - daylight * 45.0, 40.0, 0.0)
+	# Night falls: ambient dims and cools toward moonlight, and the shadow
+	# map sleeps once the sun stops casting anything worth drawing.
+	var env := world_env.environment
+	env.ambient_light_energy = lerpf(0.16, 0.7, daylight)
+	env.ambient_light_color = Color(0.42, 0.48, 0.66).lerp(Color(0.7, 0.75, 0.85), daylight)
+	sun.shadow_enabled = _sun_shadows_wanted and daylight > 0.12
 	var sky := SKY_NIGHT.lerp(SKY_DAY, daylight)
 	var dusk: float = clampf(1.0 - absf(daylight - 0.5) * 2.0, 0.0, 1.0)
 	sky = sky.lerp(SKY_DUSK, dusk * 0.5)

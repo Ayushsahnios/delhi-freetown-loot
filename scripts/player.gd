@@ -9,6 +9,7 @@ const FALL_SAFE_SPEED := 14.0
 const MODEL_HEIGHT := 5.9
 
 const Chars := preload("res://scripts/characters.gd")
+const ShadowBlob := preload("res://scripts/shadowblob.gd")
 
 signal landed_hard(impact_speed: float)
 
@@ -48,6 +49,7 @@ func _build_look(def: Dictionary) -> void:
 	run_boost = 1.18 if String(def.get("id")) == "riya" else 1.0
 	var path: String = Chars.FEMALE_A if String(def.get("id")) == "riya" else Chars.MALE
 	var model := _chars.spawn(path, MODEL_HEIGHT)
+	ShadowBlob.attach(model, 0.55)
 	_chars.tint(model, def.get("shirt", Color.WHITE), def.get("pants", Color.BLACK),
 			def.get("skin", Color.WHITE))
 	if def.get("sardar", false):
