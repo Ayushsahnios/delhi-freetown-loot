@@ -17,6 +17,7 @@ const PoliceScript := preload("res://scripts/police.gd")
 const MissionScript := preload("res://scripts/missions.gd")
 const AudioScript := preload("res://scripts/audio.gd")
 const MiniMapScript := preload("res://scripts/minimap.gd")
+const FoodScript := preload("res://scripts/food.gd")
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
@@ -49,6 +50,7 @@ var _dead := false
 var _impact_cd := 0.0
 var _audio: Node
 var _minimap: Control
+var _food: Node
 var _hud_hp_bg: ColorRect
 var _hud_hp_fill: ColorRect
 var _hud_hp_text: Label
@@ -69,6 +71,9 @@ func _ready() -> void:
 	_build_environment()
 	_build_city()
 	_build_landmarks()
+	_food = FoodScript.new()
+	add_child(_food)
+	_food.setup(_landmarks)
 	_traffic = TrafficScript.new()
 	add_child(_traffic)
 	_traffic.setup(WORLD, PITCH, ROAD, GRID + 1)
@@ -445,7 +450,7 @@ func _build_select_ui() -> void:
 		box.add_child(btn)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · F9 save · X debug hurt · C debug drop"
+	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · Q/R street food · F9 save · X debug hurt · C debug drop"
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
@@ -481,6 +486,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_missions = MissionScript.new()
 	add_child(_missions)
 	_missions.register_player(player)
+	_food.register(player, _health, _missions)
 	_cam_anchor = player.position
 	_audio.start_ambient()
 	_minimap.visible = true

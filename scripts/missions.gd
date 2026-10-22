@@ -94,6 +94,15 @@ func charge_fine(amount: int) -> int:
 	return taken
 
 
+func spend(amount: int) -> bool:
+	## Street purchases (food stalls): pay only if the wallet covers it.
+	if amount <= 0 or cash < amount:
+		return false
+	cash -= amount
+	_cash_hud.text = "Rs %d" % cash
+	return true
+
+
 func restore(saved_cash: int, saved_completed: Dictionary) -> void:
 	## Load-from-save entry point: cash, HUD, completion records.
 	## Repeatable missions stay at their markers; any one-shot mission
