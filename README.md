@@ -11,7 +11,9 @@ Place roundabout, Purani Dilli's red fort and dome, parks, and an elevated
 metro line overhead. Day/night cycle, drivable auto-rickshaws, living
 traffic and pedestrians, player health with landmark respawns, and a
 wanted system — cause chaos and police jeeps hunt you through the grid;
-lose them and the heat cools. Glowing street markers hand out missions
+lose them and the heat cools; get cornered while wanted or go down hot
+and it's **BUSTED** — fine out of your wallet, respawn outside the thana
+police station, heat wiped. Glowing street markers hand out missions
 for cash: street tests, a three-stop chai run against a cooling timer,
 and a checkpoint ring race against two rival auto-rickshaws. More coming
 every milestone.

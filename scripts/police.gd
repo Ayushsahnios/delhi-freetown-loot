@@ -6,6 +6,7 @@ extends Node
 ## nothing can fall through the world and there is no physics cost.
 
 signal stars_changed(stars: int)
+signal arrested
 
 const PED_HEAT := 2.0
 const RAM_HEAT := 1.0
@@ -14,6 +15,10 @@ const MAX_STARS := 5
 const SIGHT := 55.0
 const ESCAPE_TIME := 8.0
 const COOL_RATE := 0.6
+const ARREST_RADIUS := 9.0
+const ARREST_JEEPS := 2
+const ARREST_HOLD := 1.6
+const ARREST_MAX_SPEED := 7.0
 const CRUISE := 21.0
 const ACCEL := 9.0
 const LANE := 2.8
@@ -37,6 +42,10 @@ var _stars := 0
 var _unseen := 0.0
 var _spawn_cd := 0.0
 var _flash := 0.0
+var _arrest_t := 0.0
+var _arrested := false
+var _last_p := Vector3.ZERO
+var _tracked := false
 
 
 func setup(world_size: float, pitch: float, road_width: float, road_count: int) -> void:
@@ -62,8 +71,12 @@ func chaos_ram() -> void:
 
 
 func reset() -> void:
+	## Bust/respawn/death: wipe heat, jeeps and any arrest-in-progress.
 	heat = 0.0
 	_unseen = 0.0
+	_arrest_t = 0.0
+	_arrested = false
+	_tracked = false
 	_clear()
 	_sync_stars()
 
@@ -124,6 +137,37 @@ func _physics_process(delta: float) -> void:
 	for j in _jeeps.duplicate():
 		_pursue(j, p, delta)
 	_animate_lights()
+	_tick_arrest(p, delta)
+
+
+# ---------------------------------------------------------------- arrest
+
+func _tick_arrest(p: Vector3, delta: float) -> void:
+	## Cornered while wanted: two or more jeeps parked on top of a slow (or
+	## on-foot) player for a beat means the cops close in and it's BUSTED.
+	## Player speed is measured from position deltas so it works the same
+	## on foot and behind the wheel.
+	if not _tracked:
+		_last_p = p
+		_tracked = true
+		return
+	var speed := Vector2(p.x - _last_p.x, p.z - _last_p.z).length() / maxf(delta, 0.0001)
+	_last_p = p
+	if _stars < 1 or speed > ARREST_MAX_SPEED:
+		_arrest_t = 0.0
+		return
+	var near := 0
+	for j in _jeeps:
+		var jp: Vector3 = j.node.position
+		if Vector2(jp.x - p.x, jp.z - p.z).length() < ARREST_RADIUS:
+			near += 1
+	if near >= ARREST_JEEPS:
+		_arrest_t += delta
+		if _arrest_t >= ARREST_HOLD and not _arrested:
+			_arrested = true
+			arrested.emit()
+	else:
+		_arrest_t = 0.0
 
 
 # ---------------------------------------------------------------- pursuit

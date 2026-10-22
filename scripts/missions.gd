@@ -85,6 +85,15 @@ func resume() -> void:
 	enabled = true
 
 
+func charge_fine(amount: int) -> int:
+	## Busted: the police take their cut. Never drops below zero;
+	## returns what was actually taken so the HUD message is honest.
+	var taken := mini(maxi(amount, 0), cash)
+	cash -= taken
+	_cash_hud.text = "Rs %d" % cash
+	return taken
+
+
 func restore(saved_cash: int, saved_completed: Dictionary) -> void:
 	## Load-from-save entry point: cash, HUD, completion records.
 	## Repeatable missions stay at their markers; any one-shot mission
