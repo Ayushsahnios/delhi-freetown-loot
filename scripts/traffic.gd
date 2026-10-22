@@ -7,20 +7,13 @@ extends Node
 ## mesh per vehicle style), so full traffic costs only a few draw calls.
 
 const MeshTools := preload("res://scripts/meshtools.gd")
+const Vehicles := preload("res://scripts/vehicles.gd")
 
 const COUNT := 22
 const LANE := 2.8
 const WRAP_MARGIN := 24.0
 const ACCEL := 9.0
 const BRAKE := 22.0
-const CAR_COLORS := [
-	Color(0.75, 0.12, 0.12), Color(0.10, 0.22, 0.55), Color(0.85, 0.82, 0.78),
-	Color(0.12, 0.14, 0.16), Color(0.55, 0.52, 0.20), Color(0.20, 0.45, 0.28),
-]
-const RICK_GREEN := Color(0.18, 0.55, 0.20)
-const RICK_YELLOW := Color(0.97, 0.77, 0.19)
-const CABIN := Color(0.55, 0.65, 0.75)
-const WHEEL := Color(0.1, 0.11, 0.13)
 
 var _vehicles: Array[Dictionary] = []
 var _player: Node3D = null
@@ -43,7 +36,7 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 	_roads = road_count
 	_rng.randomize()
 	_auto_mm = _new_mm(_auto_mesh())
-	for paint in CAR_COLORS:
+	for paint in Vehicles.PAINTS:
 		_car_mms.append(_new_mm(_car_mesh(paint)))
 	for _i in range(COUNT):
 		_vehicles.append(_spawn())
@@ -223,26 +216,15 @@ func _auto_mesh() -> ArrayMesh:
 	## Whole rickshaw merged into one mesh (wheels included — they never
 	## animate separately), one surface per color.
 	var b := MeshTools.new()
-	b.add_box(Vector3(2.4, 1.3, 3.4), Vector3(0, 1.0, 0), RICK_GREEN)
-	b.add_box(Vector3(2.4, 1.4, 2.2), Vector3(0, 2.2, 0.2), RICK_YELLOW)
-	b.add_box(Vector3(1.6, 1.1, 0.9), Vector3(0, 1.35, -1.9), RICK_YELLOW)
-	for spec in [Vector3(-1.05, 0.55, -1.6), Vector3(1.05, 0.55, -1.6), Vector3(0, 0.55, 1.5)]:
-		b.add_mesh(_wheel_mesh(0.55), Transform3D(Basis(Vector3(0, 0, 1), PI / 2.0), spec), WHEEL)
+	Vehicles.build_rickshaw_body(b)
+	for spec in Vehicles.RICKSHAW_WHEELS:
+		Vehicles.add_merged_wheel(b, spec)
 	return b.build_mesh()
 
 
 func _car_mesh(paint: Color) -> ArrayMesh:
 	var b := MeshTools.new()
-	b.add_box(Vector3(2.0, 0.9, 4.2), Vector3(0, 0.85, 0), paint)
-	b.add_box(Vector3(1.8, 0.8, 2.2), Vector3(0, 1.7, 0.2), CABIN)
-	for spec in [Vector3(-1.0, 0.5, -1.4), Vector3(1.0, 0.5, -1.4), Vector3(-1.0, 0.5, 1.4), Vector3(1.0, 0.5, 1.4)]:
-		b.add_mesh(_wheel_mesh(0.45), Transform3D(Basis(Vector3(0, 0, 1), PI / 2.0), spec), WHEEL)
+	Vehicles.build_hatchback_body(b, paint)
+	for spec in Vehicles.HATCH_WHEELS:
+		Vehicles.add_merged_wheel(b, spec)
 	return b.build_mesh()
-
-
-func _wheel_mesh(radius: float) -> CylinderMesh:
-	var cm := CylinderMesh.new()
-	cm.top_radius = radius
-	cm.bottom_radius = radius
-	cm.height = 0.4
-	return cm

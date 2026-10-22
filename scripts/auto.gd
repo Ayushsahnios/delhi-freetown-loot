@@ -7,10 +7,8 @@ const KINDS := {
 	"car": {"max_speed": 34.0, "accel": 16.0, "turn": 1.55},
 	"van": {"max_speed": 21.0, "accel": 9.0, "turn": 1.3},
 }
-const CAR_COLORS := [
-	Color(0.75, 0.12, 0.12), Color(0.10, 0.22, 0.55), Color(0.85, 0.82, 0.78),
-	Color(0.12, 0.14, 0.16), Color(0.55, 0.52, 0.20), Color(0.20, 0.45, 0.28),
-]
+const MeshTools := preload("res://scripts/meshtools.gd")
+const Vehicles := preload("res://scripts/vehicles.gd")
 
 var driver_inside := false
 ## Traction 0..1 — monsoon wetness lowers it: wider turns, longer
@@ -19,6 +17,8 @@ var grip := 1.0
 
 var _spec: Dictionary = KINDS["auto"]
 var _wheels: Array[MeshInstance3D] = []
+var _steer_pivots: Array[Node3D] = []
+var _steer_vis := 0.0
 var _speed := 0.0
 var _rng := RandomNumberGenerator.new()
 
@@ -38,30 +38,40 @@ func setup(pos: Vector3, heading: float, kind := "auto") -> void:
 
 
 func _build_auto() -> void:
-	add_child(_box(Vector3(2.4, 1.3, 3.4), Color(0.18, 0.55, 0.20), Vector3(0, 1.0, 0)))
-	add_child(_box(Vector3(2.4, 1.4, 2.2), Color(0.97, 0.77, 0.19), Vector3(0, 2.2, 0.2)))
-	add_child(_box(Vector3(1.6, 1.1, 0.9), Color(0.97, 0.77, 0.19), Vector3(0, 1.35, -1.9)))
-	for spec in [Vector3(-1.05, 0.55, -1.6), Vector3(1.05, 0.55, -1.6), Vector3(0, 0.55, 1.5)]:
-		_add_wheel(spec, 0.55)
-	_add_collision(Vector3(2.6, 2.4, 3.8), Vector3(0, 1.4, 0))
+	var b := MeshTools.new()
+	Vehicles.build_rickshaw_body(b)
+	add_child(_body_node(b))
+	for spec in Vehicles.RICKSHAW_WHEELS:
+		_add_wheel(spec)
+	_add_collision(Vector3(2.2, 2.2, 4.3), Vector3(0, 1.15, 0))
 
 
 func _build_car() -> void:
-	var paint: Color = CAR_COLORS[_rng.randi_range(0, CAR_COLORS.size() - 1)]
-	add_child(_box(Vector3(2.0, 0.9, 4.2), paint, Vector3(0, 0.85, 0)))
-	add_child(_box(Vector3(1.8, 0.8, 2.2), Color(0.55, 0.65, 0.75), Vector3(0, 1.7, 0.2)))
-	for spec in [Vector3(-1.0, 0.5, -1.4), Vector3(1.0, 0.5, -1.4), Vector3(-1.0, 0.5, 1.4), Vector3(1.0, 0.5, 1.4)]:
-		_add_wheel(spec, 0.45)
-	_add_collision(Vector3(2.2, 2.0, 4.4), Vector3(0, 1.2, 0))
+	var b := MeshTools.new()
+	Vehicles.build_hatchback_body(b, _random_paint())
+	add_child(_body_node(b))
+	for spec in Vehicles.HATCH_WHEELS:
+		_add_wheel(spec)
+	_add_collision(Vector3(2.1, 1.95, 4.25), Vector3(0, 1.0, 0))
 
 
 func _build_van() -> void:
-	var paint: Color = CAR_COLORS[_rng.randi_range(0, CAR_COLORS.size() - 1)]
-	add_child(_box(Vector3(2.3, 1.3, 1.8), paint, Vector3(0, 1.15, -1.5)))
-	add_child(_box(Vector3(2.3, 2.2, 2.9), Color(0.88, 0.86, 0.80), Vector3(0, 1.7, 1.0)))
-	for spec in [Vector3(-1.05, 0.55, -1.5), Vector3(1.05, 0.55, -1.5), Vector3(-1.0, 0.55, 1.8), Vector3(1.0, 0.55, 1.8)]:
-		_add_wheel(spec, 0.55)
-	_add_collision(Vector3(2.5, 3.0, 5.0), Vector3(0, 1.6, 0))
+	var b := MeshTools.new()
+	Vehicles.build_van_body(b, _random_paint())
+	add_child(_body_node(b))
+	for spec in Vehicles.VAN_WHEELS:
+		_add_wheel(spec)
+	_add_collision(Vector3(2.5, 3.0, 4.95), Vector3(0, 1.5, 0))
+
+
+func _random_paint() -> Color:
+	return Vehicles.PAINTS[_rng.randi_range(0, Vehicles.PAINTS.size() - 1)]
+
+
+func _body_node(b: MeshTools) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = b.build_mesh()
+	return mi
 
 
 func _physics_process(_delta: float) -> void:
@@ -105,24 +115,25 @@ func drive(delta: float) -> void:
 		velocity = Vector3.ZERO
 	move_and_slide()
 
+	# Front wheels visibly steer with input; all wheels spin with speed.
+	_steer_vis = lerpf(_steer_vis, steer * 0.42, clampf(10.0 * delta, 0.0, 1.0))
+	for p in _steer_pivots:
+		p.rotation.y = _steer_vis
 	for w in _wheels:
 		w.rotation.x += _speed * delta * 2.0
 
 
-func _add_wheel(pos: Vector3, radius: float) -> void:
+func _add_wheel(spec: Dictionary) -> void:
+	var pivot := Node3D.new()
+	pivot.position = spec["pos"]
+	add_child(pivot)
 	var w := MeshInstance3D.new()
-	var cm := CylinderMesh.new()
-	cm.top_radius = radius
-	cm.bottom_radius = radius
-	cm.height = 0.4
-	var wmat := StandardMaterial3D.new()
-	wmat.albedo_color = Color(0.1, 0.11, 0.13)
-	cm.material = wmat
-	w.mesh = cm
+	w.mesh = Vehicles.wheel_mesh(spec)
 	w.rotation.z = PI / 2.0
-	w.position = pos
-	add_child(w)
+	pivot.add_child(w)
 	_wheels.append(w)
+	if spec["steer"]:
+		_steer_pivots.append(pivot)
 
 
 func _add_collision(size: Vector3, pos: Vector3) -> void:
@@ -132,15 +143,3 @@ func _add_collision(size: Vector3, pos: Vector3) -> void:
 	col.shape = box
 	col.position = pos
 	add_child(col)
-
-
-func _box(size: Vector3, color: Color, pos: Vector3) -> MeshInstance3D:
-	var m := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	bm.material = mat
-	m.mesh = bm
-	m.position = pos
-	return m
