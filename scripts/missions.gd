@@ -1,9 +1,12 @@
 extends Node
 ## Mission system: data-driven mission table, glowing street markers,
-## approach briefs, multi-stage reach / timed-delivery objectives, rival
-## racers, fail flow, cash rewards. All visuals procedural — zero assets.
+## typewriter dialogue offers with take-it-or-leave-it choices,
+## multi-stage reach / timed-delivery objectives, rival racers, fail
+## flow, cash rewards. All visuals procedural — zero assets.
 ## First two real jobs: the chai run (three stops before it cools) and
 ## the CP ring race (checkpoints against two AI rickshaws).
+
+const DialogueScript := preload("res://scripts/dialogue.gd")
 
 signal mission_completed(title: String, reward: int)
 signal mission_failed(title: String)
@@ -22,17 +25,13 @@ var _defs: Array[Dictionary] = []
 var _states := {}
 var _cds := {}
 var _givers := {}
-var _offer_id := ""
+var _offer_def: Dictionary = {}
 var _active := {}
 var _t := 0.0
 var _toast_t := 0.0
 
 var _ui: CanvasLayer
-var _brief: PanelContainer
-var _brief_title: Label
-var _brief_body: Label
-var _brief_obj: Label
-var _brief_hint: Label
+var _dlg: CanvasLayer
 var _obj_hud: Label
 var _toast: Label
 var _cash_hud: Label
@@ -75,9 +74,13 @@ func active_target() -> Vector3:
 
 func abort_active(reason: String) -> void:
 	## Called by the main scene when the player goes down: fail any
-	## running mission and pause new offers until respawn completes.
+	## running mission, drop any open offer dialogue, and pause new
+	## offers until respawn completes.
 	if not _active.is_empty():
 		_fail_mission(reason)
+	if not _offer_def.is_empty():
+		_offer_def = {}
+		_dlg.cancel()
 	enabled = false
 
 
@@ -126,7 +129,19 @@ func _build_defs() -> void:
 		{
 			"id": "gate_stroll",
 			"title": "Street test: Gate run",
-			"brief": "Loop crew street test: get from your spawn corner to India Gate and stand under the arch. Walk it, run it, or grab an auto.",
+			"lines": [
+				{
+					"speaker": "Street marshal",
+					"text": "Fresh legs! The loop crew wants proof you can move. Get from this corner to India Gate and stand under the arch — walk it, sprint it, or grab an auto.",
+					"color": Color(1.0, 0.86, 0.3),
+				},
+				{
+					"speaker": "Street marshal",
+					"text": "Straight up the mall road, you can't miss it. Rs 250 on your return.",
+					"color": Color(1.0, 0.86, 0.3),
+					"choices": ["Take the job", "Not now"],
+				},
+			],
 			"giver": Vector3(8.0, 0.0, 50.0),
 			"objective": {
 				"kind": "reach",
@@ -141,7 +156,19 @@ func _build_defs() -> void:
 		{
 			"id": "cp_crate",
 			"title": "Street test: CP crate run",
-			"brief": "A dhaba crate waits by the Connaught Place green. Run it up to the fort gate in Purani Dilli before the dal boils over.",
+			"lines": [
+				{
+					"speaker": "Dhaba owner",
+					"text": "Arre beta, my dal crate is sitting by the CP green and the fort-gate chowkidar in Purani Dilli won't wait forever.",
+					"color": Color(0.55, 0.9, 0.5),
+				},
+				{
+					"speaker": "Dhaba owner",
+					"text": "Seventy seconds before it boils over — Rs 400, cash, no arguments.",
+					"color": Color(0.55, 0.9, 0.5),
+					"choices": ["Take the job", "Not now"],
+				},
+			],
 			"giver": Vector3(14.0, 0.0, 14.0),
 			"objective": {
 				"kind": "deliver",
@@ -156,7 +183,19 @@ func _build_defs() -> void:
 		{
 			"id": "chai_run",
 			"title": "Chai run: three cups, one flask",
-			"brief": "Chotu called in sick and the flask is full. Run three cups across town — the guard at India Gate, the chowkidar at Purani Dilli, the joggers at Neighbourhood Park — before the chai cools. An auto strongly advised.",
+			"lines": [
+				{
+					"speaker": "Chai stall uncle",
+					"text": "Chotu called in sick and the flask is full to the brim. Three cups, three corners of town: the guard at India Gate, the chowkidar at Purani Dilli, the joggers at Neighbourhood Park.",
+					"color": Color(1.0, 0.6, 0.3),
+				},
+				{
+					"speaker": "Chai stall uncle",
+					"text": "The chai cools in about two minutes, so an auto is strongly advised. Rs 500 when the last cup lands.",
+					"color": Color(1.0, 0.6, 0.3),
+					"choices": ["Take the job", "Not now"],
+				},
+			],
 			"giver": Vector3(6.0, 0.0, -16.0),
 			"objectives": [
 				{
@@ -185,7 +224,19 @@ func _build_defs() -> void:
 		{
 			"id": "cp_race",
 			"title": "CP ring race: rickshaw rally",
-			"brief": "Two rival pullers talk big around the Connaught Place ring. Grab an auto, tag the start line on the west road, and lap the ring through all four crossings before they do. Mind the traffic.",
+			"lines": [
+				{
+					"speaker": "Rival puller",
+					"text": "Oye hero! We lap the CP ring before your meter even beeps. You think you can keep up through all four crossings?",
+					"color": Color(0.95, 0.4, 0.35),
+				},
+				{
+					"speaker": "Rival puller",
+					"text": "Grab an auto, tag the start line on the west road, and beat us around. Rs 600 says you can't.",
+					"color": Color(0.95, 0.4, 0.35),
+					"choices": ["Take the job", "Not now"],
+				},
+			],
 			"giver": Vector3(-30.0, 0.0, 6.0),
 			"objectives": [
 				{
@@ -255,20 +306,16 @@ func _process(delta: float) -> void:
 					_states[id] = "available"
 					_show_giver(id, true)
 			"available":
-				if enabled and _active.is_empty() and _offer_id == "" and _player != null \
+				if enabled and _active.is_empty() and _offer_def.is_empty() and _player != null \
 						and _flat_dist(_player.global_position, def["giver"]) < TRIGGER_R:
-					_offer_id = id
 					_states[id] = "offered"
-					_show_brief(def)
+					_offer_def = def
+					_dlg.start(def["lines"])
 			"offered":
 				if _player == null or _flat_dist(_player.global_position, def["giver"]) > OFFER_EXIT_R:
 					_states[id] = "available"
-					_offer_id = ""
-					_brief.visible = false
-				elif Input.is_action_just_pressed("mission"):
-					_brief.visible = false
-					_offer_id = ""
-					_start_mission(def)
+					_offer_def = {}
+					_dlg.cancel()
 	if not _active.is_empty():
 		_tick_active(delta)
 	if _obj_ring != null and _obj_ring.visible:
@@ -305,6 +352,24 @@ func _tick_active(delta: float) -> void:
 
 # ---------------------------------------------------------------- flow
 
+func _on_dialogue_finished(picked: int) -> void:
+	## Offer dialogue closed: 0 = take the job, 1 = turned down to the
+	## giver's face (short sulk cooldown), anything else = available.
+	if _offer_def.is_empty():
+		return
+	var def: Dictionary = _offer_def
+	_offer_def = {}
+	var id := String(def["id"])
+	if picked == 0 and enabled:
+		_start_mission(def)
+	elif picked == 1:
+		_states[id] = "cooldown"
+		_cds[id] = MARKER_CD
+		_show_giver(id, false)
+	else:
+		_states[id] = "available"
+
+
 func _start_mission(def: Dictionary) -> void:
 	var id := String(def["id"])
 	_states[id] = "active"
@@ -314,6 +379,10 @@ func _start_mission(def: Dictionary) -> void:
 		_spawn_racers(def)
 	_spawn_objective(def["objs"][0])
 	_obj_hud.visible = true
+	_toast.add_theme_color_override("font_color", Color(1.0, 0.86, 0.3))
+	_toast.text = "JOB — %s" % String(def["title"]).to_upper()
+	_toast.visible = true
+	_toast_t = 1.6
 
 
 func _advance_stage(objs: Array, stage: int) -> void:
@@ -575,57 +644,6 @@ func _build_ui() -> void:
 	_toast.visible = false
 	_ui.add_child(_toast)
 
-	_brief = PanelContainer.new()
-	_brief.position = Vector2(340, 470)
-	_brief.custom_minimum_size = Vector2(600, 0)
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.07, 0.08, 0.12, 0.92)
-	sb.border_color = Color(1.0, 0.84, 0.25)
-	sb.set_border_width_all(1)
-	sb.set_corner_radius_all(8)
-	sb.content_margin_left = 18.0
-	sb.content_margin_right = 18.0
-	sb.content_margin_top = 14.0
-	sb.content_margin_bottom = 14.0
-	_brief.add_theme_stylebox_override("panel", sb)
-	_brief.visible = false
-	_ui.add_child(_brief)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
-	_brief.add_child(box)
-	_brief_title = Label.new()
-	_brief_title.add_theme_font_size_override("font_size", 21)
-	_brief_title.add_theme_color_override("font_color", Color(1.0, 0.86, 0.3))
-	box.add_child(_brief_title)
-	_brief_body = Label.new()
-	_brief_body.add_theme_font_size_override("font_size", 14)
-	_brief_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_brief_body.custom_minimum_size = Vector2(560, 0)
-	box.add_child(_brief_body)
-	_brief_obj = Label.new()
-	_brief_obj.add_theme_font_size_override("font_size", 14)
-	_brief_obj.add_theme_color_override("font_color", Color(0.75, 1.0, 0.8))
-	box.add_child(_brief_obj)
-	_brief_hint = Label.new()
-	_brief_hint.add_theme_font_size_override("font_size", 12)
-	_brief_hint.add_theme_color_override("font_color", Color(0.7, 0.72, 0.78))
-	_brief_hint.text = "F — accept  ·  walk away — decline"
-	box.add_child(_brief_hint)
-
-
-func _show_brief(def: Dictionary) -> void:
-	_brief_title.text = String(def["title"])
-	_brief_body.text = String(def["brief"])
-	var objs: Array = def["objs"]
-	var line := ""
-	if def.has("race"):
-		line = "%d checkpoints + finish  ·  %d rivals" % [objs.size() - 1, def["race"]["rivals"].size()]
-	elif objs.size() > 1:
-		line = "%d stops across town" % objs.size()
-	else:
-		line = String(objs[0]["label"])
-	if float(def["time"]) > 0.0:
-		line += "  ·  %d s" % int(def["time"])
-	line += "  ·  pays Rs %d" % int(def["reward"])
-	_brief_obj.text = line
-	_brief.visible = true
+	_dlg = DialogueScript.new()
+	add_child(_dlg)
+	_dlg.finished.connect(_on_dialogue_finished)
