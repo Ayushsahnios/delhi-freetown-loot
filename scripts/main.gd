@@ -18,6 +18,7 @@ const MissionScript := preload("res://scripts/missions.gd")
 const AudioScript := preload("res://scripts/audio.gd")
 const RadioScript := preload("res://scripts/radio.gd")
 const MiniMapScript := preload("res://scripts/minimap.gd")
+const CharactersScript := preload("res://scripts/characters.gd")
 const FoodScript := preload("res://scripts/food.gd")
 const WeatherScript := preload("res://scripts/weather.gd")
 const TouchControlsScript := preload("res://scripts/touch_controls.gd")
@@ -51,6 +52,9 @@ var _hud_name: Label
 var _hud_clock: Label
 var _hud_day: Label
 var _select_layer: CanvasLayer
+var _chars := CharactersScript.new()
+var _portrait_models: Array[Node3D] = []
+var _portrait_views: Array[SubViewport] = []
 var _cam_anchor := Vector3.ZERO
 var _health: Node
 var _landmarks: Array[Dictionary] = []
@@ -589,6 +593,12 @@ func _build_select_ui() -> void:
 	sub.add_theme_font_size_override("font_size", 15)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sub)
+	var portraits := HBoxContainer.new()
+	portraits.alignment = BoxContainer.ALIGNMENT_CENTER
+	portraits.add_theme_constant_override("separation", 16)
+	box.add_child(portraits)
+	for def in Game.CHARACTERS:
+		portraits.add_child(_portrait_card(def))
 
 	var saved := SaveGame.read()
 	if not saved.is_empty():
@@ -623,9 +633,54 @@ func _build_select_ui() -> void:
 	box.add_child(hint)
 
 
+func _portrait_card(def: Dictionary) -> Control:
+	## Title-screen close-up of one legend: the rigged model idles and
+	## slowly turns in its own viewport — the Sardar's turban + beard and
+	## each legend's outfit colors show at a glance before picking.
+	var svc := SubViewportContainer.new()
+	svc.stretch = true
+	svc.custom_minimum_size = Vector2(128, 168)
+	var vp := SubViewport.new()
+	vp.size = Vector2i(128, 168)
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	svc.add_child(vp)
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.10, 0.09, 0.22)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.55, 0.55, 0.62)
+	env.ambient_light_energy = 1.0
+	var we := WorldEnvironment.new()
+	we.environment = env
+	vp.add_child(we)
+	var lamp := DirectionalLight3D.new()
+	lamp.rotation_degrees = Vector3(-38.0, 55.0, 0.0)
+	lamp.light_energy = 1.2
+	vp.add_child(lamp)
+	var path: String = CharactersScript.FEMALE_A if String(def.get("id")) == "riya" else CharactersScript.MALE
+	var model := _chars.spawn(path, 1.72)
+	_chars.tint(model, def.get("shirt", Color.WHITE), def.get("pants", Color.BLACK),
+			def.get("skin", Color.WHITE))
+	if def.get("sardar", false):
+		_chars.attach_sardar(model, def.get("turban", Color(1.0, 0.56, 0.12)))
+	vp.add_child(model)
+	_chars.play(_chars.anim_names(model), _chars.get_player(model), "idle", 1.0)
+	var cam := Camera3D.new()
+	cam.fov = 30.0
+	cam.transform = Transform3D(
+			Basis.looking_at(Vector3(0.0, -0.25, -2.3).normalized(), Vector3.UP),
+			Vector3(0.0, 1.5, 2.3))
+	vp.add_child(cam)
+	_portrait_models.append(model)
+	_portrait_views.append(vp)
+	return svc
+
+
 func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	Game.selected_character = def
 	_select_layer.visible = false
+	for v in _portrait_views:
+		v.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_hud_name.text = String(def["name"])
 
 	player = PlayerScript.new()
@@ -692,6 +747,8 @@ func _process(delta: float) -> void:
 	_apply_wetness()
 	_audio.set_rain(_weather.intensity)
 	if not _playing:
+		for m in _portrait_models:
+			m.rotate_y(delta * 0.7)
 		return
 	_impact_cd = maxf(_impact_cd - delta, 0.0)
 	_chaos_cd = maxf(_chaos_cd - delta, 0.0)
