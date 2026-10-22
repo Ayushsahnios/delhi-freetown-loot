@@ -4,10 +4,10 @@ extends Node
 ## to the nearest sidewalk line. Purely kinematic movers (same approach as
 ## the traffic manager) recycled around the player, so there is no spawn
 ## cost and nothing can fall through the world.
-## Crowds render through two MultiMeshes (unit box / unit sphere parts with
-## per-instance color) — hundreds of walkers for a couple of draw calls.
+## Every walker is an instanced rigged CC0 character (see characters.gd)
+## playing its own walk/run clips — the old MultiMesh box bodies are gone.
 
-const MeshTools := preload("res://scripts/meshtools.gd")
+const Chars := preload("res://scripts/characters.gd")
 
 const COUNT := 26
 const EDGE := 1.4
@@ -28,7 +28,11 @@ const ZONE_WAKE := 130.0
 const ZONE_RECYCLE := 150.0
 const ZONE_SPAWN_MIN := 26.0
 const ZONE_BIAS := 42.0
-const BOX_SLOTS := 7
+const PED_HEIGHT := 4.7
+const WALK_CLIP_SPEED := 3.8
+const MODELS := [
+	Chars.FEMALE_A, Chars.FEMALE_B, Chars.FEMALE_C, Chars.FEMALE_D, Chars.MALE,
+]
 
 const SKIN_TONES := [
 	Color(0.79, 0.57, 0.40), Color(0.72, 0.50, 0.33),
@@ -42,7 +46,6 @@ const PANTS := [
 	Color(0.14, 0.18, 0.30), Color(0.30, 0.30, 0.34), Color(0.32, 0.24, 0.18),
 	Color(0.10, 0.10, 0.12), Color(0.62, 0.55, 0.40),
 ]
-const TURBANS := [Color(1.0, 0.56, 0.12), Color(0.20, 0.40, 0.85), Color(0.95, 0.95, 0.92)]
 
 var _peds: Array[Dictionary] = []
 var _player: Node3D = null
@@ -55,8 +58,7 @@ var _placed := false
 var _zone_center := Vector3.ZERO
 var _zone_radius := 0.0
 var _zone_set := false
-var _box_mm: MultiMesh = null
-var _sphere_mm: MultiMesh = null
+var _chars := Chars.new()
 
 
 func setup(world_size: float, pitch: float, road_width: float, road_count: int) -> void:
@@ -65,15 +67,10 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 	_road_w = road_width
 	_roads = road_count
 	_rng.randomize()
-	var part_mat := StandardMaterial3D.new()
-	part_mat.vertex_color_use_as_albedo = true
 	var total := COUNT + ZONE_EXTRA
-	_box_mm = _part_mm(_unit_mesh(BoxMesh.new()), total * BOX_SLOTS, part_mat)
-	var sphere := SphereMesh.new()
-	_sphere_mm = _part_mm(_unit_mesh(sphere), total, part_mat)
 	for i in range(total):
 		var v := _new_ped(i >= COUNT)
-		_build_parts(v, i)
+		_dress(v)
 		_peds.append(v)
 
 
@@ -259,6 +256,8 @@ func _place(v: Dictionary) -> void:
 		if _flat_dist(v) >= SPAWN_MIN_DIST:
 			break
 	v.visible = true
+	if v.node != null:
+		v.node.visible = true
 
 
 func _zone_awake() -> bool:
@@ -291,6 +290,8 @@ func _place_zone(v: Dictionary) -> void:
 		if _flat_dist(v) >= ZONE_SPAWN_MIN:
 			break
 	v.visible = true
+	if v.node != null:
+		v.node.visible = true
 
 
 func _nearest_sidewalk(pos: Vector3) -> Dictionary:
@@ -332,55 +333,27 @@ func _face(v: Dictionary, dir: Vector3) -> void:
 
 
 func _animate(v: Dictionary) -> void:
-	## Push every body-part instance transform for one walker. Limbs swing
-	## about their part centers, exactly as the old mesh nodes did.
-	var amp := 0.5
+	## Place one walker in the world and keep its clip honest: stroll on
+	## the sidewalk, run while panicking.
+	var node: Node3D = v.node
+	if node == null:
+		return
+	node.global_transform = Transform3D(Basis(Vector3.UP, v.heading), v.pos)
 	if v.panic > 0.0 or v.rejoin > 0.0:
-		amp = 0.85
-	var s := sin(v.phase) * amp
-	var base := Transform3D(Basis(Vector3.UP, v.heading), v.pos)
-	for p in v.parts:
-		var local := Transform3D(Basis(), p.pivot)
-		if p.swing != 0.0:
-			local = local * Transform3D(Basis(Vector3(1, 0, 0), s * p.swing), Vector3.ZERO)
-		local = local * Transform3D(Basis().scaled(p.size), Vector3.ZERO)
-		p.mm.set_instance_transform(p.idx, base * local)
+		_chars.play(v.anims, v.ap, "run", 1.1)
+	else:
+		_chars.play(v.anims, v.ap, "walk", v.speed / WALK_CLIP_SPEED)
 
 
 func _hide_ped(v: Dictionary) -> void:
-	## Park every part instance below the world until the walker wakes.
-	var hidden := Transform3D(Basis(), Vector3(0.0, -500.0, 0.0))
-	for p in v.parts:
-		p.mm.set_instance_transform(p.idx, hidden)
+	## Park the walker out of sight until its zone wakes again.
+	if v.node != null:
+		v.node.visible = false
+	if v.ap != null:
+		v.ap.stop()
 
 
 # ---------------------------------------------------------------- visuals
-
-func _part_mm(mesh: PrimitiveMesh, count: int, mat: StandardMaterial3D) -> MultiMesh:
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.mesh = mesh
-	mm.instance_count = count
-	var hidden := Transform3D(Basis(), Vector3(0.0, -500.0, 0.0))
-	for i in count:
-		mm.set_instance_transform(i, hidden)
-	var mmi := MultiMeshInstance3D.new()
-	mmi.multimesh = mm
-	add_child(mmi)
-	return mm
-
-
-func _unit_mesh(mesh: PrimitiveMesh) -> PrimitiveMesh:
-	## Unit-sized shape; real proportions come from per-instance scale.
-	if mesh is BoxMesh:
-		mesh.size = Vector3.ONE
-	else:
-		var s := mesh as SphereMesh
-		s.radius = 0.5
-		s.height = 1.0
-	mesh.material = null
-	return mesh
 
 
 func _new_ped(zone: bool) -> Dictionary:
@@ -389,35 +362,21 @@ func _new_ped(zone: bool) -> Dictionary:
 		"along_z": true, "road": 0.0, "t": 0.0, "dir": 1,
 		"speed": 3.0, "panic": 0.0, "panic_dir": Vector3.ZERO,
 		"rejoin": 0.0, "cd": 0.0, "phase": _rng.randf() * TAU,
-		"zone": zone,
+		"zone": zone, "node": null, "ap": null, "anims": {},
 	}
 
 
-func _build_parts(v: Dictionary, i: int) -> void:
-	## Fixed instance slots per walker: boxes b+0..b+6 (legs, torso, arms,
-	## head, headgear) and one sphere slot for a turban when worn.
+func _dress(v: Dictionary) -> void:
+	## One rigged walker: random model from the CC0 set, random palette.
+	## The model's own AnimationPlayer drives the walk.
+	var path: String = MODELS[_rng.randi_range(0, MODELS.size() - 1)]
+	var node := _chars.spawn(path, PED_HEIGHT)
 	var skin: Color = SKIN_TONES[_rng.randi_range(0, SKIN_TONES.size() - 1)]
 	var shirt: Color = SHIRTS[_rng.randi_range(0, SHIRTS.size() - 1)]
 	var pants: Color = PANTS[_rng.randi_range(0, PANTS.size() - 1)]
-	var b := i * BOX_SLOTS
-	v.parts.append(_part(_box_mm, b + 0, Vector3(0.62, 1.7, 0.68), Vector3(-0.42, 0.85, 0), pants, 1.0))
-	v.parts.append(_part(_box_mm, b + 1, Vector3(0.62, 1.7, 0.68), Vector3(0.42, 0.85, 0), pants, -1.0))
-	v.parts.append(_part(_box_mm, b + 2, Vector3(1.8, 2.2, 1.0), Vector3(0, 2.6, 0), shirt, 0.0))
-	v.parts.append(_part(_box_mm, b + 3, Vector3(0.5, 1.7, 0.5), Vector3(-1.15, 2.8, 0), skin, -0.8))
-	v.parts.append(_part(_box_mm, b + 4, Vector3(0.5, 1.7, 0.5), Vector3(1.15, 2.8, 0), skin, 0.8))
-	v.parts.append(_part(_box_mm, b + 5, Vector3(1.05, 1.05, 1.05), Vector3(0, 4.15, 0), skin, 0.0))
-	var roll := _rng.randf()
-	if roll < 0.14:
-		v.parts.append(_part(_sphere_mm, i, Vector3(1.4, 1.05, 1.4), Vector3(0, 4.7, 0),
-				TURBANS[_rng.randi_range(0, TURBANS.size() - 1)], 0.0))
-	elif roll < 0.34:
-		v.parts.append(_part(_box_mm, b + 6, Vector3(2.0, 0.5, 1.2), Vector3(0, 3.55, 0),
-				SHIRTS[_rng.randi_range(0, SHIRTS.size() - 1)], 0.0))
-	else:
-		v.parts.append(_part(_box_mm, b + 6, Vector3(1.1, 0.35, 1.1), Vector3(0, 4.6, 0),
-				Color(0.12, 0.09, 0.06), 0.0))
-
-
-func _part(mm: MultiMesh, idx: int, size: Vector3, center: Vector3, color: Color, swing: float) -> Dictionary:
-	mm.set_instance_color(idx, color)
-	return {"mm": mm, "idx": idx, "size": size, "pivot": center, "swing": swing}
+	_chars.tint(node, shirt, pants, skin)
+	add_child(node)
+	node.visible = false
+	v.node = node
+	v.ap = _chars.get_player(node)
+	v.anims = _chars.anim_names(node)

@@ -5,6 +5,7 @@ extends Node
 
 const HealthScript := preload("res://scripts/health.gd")
 const MissionScript := preload("res://scripts/missions.gd")
+const Chars := preload("res://scripts/characters.gd")
 
 const BUY_R := 3.6
 const CHAI := {"name": "CHAI", "price": 20, "heal": 20}
@@ -156,9 +157,13 @@ func _build_cart(pos: Vector3, face_toward: Vector3) -> Array[Dictionary]:
 		snack.mesh = sm
 		snack.position = Vector3(0.5 + i * 0.25, 1.8, -0.2)
 		root.add_child(snack)
-	root.add_child(_box(Vector3(0.95, 1.5, 0.7), Color(0.9, 0.5, 0.12), Vector3(0, 1.1, 1.35)))
-	root.add_child(_box(Vector3(0.6, 0.6, 0.6), Color(0.78, 0.55, 0.38), Vector3(0, 2.15, 1.35)))
-	root.add_child(_box(Vector3(0.68, 0.18, 0.68), Color(0.85, 0.2, 0.2), Vector3(0, 2.5, 1.35)))
+	# Vendor: rigged CC0 character (idle clip), tinted like the old apron.
+	var chars := Chars.new()
+	var vendor := chars.spawn(Chars.MALE, 2.7)
+	chars.tint(vendor, Color(0.9, 0.5, 0.12), Color(0.16, 0.14, 0.13), Color(0.78, 0.55, 0.38))
+	vendor.position = Vector3(0, 0, 1.35)
+	root.add_child(vendor)
+	chars.play(chars.anim_names(vendor), chars.get_player(vendor), "idle", 0.9)
 
 	var steam: Array[Dictionary] = []
 	for i in range(3):
