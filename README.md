@@ -17,7 +17,10 @@ police station, heat wiped. Glowing street markers hand out missions
 for cash: street tests, a three-stop chai run against a cooling timer,
 and a checkpoint ring race against two rival auto-rickshaws. Street thela
 carts at every landmark sell chai and samosas — mission cash in, health
-back out, the first real money sink. More coming
+back out, the first real money sink. Mission givers talk now: walk into
+a glowing marker and a typewriter dialogue box opens — the chai uncle
+and rival pullers make their pitch, you take the job or turn them down
+to their face. More coming
 every milestone.
 
 ## The legends
@@ -26,14 +29,14 @@ every milestone.
 - **Monty "Dilli ka Don" Malhotra** — Connaught Place hustler
 
 ## Controls
-WASD / arrows — move · Shift — run · E — enter/exit vehicle · Q / R —
-chai / samosa from street stalls
+WASD / arrows — move · Shift — run · E — enter/exit vehicle · H — horn ·
+Q / R — chai / samosa from street stalls · Space — advance dialogue,
+confirm choice (W/S picks) · X / C — debug hurt / drop
 
 ## ▶ Play in browser
 **https://ayushsahnios.github.io/delhi-freetown-loot/** — deployed
 automatically from master (single-threaded web export, works on plain
-static hosting). · F — accept
-mission · H — horn · Q / R — street food · X — debug hurt · C — debug drop (fall damage)
+static hosting).
 
 ## Run it
 Open this folder in **Godot 4.7+** and press F5, or headless:
