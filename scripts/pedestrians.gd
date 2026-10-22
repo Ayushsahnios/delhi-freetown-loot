@@ -60,6 +60,7 @@ var _zone_center := Vector3.ZERO
 var _zone_radius := 0.0
 var _zone_set := false
 var _chars := Chars.new()
+var _last_model := -1
 
 
 func setup(world_size: float, pitch: float, road_width: float, road_count: int) -> void:
@@ -369,8 +370,14 @@ func _new_ped(zone: bool) -> Dictionary:
 
 func _dress(v: Dictionary) -> void:
 	## One rigged walker: random model from the CC0 set, random palette.
-	## The model's own AnimationPlayer drives the walk.
-	var path: String = MODELS[_rng.randi_range(0, MODELS.size() - 1)]
+	## The model's own AnimationPlayer drives the walk. A reroll keeps the
+	## same body from spawning twice in a row, so clones rarely stand
+	## shoulder to shoulder (acceptance: crowd visibly varied).
+	var pick := _rng.randi_range(0, MODELS.size() - 1)
+	if pick == _last_model and MODELS.size() > 1:
+		pick = (pick + 1 + _rng.randi_range(0, MODELS.size() - 2)) % MODELS.size()
+	_last_model = pick
+	var path: String = MODELS[pick]
 	var node := _chars.spawn(path, PED_HEIGHT)
 	ShadowBlob.attach(node, 0.48)
 	var skin: Color = SKIN_TONES[_rng.randi_range(0, SKIN_TONES.size() - 1)]
