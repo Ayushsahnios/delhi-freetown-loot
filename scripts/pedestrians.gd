@@ -1,9 +1,13 @@
 extends Node
 ## Pedestrians: sidewalk NPCs walking the road grid. They turn at corners,
 ## scatter when the player sounds the horn nearby, then find their way back
-## to the nearest sidewalk line. Purely kinematic Node3D movers (same
-## approach as the traffic manager) recycled around the player, so there is
-## no spawn cost and nothing can fall through the world.
+## to the nearest sidewalk line. Purely kinematic movers (same approach as
+## the traffic manager) recycled around the player, so there is no spawn
+## cost and nothing can fall through the world.
+## Crowds render through two MultiMeshes (unit box / unit sphere parts with
+## per-instance color) — hundreds of walkers for a couple of draw calls.
+
+const MeshTools := preload("res://scripts/meshtools.gd")
 
 const COUNT := 26
 const EDGE := 1.4
@@ -24,6 +28,7 @@ const ZONE_WAKE := 130.0
 const ZONE_RECYCLE := 150.0
 const ZONE_SPAWN_MIN := 26.0
 const ZONE_BIAS := 42.0
+const BOX_SLOTS := 7
 
 const SKIN_TONES := [
 	Color(0.79, 0.57, 0.40), Color(0.72, 0.50, 0.33),
@@ -50,6 +55,8 @@ var _placed := false
 var _zone_center := Vector3.ZERO
 var _zone_radius := 0.0
 var _zone_set := false
+var _box_mm: MultiMesh = null
+var _sphere_mm: MultiMesh = null
 
 
 func setup(world_size: float, pitch: float, road_width: float, road_count: int) -> void:
@@ -58,31 +65,16 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 	_road_w = road_width
 	_roads = road_count
 	_rng.randomize()
-	for _i in range(COUNT):
-		var node := Node3D.new()
-		var limbs := _build_ped(node)
-		node.visible = false
-		add_child(node)
-		_peds.append({
-			"node": node, "legs": limbs["legs"], "arms": limbs["arms"],
-			"along_z": true, "road": 0.0, "t": 0.0, "dir": 1,
-			"speed": 3.0, "panic": 0.0, "panic_dir": Vector3.ZERO,
-			"rejoin": 0.0, "cd": 0.0, "phase": _rng.randf() * TAU,
-		})
-	# Bazaar crowd squad: extra shoppers that only wake around the crowd
-	# zone (see set_crowd_zone) — the district's density boost.
-	for _i in range(ZONE_EXTRA):
-		var znode := Node3D.new()
-		var zlimbs := _build_ped(znode)
-		znode.visible = false
-		add_child(znode)
-		_peds.append({
-			"node": znode, "legs": zlimbs["legs"], "arms": zlimbs["arms"],
-			"along_z": true, "road": 0.0, "t": 0.0, "dir": 1,
-			"speed": 3.0, "panic": 0.0, "panic_dir": Vector3.ZERO,
-			"rejoin": 0.0, "cd": 0.0, "phase": _rng.randf() * TAU,
-			"zone": true,
-		})
+	var part_mat := StandardMaterial3D.new()
+	part_mat.vertex_color_use_as_albedo = true
+	var total := COUNT + ZONE_EXTRA
+	_box_mm = _part_mm(_unit_mesh(BoxMesh.new()), total * BOX_SLOTS, part_mat)
+	var sphere := SphereMesh.new()
+	_sphere_mm = _part_mm(_unit_mesh(sphere), total, part_mat)
+	for i in range(total):
+		var v := _new_ped(i >= COUNT)
+		_build_parts(v, i)
+		_peds.append(v)
 
 
 func set_crowd_zone(center: Vector3, radius: float) -> void:
@@ -112,12 +104,13 @@ func _physics_process(delta: float) -> void:
 		var is_zone := bool(v.get("zone", false))
 		if is_zone:
 			if not _zone_awake():
-				if v.node.visible:
-					v.node.visible = false
+				if v.visible:
+					v.visible = false
+					_hide_ped(v)
 					v.panic = 0.0
 					v.rejoin = 0.0
 				continue
-			if not v.node.visible:
+			if not v.visible:
 				_place_zone(v)
 		if v.cd > 0.0:
 			v.cd -= delta
@@ -168,9 +161,9 @@ func _maybe_turn(v: Dictionary) -> void:
 
 func _apply(v: Dictionary) -> void:
 	if v.along_z:
-		v.node.position = Vector3(v.road, 0.0, v.t)
+		v.pos = Vector3(v.road, 0.0, v.t)
 	else:
-		v.node.position = Vector3(v.t, 0.0, v.road)
+		v.pos = Vector3(v.t, 0.0, v.road)
 
 
 # ---------------------------------------------------------------- panic
@@ -178,7 +171,7 @@ func _apply(v: Dictionary) -> void:
 func _scatter(origin: Vector3) -> void:
 	## Horn blast: NPCs within SCATTER_RADIUS bolt away from the sound.
 	for v in _peds:
-		var p: Vector3 = v.node.position
+		var p: Vector3 = v.pos
 		var away := Vector3(p.x - origin.x, 0.0, p.z - origin.z)
 		if away.length() > SCATTER_RADIUS:
 			continue
@@ -195,7 +188,7 @@ func vehicle_strike(pos: Vector3, radius: float) -> int:
 	## count feeds the wanted system (main.gd).
 	var n := 0
 	for v in _peds:
-		var p: Vector3 = v.node.position
+		var p: Vector3 = v.pos
 		var away := Vector2(p.x - pos.x, p.z - pos.z)
 		if away.length() > radius:
 			continue
@@ -214,17 +207,17 @@ func _flee_tick(v: Dictionary, delta: float) -> void:
 	if v.rejoin > 0.0:
 		v.rejoin += delta
 		var mv: Vector3 = v.panic_dir * REJOIN_SPEED
-		v.node.position += mv * delta
+		v.pos += mv * delta
 		v.phase += delta * REJOIN_SPEED * 2.6
 		_face(v, mv)
-		var near := _nearest_sidewalk(v.node.position)
+		var near := _nearest_sidewalk(v.pos)
 		if near["dist"] < 1.6 or v.rejoin > REJOIN_LIMIT:
 			_snap_to_sidewalk(v)
 		return
 	v.panic -= delta
 	var falloff: float = 0.35 + 0.65 * v.panic / PANIC_TIME
 	var mv2: Vector3 = v.panic_dir * PANIC_SPEED * falloff
-	v.node.position += mv2 * delta
+	v.pos += mv2 * delta
 	v.phase += delta * 12.0
 	_face(v, mv2)
 	if v.panic <= 0.0:
@@ -232,8 +225,8 @@ func _flee_tick(v: Dictionary, delta: float) -> void:
 
 
 func _snap_to_sidewalk(v: Dictionary) -> void:
-	var near := _nearest_sidewalk(v.node.position)
-	var pos: Vector3 = v.node.position
+	var near := _nearest_sidewalk(v.pos)
+	var pos: Vector3 = v.pos
 	v.along_z = near["along_z"]
 	v.road = near["line"]
 	v.t = pos.z if v.along_z else pos.x
@@ -265,7 +258,7 @@ func _place(v: Dictionary) -> void:
 		_apply(v)
 		if _flat_dist(v) >= SPAWN_MIN_DIST:
 			break
-	v.node.visible = true
+	v.visible = true
 
 
 func _zone_awake() -> bool:
@@ -297,7 +290,7 @@ func _place_zone(v: Dictionary) -> void:
 		_apply(v)
 		if _flat_dist(v) >= ZONE_SPAWN_MIN:
 			break
-	v.node.visible = true
+	v.visible = true
 
 
 func _nearest_sidewalk(pos: Vector3) -> Dictionary:
@@ -329,86 +322,102 @@ func _nearest_line(coord: float) -> float:
 
 func _flat_dist(v: Dictionary) -> float:
 	var p: Vector3 = _player.global_position
-	var np: Vector3 = v.node.position
+	var np: Vector3 = v.pos
 	return Vector2(np.x - p.x, np.z - p.z).length()
 
 
 func _face(v: Dictionary, dir: Vector3) -> void:
 	if dir.length_squared() > 0.001:
-		v.node.rotation.y = atan2(-dir.x, -dir.z)
+		v.heading = atan2(-dir.x, -dir.z)
 
 
 func _animate(v: Dictionary) -> void:
+	## Push every body-part instance transform for one walker. Limbs swing
+	## about their part centers, exactly as the old mesh nodes did.
 	var amp := 0.5
 	if v.panic > 0.0 or v.rejoin > 0.0:
 		amp = 0.85
 	var s := sin(v.phase) * amp
-	if v.legs.size() == 2:
-		v.legs[0].rotation.x = s
-		v.legs[1].rotation.x = -s
-	if v.arms.size() == 2:
-		v.arms[0].rotation.x = -s * 0.8
-		v.arms[1].rotation.x = s * 0.8
+	var base := Transform3D(Basis(Vector3.UP, v.heading), v.pos)
+	for p in v.parts:
+		var local := Transform3D(Basis(), p.pivot)
+		if p.swing != 0.0:
+			local = local * Transform3D(Basis(Vector3(1, 0, 0), s * p.swing), Vector3.ZERO)
+		local = local * Transform3D(Basis().scaled(p.size), Vector3.ZERO)
+		p.mm.set_instance_transform(p.idx, base * local)
+
+
+func _hide_ped(v: Dictionary) -> void:
+	## Park every part instance below the world until the walker wakes.
+	var hidden := Transform3D(Basis(), Vector3(0.0, -500.0, 0.0))
+	for p in v.parts:
+		p.mm.set_instance_transform(p.idx, hidden)
 
 
 # ---------------------------------------------------------------- visuals
 
-func _build_ped(parent: Node3D) -> Dictionary:
+func _part_mm(mesh: PrimitiveMesh, count: int, mat: StandardMaterial3D) -> MultiMesh:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = mesh
+	mm.instance_count = count
+	var hidden := Transform3D(Basis(), Vector3(0.0, -500.0, 0.0))
+	for i in count:
+		mm.set_instance_transform(i, hidden)
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	add_child(mmi)
+	return mm
+
+
+func _unit_mesh(mesh: PrimitiveMesh) -> PrimitiveMesh:
+	## Unit-sized shape; real proportions come from per-instance scale.
+	if mesh is BoxMesh:
+		mesh.size = Vector3.ONE
+	else:
+		var s := mesh as SphereMesh
+		s.radius = 0.5
+		s.height = 1.0
+	mesh.material = null
+	return mesh
+
+
+func _new_ped(zone: bool) -> Dictionary:
+	return {
+		"pos": Vector3.ZERO, "heading": 0.0, "visible": false, "parts": [],
+		"along_z": true, "road": 0.0, "t": 0.0, "dir": 1,
+		"speed": 3.0, "panic": 0.0, "panic_dir": Vector3.ZERO,
+		"rejoin": 0.0, "cd": 0.0, "phase": _rng.randf() * TAU,
+		"zone": zone,
+	}
+
+
+func _build_parts(v: Dictionary, i: int) -> void:
+	## Fixed instance slots per walker: boxes b+0..b+6 (legs, torso, arms,
+	## head, headgear) and one sphere slot for a turban when worn.
 	var skin: Color = SKIN_TONES[_rng.randi_range(0, SKIN_TONES.size() - 1)]
 	var shirt: Color = SHIRTS[_rng.randi_range(0, SHIRTS.size() - 1)]
 	var pants: Color = PANTS[_rng.randi_range(0, PANTS.size() - 1)]
-
-	var legs: Array = []
-	for side in [-0.42, 0.42]:
-		var leg := _box(Vector3(0.62, 1.7, 0.68), pants)
-		leg.position = Vector3(side, 0.85, 0)
-		parent.add_child(leg)
-		legs.append(leg)
-
-	var body := _box(Vector3(1.8, 2.2, 1.0), shirt)
-	body.position.y = 2.6
-	parent.add_child(body)
-
-	var arms: Array = []
-	for side in [-1.15, 1.15]:
-		var arm := _box(Vector3(0.5, 1.7, 0.5), skin)
-		arm.position = Vector3(side, 2.8, 0)
-		parent.add_child(arm)
-		arms.append(arm)
-
-	var head := _box(Vector3(1.05, 1.05, 1.05), skin)
-	head.position.y = 4.15
-	parent.add_child(head)
-
+	var b := i * BOX_SLOTS
+	v.parts.append(_part(_box_mm, b + 0, Vector3(0.62, 1.7, 0.68), Vector3(-0.42, 0.85, 0), pants, 1.0))
+	v.parts.append(_part(_box_mm, b + 1, Vector3(0.62, 1.7, 0.68), Vector3(0.42, 0.85, 0), pants, -1.0))
+	v.parts.append(_part(_box_mm, b + 2, Vector3(1.8, 2.2, 1.0), Vector3(0, 2.6, 0), shirt, 0.0))
+	v.parts.append(_part(_box_mm, b + 3, Vector3(0.5, 1.7, 0.5), Vector3(-1.15, 2.8, 0), skin, -0.8))
+	v.parts.append(_part(_box_mm, b + 4, Vector3(0.5, 1.7, 0.5), Vector3(1.15, 2.8, 0), skin, 0.8))
+	v.parts.append(_part(_box_mm, b + 5, Vector3(1.05, 1.05, 1.05), Vector3(0, 4.15, 0), skin, 0.0))
 	var roll := _rng.randf()
 	if roll < 0.14:
-		var turban := MeshInstance3D.new()
-		var tm := SphereMesh.new()
-		tm.radius = 0.7
-		tm.height = 1.05
-		var tmat := StandardMaterial3D.new()
-		tmat.albedo_color = TURBANS[_rng.randi_range(0, TURBANS.size() - 1)]
-		tm.material = tmat
-		turban.mesh = tm
-		turban.position.y = 4.7
-		parent.add_child(turban)
+		v.parts.append(_part(_sphere_mm, i, Vector3(1.4, 1.05, 1.4), Vector3(0, 4.7, 0),
+				TURBANS[_rng.randi_range(0, TURBANS.size() - 1)], 0.0))
 	elif roll < 0.34:
-		var scarf := _box(Vector3(2.0, 0.5, 1.2), SHIRTS[_rng.randi_range(0, SHIRTS.size() - 1)])
-		scarf.position.y = 3.55
-		parent.add_child(scarf)
+		v.parts.append(_part(_box_mm, b + 6, Vector3(2.0, 0.5, 1.2), Vector3(0, 3.55, 0),
+				SHIRTS[_rng.randi_range(0, SHIRTS.size() - 1)], 0.0))
 	else:
-		var hair := _box(Vector3(1.1, 0.35, 1.1), Color(0.12, 0.09, 0.06))
-		hair.position.y = 4.6
-		parent.add_child(hair)
-	return {"legs": legs, "arms": arms}
+		v.parts.append(_part(_box_mm, b + 6, Vector3(1.1, 0.35, 1.1), Vector3(0, 4.6, 0),
+				Color(0.12, 0.09, 0.06), 0.0))
 
 
-func _box(size: Vector3, color: Color) -> MeshInstance3D:
-	var m := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	bm.material = mat
-	m.mesh = bm
-	return m
+func _part(mm: MultiMesh, idx: int, size: Vector3, center: Vector3, color: Color, swing: float) -> Dictionary:
+	mm.set_instance_color(idx, color)
+	return {"mm": mm, "idx": idx, "size": size, "pivot": center, "swing": swing}
