@@ -7,6 +7,7 @@ extends Node
 ## the CP ring race (checkpoints against two AI rickshaws).
 
 const DialogueScript := preload("res://scripts/dialogue.gd")
+const StoryArcs := preload("res://scripts/story_arcs.gd")
 
 signal mission_completed(title: String, reward: int)
 signal mission_failed(title: String)
@@ -80,6 +81,7 @@ func abort_active(reason: String) -> void:
 		_fail_mission(reason)
 	if not _offer_def.is_empty():
 		_offer_def = {}
+	if _dlg.is_running():
 		_dlg.cancel()
 	enabled = false
 
@@ -225,6 +227,7 @@ func _build_defs() -> void:
 				},
 			],
 			"time": 130.0,
+			"unit": "cups",
 			"reward": 500,
 			"repeatable": true,
 		},
@@ -290,6 +293,7 @@ func _build_defs() -> void:
 			"repeatable": true,
 		},
 	]
+	_defs.append_array(StoryArcs.STORY_ARCS)
 
 
 # ---------------------------------------------------------------- loop
@@ -313,7 +317,8 @@ func _process(delta: float) -> void:
 					_states[id] = "available"
 					_show_giver(id, true)
 			"available":
-				if enabled and _active.is_empty() and _offer_def.is_empty() and _player != null \
+				if enabled and _active.is_empty() and _offer_def.is_empty() and not _dlg.is_running() \
+						and _player != null \
 						and _flat_dist(_player.global_position, def["giver"]) < TRIGGER_R:
 					_states[id] = "offered"
 					_offer_def = def
@@ -399,7 +404,7 @@ func _advance_stage(objs: Array, stage: int) -> void:
 	if _active["def"].has("race"):
 		_toast.text = "CHECKPOINT %d/%d" % [stage + 1, objs.size() - 1]
 	else:
-		_toast.text = "DELIVERED  ·  %d of %d cups" % [stage + 1, objs.size()]
+		_toast.text = "DELIVERED  ·  %d of %d %s" % [stage + 1, objs.size(), String(_active["def"].get("unit", "stops"))]
 	_toast.visible = true
 	_toast_t = 1.2
 
@@ -417,6 +422,9 @@ func _complete_mission() -> void:
 	_toast_t = 2.5
 	mission_completed.emit(String(def["title"]), reward)
 	_end_mission(def)
+	if def.has("outro"):
+		## Story missions close with a final conversation beat.
+		_dlg.start(def["outro"])
 
 
 func _fail_mission(reason: String) -> void:
@@ -449,12 +457,13 @@ func _end_mission(def: Dictionary) -> void:
 
 func _spawn_giver(def: Dictionary) -> void:
 	var pos: Vector3 = def["giver"]
+	var mc: Color = def.get("marker_color", Color(1.0, 0.84, 0.25))
 	var ring := MeshInstance3D.new()
 	var rm := CylinderMesh.new()
 	rm.top_radius = 2.2
 	rm.bottom_radius = 2.2
 	rm.height = 2.6
-	rm.material = _xmat(Color(1.0, 0.84, 0.25), 0.42)
+	rm.material = _xmat(mc, 0.42)
 	ring.mesh = rm
 	ring.position = pos + Vector3(0.0, 1.3, 0.0)
 	add_child(ring)
@@ -463,7 +472,7 @@ func _spawn_giver(def: Dictionary) -> void:
 	bm.top_radius = 0.25
 	bm.bottom_radius = 0.25
 	bm.height = 9.0
-	bm.material = _xmat(Color(1.0, 0.9, 0.45), 0.55)
+	bm.material = _xmat(mc.lightened(0.3), 0.55)
 	beam.mesh = bm
 	beam.position = pos + Vector3(0.0, 4.5, 0.0)
 	add_child(beam)

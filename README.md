@@ -20,7 +20,10 @@ carts at every landmark sell chai and samosas — mission cash in, health
 back out, the first real money sink. Mission givers talk now: walk into
 a glowing marker and a typewriter dialogue box opens — the chai uncle
 and rival pullers make their pitch, you take the job or turn them down
-to their face. More coming
+to their face. Each legend opens their Kahani with a one-shot intro
+chapter — Sardar Ji's pawned auto-stand battery, Riya's three-parcel
+instalment run, Monty's ninety-second pass hustle — each closing with
+a proper outro conversation. More coming
 every milestone.
 
 ## The legends
