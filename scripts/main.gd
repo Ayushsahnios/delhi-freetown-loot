@@ -67,6 +67,7 @@ var _toast_tween: Tween
 var _char_states := {}
 var _switch_lock := 0.0
 var _switch_pending_release := false
+var _chandni_seen := false
 
 
 func _ready() -> void:
@@ -83,6 +84,7 @@ func _ready() -> void:
 	_peds = PedestrianScript.new()
 	add_child(_peds)
 	_peds.setup(WORLD, PITCH, ROAD, GRID + 1)
+	_peds.set_crowd_zone(_block_center(4, 7) + Vector3(6.0, 0.0, 0.0), 46.0)
 	_audio = AudioScript.new()
 	add_child(_audio)
 	_audio.setup()
@@ -148,6 +150,8 @@ func _build_city() -> void:
 				_build_india_gate(c.x, c.z)
 			elif ix == 3 and iz == 7:
 				_build_purani_dilli(c.x, c.z)
+			elif ix == 4 and iz == 7:
+				_build_chandni_chowk(c.x, c.z)
 			elif ix == 7 and iz == 5:
 				_build_police_station(c.x, c.z)
 			elif (ix == 8 and iz == 2) or (ix == 2 and iz == 3):
@@ -283,6 +287,78 @@ func _build_purani_dilli(x: float, z: float) -> void:
 	dome.scale = Vector3(1, 1.25, 1)
 	dome.position = Vector3(x, 15.2, z)
 	add_child(dome)
+
+
+const AWNINGS := [
+	[Color(0.95, 0.45, 0.12), Color(0.94, 0.92, 0.88)],
+	[Color(0.12, 0.55, 0.55), Color(0.95, 0.90, 0.80)],
+	[Color(0.85, 0.20, 0.45), Color(0.95, 0.85, 0.25)],
+	[Color(0.20, 0.55, 0.20), Color(0.90, 0.88, 0.84)],
+	[Color(0.95, 0.70, 0.15), Color(0.30, 0.50, 0.80)],
+	[Color(0.60, 0.25, 0.60), Color(0.94, 0.92, 0.88)],
+]
+
+func _build_chandni_chowk(x: float, z: float) -> void:
+	## Bazaar district: the block's inner street becomes a market lane —
+	## a signature red gate at the south entry, stalls with striped
+	## awnings and bunting on both sides, shop rows behind them, and a
+	## pedestrian crowd zone (pedestrians.gd) filling it with shoppers.
+	add_child(_flat(Vector3(BLOCK - 2.0, 0.06, BLOCK - 2.0), Vector3(x, 0.07, z),
+			Color(0.71, 0.62, 0.48)))
+	var street := x + 6.0
+	var gate_z := z - 15.0
+	var red := Color(0.60, 0.25, 0.15)
+	var cream := Color(0.93, 0.88, 0.76)
+	_add_building(Vector3(street - 7.5, 0, gate_z), Vector3(2.6, 10.0, 2.6), red)
+	_add_building(Vector3(street + 7.5, 0, gate_z), Vector3(2.6, 10.0, 2.6), red)
+	add_child(_mesh_box(Vector3(16.6, 2.6, 2.8), red, Vector3(street, 10.8, gate_z)))
+	add_child(_mesh_box(Vector3(16.6, 0.5, 2.9), cream, Vector3(street, 9.5, gate_z)))
+	for fx in [-6.0, 0.0, 6.0]:
+		add_child(_mesh_box(Vector3(0.7, 1.1, 0.7), cream, Vector3(street + fx, 12.6, gate_z)))
+	var zeds := [z - 12.0, z - 6.5, z + 14.5]
+	for i in zeds.size():
+		_stall(Vector3(street - 9.0, 0, zeds[i]), 1.0, i)
+		_stall(Vector3(street + 9.0, 0, zeds[i]), -1.0, i + 3)
+	_add_building(Vector3(x - 11.5, 0, z - 8.0), Vector3(11.0, 7.0, 16.0), Color(0.82, 0.66, 0.45))
+	add_child(_mesh_box(Vector3(11.4, 0.7, 16.4), cream, Vector3(x - 11.5, 5.6, z - 8.0)))
+	_add_building(Vector3(x - 9.0, 0, z + 14.5), Vector3(16.0, 5.5, 5.0), Color(0.75, 0.55, 0.35))
+	add_child(_mesh_box(Vector3(16.4, 0.6, 5.4), cream, Vector3(x - 9.0, 4.4, z + 14.5)))
+	for bz in [z - 11.5, z - 4.0]:
+		_bunting(street, bz)
+
+
+func _stall(pos: Vector3, face: float, idx: int) -> void:
+	## One bazaar stall: solid counter, striped awning on poles, crates of
+	## goods. `face` is +1/-1 — the direction the stall faces (toward the
+	## market street).
+	var woods := [Color(0.55, 0.40, 0.26), Color(0.48, 0.34, 0.22), Color(0.60, 0.44, 0.28)]
+	_add_building(pos, Vector3(2.6, 2.2, 4.2), woods[idx % 3])
+	var ax := pos.x + 0.6 * face
+	var pair: Array = AWNINGS[idx % AWNINGS.size()]
+	add_child(_mesh_box(Vector3(3.4, 0.28, 2.5), pair[0], Vector3(ax, 5.6, pos.z - 1.25)))
+	add_child(_mesh_box(Vector3(3.4, 0.28, 2.5), pair[1], Vector3(ax, 5.6, pos.z + 1.25)))
+	for side in [-2.2, 2.2]:
+		add_child(_mesh_box(Vector3(0.22, 5.6, 0.22), Color(0.35, 0.25, 0.16),
+				Vector3(ax, 2.8, pos.z + side)))
+	var fruit := [Color(0.95, 0.55, 0.10), Color(0.25, 0.65, 0.25), Color(0.90, 0.20, 0.20), Color(0.95, 0.85, 0.30)]
+	for g in range(2):
+		add_child(_mesh_box(Vector3(1.1, 1.0, 1.3), fruit[(idx + g) % 4],
+				Vector3(pos.x, 2.75, pos.z + (1.0 if g == 0 else -1.0))))
+
+
+func _bunting(street: float, bz: float) -> void:
+	## Festival flags strung across the market lane, hung between two
+	## poles with a gentle sag.
+	for side in [-7.2, 7.2]:
+		add_child(_mesh_box(Vector3(0.2, 6.2, 0.2), Color(0.30, 0.22, 0.15),
+				Vector3(street + side, 3.1, bz)))
+	var cols := [Color(0.95, 0.45, 0.12), Color(0.85, 0.20, 0.45), Color(0.20, 0.60, 0.25),
+		Color(0.95, 0.85, 0.25), Color(0.25, 0.55, 0.90)]
+	for f in range(9):
+		var t := (f + 1) / 10.0
+		var fy := 6.1 - sin(PI * t) * 0.7
+		add_child(_mesh_box(Vector3(0.55, 0.7, 0.14), cols[f % 5],
+				Vector3(street - 7.2 + 14.4 * t, fy, bz)))
 
 
 func _build_park(x: float, z: float) -> void:
@@ -522,6 +598,13 @@ func _process(delta: float) -> void:
 		return
 	_impact_cd = maxf(_impact_cd - delta, 0.0)
 	_chaos_cd = maxf(_chaos_cd - delta, 0.0)
+	var cc := _block_center(4, 7)
+	var ccd := Vector2(player.global_position.x - cc.x, player.global_position.z - cc.z).length()
+	if not _chandni_seen and ccd < 34.0:
+		_chandni_seen = true
+		_show_toast("CHANDNI CHOWK · moonlight bazaar")
+	elif _chandni_seen and ccd > 60.0:
+		_chandni_seen = false
 	if _switch_lock > 0.0:
 		_switch_lock = maxf(_switch_lock - delta, 0.0)
 		if _switch_lock <= 0.0 and _switch_pending_release:
@@ -730,6 +813,7 @@ func _build_landmarks() -> void:
 		{"name": "Connaught Place", "center": _block_center(5, 5), "spawn": _block_center(5, 5) + Vector3(14.0, 1.0, 14.0)},
 		{"name": "India Gate", "center": _block_center(5, 3), "spawn": _block_center(5, 3) + Vector3(0.0, 1.0, 10.0)},
 		{"name": "Purani Dilli Fort", "center": _block_center(3, 7), "spawn": _block_center(3, 7) + Vector3(0.0, 1.0, 12.0)},
+		{"name": "Chandni Chowk", "center": _block_center(4, 7), "spawn": _block_center(4, 7) + Vector3(6.0, 1.0, -14.0)},
 		{"name": "Neighbourhood Park", "center": _block_center(8, 2), "spawn": _block_center(8, 2) + Vector3(0.0, 1.0, 12.0)},
 		{"name": "Police Station", "center": _block_center(7, 5), "spawn": _block_center(7, 5) + Vector3(0.0, 1.0, 10.0), "police": true},
 	]
