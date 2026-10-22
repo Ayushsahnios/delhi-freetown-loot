@@ -24,13 +24,14 @@ const WeatherScript := preload("res://scripts/weather.gd")
 const TouchControlsScript := preload("res://scripts/touch_controls.gd")
 const PauseScript := preload("res://scripts/pause.gd")
 const MeshTools := preload("res://scripts/meshtools.gd")
+const RoadsScript := preload("res://scripts/roads.gd")
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
 const SKY_NIGHT := Color(0.04, 0.06, 0.19)
 const STORM_SKY := Color(0.22, 0.25, 0.30)
-const ROAD_DRY := Color(0.18, 0.19, 0.21)
-const ROAD_WET := Color(0.075, 0.085, 0.115)
+const ROAD_TINT_DRY := Color(1.0, 1.0, 1.0)
+const ROAD_TINT_WET := Color(0.45, 0.47, 0.58)
 const PALETTE := [
 	Color(0.85, 0.78, 0.66), Color(0.79, 0.64, 0.48), Color(0.71, 0.72, 0.76),
 	Color(0.85, 0.56, 0.42), Color(0.62, 0.71, 0.78), Color(0.88, 0.84, 0.75),
@@ -93,7 +94,6 @@ var _touch: CanvasLayer
 var _pause: CanvasLayer
 var _districts := {}
 var _cur_district: MeshTools = null
-var _dash_xfs: Array[Transform3D] = []
 var _tree_trunk_xfs: Array[Transform3D] = []
 var _tree_crown_xfs: Array[Transform3D] = []
 var _pillar_xfs: Array[Transform3D] = []
@@ -246,19 +246,11 @@ func _build_city() -> void:
 	ground_body.add_child(ground_mesh)
 	add_child(ground_body)
 
-	# roads — one shared material so the whole network darkens as rain soaks in
-	_road_mat = StandardMaterial3D.new()
-	_road_mat.albedo_color = ROAD_DRY
-	var dash_spin := Basis(Vector3.UP, PI / 2.0)
-	for i in range(GRID + 1):
-		var pos := -WORLD / 2.0 + i * PITCH - BLOCK / 2.0
-		add_child(_flat_mat(Vector3(WORLD, 0.08, ROAD), Vector3(0, 0.04, pos), _road_mat))
-		add_child(_flat_mat(Vector3(ROAD, 0.08, WORLD), Vector3(pos, 0.04, 0), _road_mat))
-		var s := -WORLD / 2.0 + 7.0
-		while s < WORLD / 2.0:
-			_dash_xfs.append(Transform3D(Basis(), Vector3(s, 0.09, pos)))
-			_dash_xfs.append(Transform3D(dash_spin, Vector3(pos, 0.09, s)))
-			s += 14.0
+	# roads — textured asphalt with lane wear, tiled sidewalks with curbs
+	# and zebra crossings (one merged mesh); one shared asphalt material so
+	# the whole network still darkens as rain soaks in
+	_road_mat = RoadsScript.make_asphalt_material()
+	add_child(RoadsScript.build(WORLD, PITCH, ROAD, GRID + 1, _road_mat))
 
 	# blocks — static visuals accumulate into per-district merged meshes
 	for ix in range(GRID):
@@ -329,12 +321,8 @@ func _dist_box(size: Vector3, center: Vector3, color: Color) -> void:
 
 
 func _commit_props() -> void:
-	## Repeated props draw as one MultiMesh each: lane dashes, tree parts,
+	## Repeated props draw as one MultiMesh each: tree parts,
 	## metro pillars and deck segments.
-	var dash := BoxMesh.new()
-	dash.size = Vector3(5.0, 0.06, 0.45)
-	dash.material = MeshTools.shared_material(Color(0.96, 0.88, 0.30))
-	_add_mm(dash, _dash_xfs)
 	var trunk := CylinderMesh.new()
 	trunk.top_radius = 0.35
 	trunk.bottom_radius = 0.5
@@ -438,15 +426,6 @@ func _mesh_box(size: Vector3, color: Color, offset := Vector3.ZERO) -> MeshInsta
 	m.position = offset
 	return m
 
-
-func _flat_mat(size: Vector3, pos: Vector3, mat: StandardMaterial3D) -> MeshInstance3D:
-	var m := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	bm.material = mat
-	m.mesh = bm
-	m.position = pos
-	return m
 
 
 func _tree(pos: Vector3) -> void:
@@ -1101,7 +1080,7 @@ func _apply_wetness() -> void:
 	_applied_wet = w
 	if _road_mat == null:
 		return
-	_road_mat.albedo_color = ROAD_DRY.lerp(ROAD_WET, w)
+	_road_mat.albedo_color = ROAD_TINT_DRY.lerp(ROAD_TINT_WET, w)
 	_road_mat.roughness = 1.0 - 0.62 * w
 	_road_mat.metallic = 0.28 * w
 
