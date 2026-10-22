@@ -33,6 +33,7 @@ every milestone.
 
 ## Controls
 WASD / arrows — move · Shift — run · E — enter/exit vehicle · H — horn ·
+N — cycle the in-vehicle radio (3 procedural stations) ·
 Q / R — chai / samosa from street stalls · Space — advance dialogue,
 confirm choice (W/S picks) · X / C — debug hurt / drop
 
