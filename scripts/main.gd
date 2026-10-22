@@ -21,6 +21,7 @@ const MiniMapScript := preload("res://scripts/minimap.gd")
 const FoodScript := preload("res://scripts/food.gd")
 const WeatherScript := preload("res://scripts/weather.gd")
 const TouchControlsScript := preload("res://scripts/touch_controls.gd")
+const PauseScript := preload("res://scripts/pause.gd")
 const MeshTools := preload("res://scripts/meshtools.gd")
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
@@ -81,6 +82,7 @@ var _weather: WeatherScript
 var _road_mat: StandardMaterial3D
 var _applied_wet := -1.0
 var _touch: CanvasLayer
+var _pause: CanvasLayer
 var _districts := {}
 var _cur_district: MeshTools = null
 var _dash_xfs: Array[Transform3D] = []
@@ -93,6 +95,9 @@ var _metro_seg_xfs: Array[Transform3D] = []
 func _ready() -> void:
 	_rng.randomize()
 	_build_environment()
+	var boot := PauseScript.load_settings()
+	PauseScript.apply_audio(boot)
+	sun.shadow_enabled = bool(boot.get("shadows", false))
 	_weather = WeatherScript.new()
 	add_child(_weather)
 	_weather.setup()
@@ -121,6 +126,9 @@ func _ready() -> void:
 	_build_select_ui()
 	_touch = TouchControlsScript.new()
 	add_child(_touch)
+	_pause = PauseScript.new()
+	_pause.setup(self)
+	add_child(_pause)
 	Input.joy_connection_changed.connect(_on_joy_connection_changed)
 	get_tree().root.close_requested.connect(_save_game)
 
@@ -609,7 +617,7 @@ func _build_select_ui() -> void:
 		box.add_child(btn)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · N radio · Q/R street food · Tab switch character · F9 save · X debug hurt · C debug drop\nGamepad · stick move · A interact · B horn · X radio · Y switch · RB sprint · D-pad food · Start save · touch pad UI on touchscreens"
+	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · N radio · Q/R street food · Tab switch character · F9 save · X debug hurt · C debug drop · Esc pause\nGamepad · stick move · A interact · B horn · X radio · Y switch · RB sprint · D-pad food · Select pause · Start save · touch pad UI on touchscreens"
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)

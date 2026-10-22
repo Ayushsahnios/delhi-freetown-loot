@@ -39,6 +39,7 @@ var selected_character: Dictionary = CHARACTERS[0]
 
 func _ready() -> void:
 	_setup_inputs()
+	_setup_audio_buses()
 
 
 func _setup_inputs() -> void:
@@ -56,6 +57,7 @@ func _setup_inputs() -> void:
 	_add_keys("debug_hurt", [KEY_X])
 	_add_keys("debug_fall", [KEY_C])
 	_add_keys("save", [KEY_F9])
+	_add_keys("pause", [KEY_ESCAPE])
 	# Gamepad — the same actions, so every gameplay reader works unchanged:
 	# left stick drives move_* with analog strength, face buttons take the
 	# one-shot actions, D-pad buys street food.
@@ -71,8 +73,26 @@ func _setup_inputs() -> void:
 	_add_joy_buttons("buy_chai", [JOY_BUTTON_DPAD_UP])
 	_add_joy_buttons("buy_samosa", [JOY_BUTTON_DPAD_DOWN])
 	_add_joy_buttons("save", [JOY_BUTTON_START])
+	_add_joy_buttons("pause", [JOY_BUTTON_BACK])
 	for action in ["move_forward", "move_back", "move_left", "move_right"]:
 		InputMap.action_set_deadzone(action, 0.2)
+
+
+func _setup_audio_buses() -> void:
+	## Runtime mixer buses for the settings sliders: gameplay scripts keep
+	## their own volume_db untouched; sliders scale the bus instead.
+	_ensure_bus("Ambient")
+	_ensure_bus("Radio")
+
+
+func _ensure_bus(bus_name: String) -> void:
+	for i in AudioServer.bus_count:
+		if AudioServer.get_bus_name(i) == bus_name:
+			return
+	AudioServer.add_bus()
+	var idx := AudioServer.bus_count - 1
+	AudioServer.set_bus_name(idx, bus_name)
+	AudioServer.set_bus_send(idx, "Master")
 
 
 func _add_keys(action: String, keycodes: Array) -> void:
