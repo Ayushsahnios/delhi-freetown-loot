@@ -70,3 +70,33 @@ CC0 asset packs (kenney.nl) allowed from v0.2 for props if wanted.
 
 Code complete · `godot --headless --import` clean · export smoke green ·
 playable by owner · issue closed with notes.
+
+## 8 · Changelog
+
+**v1.0.0 — 2026-10-22 — "Full Fledged"**
+
+First full release. Everything below is original code and procedural content —
+no third-party assets.
+
+- **World** — procedural Delhi: India Gate, Connaught Place roundabout,
+  Purani Dilli fort and dome, neighbourhood parks, elevated metro line;
+  day/night cycle and monsoon weather with slick streets. City geometry
+  merged and traffic/crowds instanced in the v1.0 performance pass.
+- **Living city** — traffic AI, pedestrian crowds, street-food thela carts
+  (chai/samosa) as the first money sink, glowing mission markers.
+- **Wanted system** — heat stars, police jeep chases, BUSTED: fined out of
+  the wallet, respawn at the thana, heat wiped.
+- **Missions** — four repeatable street jobs: Gate run, timed CP crate run,
+  three-cup chai run, and the CP ring race against two rival autos.
+- **Kahani story arcs** — one-shot intro/outro chapters for the three
+  legends: Sardar Ji's pawned battery, Riya's instalment run, Monty's
+  ninety-second pass hustle, with typewriter dialogue and choices.
+- **Meta** — save/continue, character switching, minimap, three-station
+  procedural radio, horn and ambient audio, pause menu with volume and
+  quality settings.
+- **Input** — keyboard, gamepad, and touch controls.
+- **v1.0 balance pass** — timed street missions now pay for risk:
+  crate run Rs 450, chai run Rs 600, ring race Rs 650; untimed Gate run
+  stays Rs 250 and one-shot story chapters stay Rs 700–900.
+- **Fixed** — fresh-start bug where read-only story-arc definitions aborted
+  mission setup, leaving every mission giver dead until restart.

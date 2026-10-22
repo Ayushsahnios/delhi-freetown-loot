@@ -5,6 +5,8 @@ open world, built 100% from scratch on [Godot 4](https://godotengine.org)
 (MIT-licensed engine). Original code, original procedural assets, nothing
 reverse-engineered, nothing licensed.
 
+**v1.0 is out** — read the [release notes](PLAN.md#8--changelog).
+
 ## The city
 Free-roam a stylized low-poly Delhi from minute one — India Gate, Connaught
 Place roundabout, Purani Dilli's red fort and dome, parks, and an elevated

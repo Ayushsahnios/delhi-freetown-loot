@@ -173,7 +173,7 @@ func _build_defs() -> void:
 				},
 				{
 					"speaker": "Dhaba owner",
-					"text": "Seventy seconds before it boils over — Rs 400, cash, no arguments.",
+					"text": "Seventy seconds before it boils over — Rs 450, cash, no arguments.",
 					"color": Color(0.55, 0.9, 0.5),
 					"choices": ["Take the job", "Not now"],
 				},
@@ -186,7 +186,7 @@ func _build_defs() -> void:
 				"radius": 8.0,
 				"time": 70.0,
 			},
-			"reward": 400,
+			"reward": 450,
 			"repeatable": true,
 		},
 		{
@@ -200,7 +200,7 @@ func _build_defs() -> void:
 				},
 				{
 					"speaker": "Chai stall uncle",
-					"text": "The chai cools in about two minutes, so an auto is strongly advised. Rs 500 when the last cup lands.",
+					"text": "The chai cools in about two minutes, so an auto is strongly advised. Rs 600 when the last cup lands.",
 					"color": Color(1.0, 0.6, 0.3),
 					"choices": ["Take the job", "Not now"],
 				},
@@ -228,7 +228,7 @@ func _build_defs() -> void:
 			],
 			"time": 130.0,
 			"unit": "cups",
-			"reward": 500,
+			"reward": 600,
 			"repeatable": true,
 		},
 		{
@@ -242,7 +242,7 @@ func _build_defs() -> void:
 				},
 				{
 					"speaker": "Rival puller",
-					"text": "Grab an auto, tag the start line on the west road, and beat us around. Rs 600 says you can't.",
+					"text": "Grab an auto, tag the start line on the west road, and beat us around. Rs 650 says you can't.",
 					"color": Color(0.95, 0.4, 0.35),
 					"choices": ["Take the job", "Not now"],
 				},
@@ -289,11 +289,15 @@ func _build_defs() -> void:
 					],
 				"rivals": [13.5, 15.0],
 			},
-			"reward": 600,
+			"reward": 650,
 			"repeatable": true,
 		},
 	]
-	_defs.append_array(StoryArcs.STORY_ARCS)
+	# Story arcs come from a const (read-only) dictionary — duplicate them
+	# so the runtime state fields written in _ready() never hit the shared
+	# read-only source definitions (which aborts mission setup on fresh start).
+	for arc in StoryArcs.STORY_ARCS:
+		_defs.append(arc.duplicate(true))
 
 
 # ---------------------------------------------------------------- loop
