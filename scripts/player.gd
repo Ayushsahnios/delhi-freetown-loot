@@ -13,31 +13,51 @@ var controls_enabled := true
 
 var _legs: Array[MeshInstance3D] = []
 var _arms: Array[MeshInstance3D] = []
+var _visuals: Array[Node] = []
 var _walk_phase := 0.0
 var _air_vy := 0.0
 var _was_on_floor := true
+var _collision_added := false
 
 
 func setup(def: Dictionary) -> void:
+	_build_look(def)
+	_ensure_collision()
+
+
+func swap_character(def: Dictionary) -> void:
+	## Character-switch rebuild: replace meshes and the per-character stat
+	## while keeping this node's identity — collision, velocity and every
+	## registration (traffic, peds, police, missions) stay attached.
+	for v in _visuals:
+		v.queue_free()
+	_visuals.clear()
+	_legs.clear()
+	_arms.clear()
+	_walk_phase = 0.0
+	_build_look(def)
+
+
+func _build_look(def: Dictionary) -> void:
 	run_boost = 1.18 if String(def.get("id")) == "riya" else 1.0
 
 	var body := _box(Vector3(2.0, 2.6, 1.1), def["shirt"])
 	body.position.y = 3.0
-	add_child(body)
+	_add(body)
 
 	var head := _box(Vector3(1.15, 1.15, 1.15), def["skin"])
 	head.position.y = 4.9
-	add_child(head)
+	_add(head)
 
 	for side in [-0.55, 0.55]:
 		var leg := _box(Vector3(0.75, 1.8, 0.8), def["pants"])
 		leg.position = Vector3(side, 0.9, 0)
-		add_child(leg)
+		_add(leg)
 		_legs.append(leg)
 	for side in [-1.35, 1.35]:
 		var arm := _box(Vector3(0.6, 2.0, 0.6), def["skin"])
 		arm.position = Vector3(side, 3.1, 0)
-		add_child(arm)
+		_add(arm)
 		_arms.append(arm)
 
 	if def.get("sardar", false):
@@ -50,15 +70,20 @@ func setup(def: Dictionary) -> void:
 		tm.material = tmat
 		turban.mesh = tm
 		turban.position.y = 5.55
-		add_child(turban)
+		_add(turban)
 		var beard := _box(Vector3(1.0, 0.9, 0.35), Color(0.17, 0.13, 0.09))
 		beard.position = Vector3(0, 4.45, 0.62)
-		add_child(beard)
+		_add(beard)
 	else:
 		var hair := _box(Vector3(1.2, 0.4, 1.2), Color(0.12, 0.09, 0.06))
 		hair.position.y = 5.45
-		add_child(hair)
+		_add(hair)
 
+
+func _ensure_collision() -> void:
+	if _collision_added:
+		return
+	_collision_added = true
 	var col := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = 0.9
@@ -66,6 +91,11 @@ func setup(def: Dictionary) -> void:
 	col.shape = capsule
 	col.position.y = 3.0
 	add_child(col)
+
+
+func _add(node: Node) -> void:
+	add_child(node)
+	_visuals.append(node)
 
 
 func _box(size: Vector3, color: Color) -> MeshInstance3D:

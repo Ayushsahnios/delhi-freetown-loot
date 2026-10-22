@@ -64,6 +64,9 @@ var _hud_msg: Label
 var _flash_tween: Tween
 var _toast: Label
 var _toast_tween: Tween
+var _char_states := {}
+var _switch_lock := 0.0
+var _switch_pending_release := false
 
 
 func _ready() -> void:
@@ -450,7 +453,7 @@ func _build_select_ui() -> void:
 		box.add_child(btn)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · Q/R street food · F9 save · X debug hurt · C debug drop"
+	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · Q/R street food · Tab switch character · F9 save · X debug hurt · C debug drop"
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
@@ -519,9 +522,17 @@ func _process(delta: float) -> void:
 		return
 	_impact_cd = maxf(_impact_cd - delta, 0.0)
 	_chaos_cd = maxf(_chaos_cd - delta, 0.0)
+	if _switch_lock > 0.0:
+		_switch_lock = maxf(_switch_lock - delta, 0.0)
+		if _switch_lock <= 0.0 and _switch_pending_release:
+			_switch_pending_release = false
+			if not _dead:
+				player.controls_enabled = true
 	if not _dead:
 		if Input.is_action_just_pressed("interact"):
 			_toggle_vehicle()
+		if Input.is_action_just_pressed("switch_character"):
+			_switch_character()
 		if Input.is_action_just_pressed("horn"):
 			_audio.horn()
 		if Input.is_action_just_pressed("debug_hurt"):
@@ -587,6 +598,68 @@ func _toggle_vehicle() -> void:
 		current_auto = v
 		current_auto.driver_inside = true
 		player.visible = false
+
+
+# ---------------------------------------------------------------- switch
+
+func _switch_character() -> void:
+	if not _playing or _dead or _switch_lock > 0.0 \
+			or player == null or not is_instance_valid(player):
+		return
+	if not player.controls_enabled:
+		return
+	if current_auto != null:
+		_show_toast("STEP OUT OF THE VEHICLE TO SWITCH")
+		return
+	var cur_id := String(Game.selected_character.get("id", ""))
+	_stash_character(cur_id)
+	var nxt: Dictionary = Game.CHARACTERS[(_char_index(cur_id) + 1) % Game.CHARACTERS.size()]
+	Game.selected_character = nxt
+	_hud_name.text = String(nxt["name"])
+	player.swap_character(nxt)
+	var st: Dictionary = _char_states.get(String(nxt["id"]), {})
+	if st.is_empty():
+		# First outing: debut beside the previous character's spot.
+		player.global_position += Vector3(1.4, 0.0, 0.9)
+		player.global_position.y = maxf(player.global_position.y, 1.0)
+		player.velocity = Vector3.ZERO
+		_health.restore(100.0)
+		_missions.set_cash(0)
+	else:
+		player.global_position = st["pos"]
+		player.rotation.y = float(st["heading"])
+		player.velocity = Vector3.ZERO
+		_health.restore(float(st["hp"]))
+		_missions.set_cash(int(st["cash"]))
+	# Brief control lock while the camera glides over to the new lead.
+	_switch_lock = 0.6
+	_switch_pending_release = true
+	player.controls_enabled = false
+	if _flash_tween != null and _flash_tween.is_valid():
+		_flash_tween.kill()
+	_flash.color.a = 0.16
+	_flash_tween = create_tween()
+	_flash_tween.tween_property(_flash, "color:a", 0.0, 0.45)
+	_show_toast("NOW PLAYING · " + String(nxt["name"]).to_upper())
+
+
+func _stash_character(id: String) -> void:
+	if player == null or not is_instance_valid(player) \
+			or _health == null or _missions == null:
+		return
+	_char_states[id] = {
+		"pos": player.global_position,
+		"heading": player.rotation.y,
+		"hp": _health.hp,
+		"cash": _missions.cash,
+	}
+
+
+func _char_index(id: String) -> int:
+	for i in Game.CHARACTERS.size():
+		if String(Game.CHARACTERS[i]["id"]) == id:
+			return i
+	return 0
 
 
 func _update_camera(delta: float) -> void:
@@ -802,7 +875,7 @@ func _collect_save() -> Dictionary:
 	if current_auto != null:
 		pos = current_auto.position
 		heading = current_auto.rotation.y
-	return {
+	var data := {
 		"character": String(Game.selected_character.get("id", "")),
 		"cash": _missions.cash,
 		"hp": _health.hp,
@@ -811,6 +884,21 @@ func _collect_save() -> Dictionary:
 		"day_t": day_t,
 		"missions_completed": _missions.completed,
 	}
+	# Per-character snapshots so everyone's wallet, health and last spot
+	# survive a save/load cycle, not just the current lead.
+	var chars := {}
+	var cur := String(Game.selected_character.get("id", ""))
+	chars[cur] = {"hp": _health.hp, "cash": _missions.cash, "heading": heading,
+		"pos": [pos.x, pos.y, pos.z]}
+	for id in _char_states:
+		if String(id) == cur:
+			continue
+		var st: Dictionary = _char_states[id]
+		var p: Vector3 = st["pos"]
+		chars[String(id)] = {"hp": float(st["hp"]), "cash": int(st["cash"]),
+			"heading": float(st["heading"]), "pos": [p.x, p.y, p.z]}
+	data["chars"] = chars
+	return data
 
 
 func _apply_save(save: Dictionary) -> void:
@@ -820,6 +908,19 @@ func _apply_save(save: Dictionary) -> void:
 	if typeof(missions_done) != TYPE_DICTIONARY:
 		missions_done = {}
 	_missions.restore(int(save.get("cash", 0)), missions_done)
+	var chars = save.get("chars", {})
+	if typeof(chars) == TYPE_DICTIONARY:
+		for id in chars:
+			var c: Dictionary = chars[id]
+			var raw_c = c.get("pos", [])
+			if typeof(raw_c) != TYPE_ARRAY or raw_c.size() != 3:
+				continue
+			_char_states[String(id)] = {
+				"pos": Vector3(float(raw_c[0]), maxf(float(raw_c[1]), 1.0), float(raw_c[2])),
+				"heading": float(c.get("heading", 0.0)),
+				"hp": clampf(float(c.get("hp", 100.0)), 1.0, 100.0),
+				"cash": maxi(int(c.get("cash", 0)), 0),
+			}
 	var pos := player.global_position
 	var raw = save.get("pos", [])
 	if typeof(raw) == TYPE_ARRAY and raw.size() == 3:

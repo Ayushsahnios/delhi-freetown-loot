@@ -106,6 +106,13 @@ func spend(amount: int) -> bool:
 	return true
 
 
+func set_cash(amount: int) -> void:
+	## Character-switch entry point: swap the visible wallet without
+	## touching mission completion records.
+	cash = maxi(amount, 0)
+	_cash_hud.text = "Rs %d" % cash
+
+
 func restore(saved_cash: int, saved_completed: Dictionary) -> void:
 	## Load-from-save entry point: cash, HUD, completion records.
 	## Repeatable missions stay at their markers; any one-shot mission
