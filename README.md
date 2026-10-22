@@ -37,6 +37,11 @@ N — cycle the in-vehicle radio (3 procedural stations) ·
 Q / R — chai / samosa from street stalls · Space — advance dialogue,
 confirm choice (W/S picks) · X / C — debug hurt / drop
 
+**Gamepad** — left stick move · A interact · B horn · X radio ·
+Y switch character · RB sprint · D-pad up/down chai/samosa · Start save.
+**Touch** — on-screen joystick + buttons appears automatically on
+touchscreen devices (also in the browser build on phones).
+
 ## ▶ Play in browser
 **https://ayushsahnios.github.io/delhi-freetown-loot/** — deployed
 automatically from master (single-threaded web export, works on plain

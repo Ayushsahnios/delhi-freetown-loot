@@ -20,6 +20,7 @@ const RadioScript := preload("res://scripts/radio.gd")
 const MiniMapScript := preload("res://scripts/minimap.gd")
 const FoodScript := preload("res://scripts/food.gd")
 const WeatherScript := preload("res://scripts/weather.gd")
+const TouchControlsScript := preload("res://scripts/touch_controls.gd")
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
@@ -78,6 +79,7 @@ var _chandni_seen := false
 var _weather: WeatherScript
 var _road_mat: StandardMaterial3D
 var _applied_wet := -1.0
+var _touch: CanvasLayer
 
 
 func _ready() -> void:
@@ -109,7 +111,15 @@ func _ready() -> void:
 	add_child(camera)
 	_build_hud()
 	_build_select_ui()
+	_touch = TouchControlsScript.new()
+	add_child(_touch)
+	Input.joy_connection_changed.connect(_on_joy_connection_changed)
 	get_tree().root.close_requested.connect(_save_game)
+
+
+func _on_joy_connection_changed(_device: int, connected: bool) -> void:
+	if connected:
+		_show_toast("GAMEPAD CONNECTED")
 
 
 # ---------------------------------------------------------------- environment
@@ -564,7 +574,7 @@ func _build_select_ui() -> void:
 		box.add_child(btn)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · N radio · Q/R street food · Tab switch character · F9 save · X debug hurt · C debug drop"
+	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · N radio · Q/R street food · Tab switch character · F9 save · X debug hurt · C debug drop\nGamepad · stick move · A interact · B horn · X radio · Y switch · RB sprint · D-pad food · Start save · touch pad UI on touchscreens"
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
@@ -621,6 +631,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 		_autos.append(a)
 
 	_playing = true
+	_touch.set_active(true)
 	if not save.is_empty():
 		_apply_save(save)
 
