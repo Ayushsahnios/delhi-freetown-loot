@@ -140,6 +140,8 @@ func _build_city() -> void:
 				_build_india_gate(c.x, c.z)
 			elif ix == 3 and iz == 7:
 				_build_purani_dilli(c.x, c.z)
+			elif ix == 7 and iz == 5:
+				_build_police_station(c.x, c.z)
 			elif (ix == 8 and iz == 2) or (ix == 2 and iz == 3):
 				_build_park(c.x, c.z)
 			else:
@@ -279,6 +281,22 @@ func _build_park(x: float, z: float) -> void:
 	_grass(Vector3(x, 0, z))
 	for t in range(7):
 		_tree(Vector3(x + _rng.randf_range(-13, 13), 0, z + _rng.randf_range(-13, 13)))
+
+
+func _build_police_station(x: float, z: float) -> void:
+	## Thana on a full block: white hall with a navy band, entrance canopy,
+	## a watch tower with red/blue beacons. Busted players respawn here.
+	add_child(_flat(Vector3(BLOCK - 6.0, 0.06, BLOCK - 6.0), Vector3(x, 0.09, z), Color(0.60, 0.61, 0.64)))
+	var white := Color(0.92, 0.93, 0.95)
+	var navy := Color(0.10, 0.16, 0.35)
+	_add_building(Vector3(x, 0, z - 7.0), Vector3(20.0, 8.0, 9.0), white)
+	add_child(_mesh_box(Vector3(20.4, 1.1, 9.4), navy, Vector3(x, 6.2, z - 7.0)))
+	add_child(_mesh_box(Vector3(9.0, 0.5, 5.0), navy, Vector3(x, 4.6, z - 1.2)))
+	for s in [-4.4, 0.0, 4.4]:
+		add_child(_mesh_box(Vector3(0.45, 4.6, 0.45), white, Vector3(x + s, 2.3, z + 1.2)))
+	_add_building(Vector3(x + 9.0, 0, z - 9.0), Vector3(3.2, 12.0, 3.2), navy)
+	add_child(_mesh_box(Vector3(0.9, 0.9, 0.9), Color(0.95, 0.08, 0.12), Vector3(x + 8.4, 12.6, z - 9.0)))
+	add_child(_mesh_box(Vector3(0.9, 0.9, 0.9), Color(0.10, 0.30, 0.98), Vector3(x + 9.6, 12.6, z - 9.0)))
 
 
 func _build_metro(x: float, z_line: float) -> void:
@@ -449,6 +467,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_police.setup(WORLD, PITCH, ROAD, GRID + 1)
 	_police.register_player(player)
 	_police.stars_changed.connect(_on_stars_changed)
+	_police.arrested.connect(_on_arrested)
 	player.landed_hard.connect(_on_landed_hard)
 	_health = HealthScript.new()
 	add_child(_health)
@@ -633,6 +652,7 @@ func _build_landmarks() -> void:
 		{"name": "India Gate", "center": _block_center(5, 3), "spawn": _block_center(5, 3) + Vector3(0.0, 1.0, 10.0)},
 		{"name": "Purani Dilli Fort", "center": _block_center(3, 7), "spawn": _block_center(3, 7) + Vector3(0.0, 1.0, 12.0)},
 		{"name": "Neighbourhood Park", "center": _block_center(8, 2), "spawn": _block_center(8, 2) + Vector3(0.0, 1.0, 12.0)},
+		{"name": "Police Station", "center": _block_center(7, 5), "spawn": _block_center(7, 5) + Vector3(0.0, 1.0, 10.0), "police": true},
 	]
 
 
@@ -648,6 +668,9 @@ func _nearest_landmark(pos: Vector3) -> Dictionary:
 
 
 func _on_died() -> void:
+	if _police != null and _police.stars() > 0:
+		_start_busted_flow()
+		return
 	_dead = true
 	if _police != null:
 		_police.reset()
@@ -691,6 +714,65 @@ func _respawn_done() -> void:
 func _clear_invuln() -> void:
 	if _health != null:
 		_health.invulnerable = false
+
+
+# ---------------------------------------------------------------- busted
+
+func _on_arrested() -> void:
+	_start_busted_flow()
+
+
+func _start_busted_flow() -> void:
+	## BUSTED: surrounded while wanted, or down with heat on you. Fine out
+	## of the mission wallet, heat cleared, respawn outside the thana.
+	if _dead:
+		return
+	_dead = true
+	var stars := 1
+	if _police != null:
+		stars = maxi(_police.stars(), 1)
+		_police.reset()
+	var fine := 0
+	if _missions != null:
+		fine = _missions.charge_fine(100 * stars)
+		_missions.abort_active("you got busted")
+	if current_auto != null:
+		current_auto.driver_inside = false
+		current_auto = null
+		player.visible = true
+	player.controls_enabled = false
+	if _flash_tween != null and _flash_tween.is_valid():
+		_flash_tween.kill()
+	_flash.color = Color(0.20, 0.35, 0.95, 0.45)
+	_flash_tween = create_tween()
+	_flash_tween.tween_property(_flash, "color:a", 0.0, 0.6)
+	_hud_msg.text = "BUSTED"
+	_hud_msg.visible = true
+	var tw := create_tween()
+	tw.tween_property(_fade, "color:a", 1.0, 0.7)
+	tw.tween_callback(_do_busted_respawn.bind(fine))
+	tw.tween_interval(1.0)
+	tw.tween_property(_fade, "color:a", 0.0, 0.9)
+	tw.tween_callback(_respawn_done)
+	tw.tween_interval(1.5)
+	tw.tween_callback(_clear_invuln)
+
+
+func _do_busted_respawn(fine: int) -> void:
+	var station := _police_station()
+	_health.invulnerable = true
+	_health.respawn_reset()
+	player.global_position = station
+	player.velocity = Vector3.ZERO
+	_cam_anchor = player.global_position + player.global_transform.basis.z * 10.0 + Vector3(0, 6, 0)
+	_hud_msg.text = "RELEASED \u00b7 Rs %d fine" % fine if fine > 0 else "RELEASED \u00b7 pockets empty"
+
+
+func _police_station() -> Vector3:
+	for lm in _landmarks:
+		if bool(lm.get("police", false)):
+			return lm["spawn"]
+	return _landmarks[0]["spawn"]
 
 
 # ---------------------------------------------------------------- save/load
