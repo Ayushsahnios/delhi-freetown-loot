@@ -95,6 +95,9 @@ var _tree_trunk_xfs: Array[Transform3D] = []
 var _tree_crown_xfs: Array[Transform3D] = []
 var _pillar_xfs: Array[Transform3D] = []
 var _metro_seg_xfs: Array[Transform3D] = []
+var _win_xfs: Array[Transform3D] = []
+var _win_lit_xfs: Array[Transform3D] = []
+var _win_lit_mat: StandardMaterial3D = null
 
 
 func _ready() -> void:
@@ -226,8 +229,10 @@ func _build_city() -> void:
 					var h := _rng.randf_range(7.0, 33.0)
 					var ox := _rng.randf_range(-1.0, 1.0) * (BLOCK - w) * 0.5
 					var oz := _rng.randf_range(-1.0, 1.0) * (BLOCK - d) * 0.5
-					_add_building(Vector3(c.x + ox, 0, c.z + oz), Vector3(w, h, d),
+					var bpos := Vector3(c.x + ox, 0, c.z + oz)
+					_add_building(bpos, Vector3(w, h, d),
 							PALETTE[_rng.randi_range(0, PALETTE.size() - 1)])
+					_add_windows(bpos, Vector3(w, h, d))
 				_tree(Vector3(c.x - BLOCK / 2.0 + 2.0, 0, c.z - BLOCK / 2.0 + 2.0))
 
 	_cur_district = null
@@ -295,13 +300,63 @@ func _commit_props() -> void:
 	seg.size = Vector3(ROAD - 2.0, 1.2, 22.0)
 	seg.material = MeshTools.shared_material(Color(0.32, 0.35, 0.42))
 	_add_mm(seg, _metro_seg_xfs)
+	# Facade glazing: every tower window is one quad instance; a fixed
+	# random subset carries the warm emissive material that glows at night.
+	var glass := QuadMesh.new()
+	glass.size = Vector2(1.5, 1.9)
+	var glass_mat := StandardMaterial3D.new()
+	glass_mat.albedo_color = Color(0.08, 0.11, 0.16)
+	glass_mat.metallic = 0.5
+	glass_mat.roughness = 0.25
+	glass.material = glass_mat
+	var glass_mm := _add_mm(glass, _win_xfs)
+	var lit := QuadMesh.new()
+	lit.size = Vector2(1.5, 1.9)
+	_win_lit_mat = StandardMaterial3D.new()
+	_win_lit_mat.albedo_color = Color(1.0, 0.87, 0.6)
+	_win_lit_mat.emission_enabled = true
+	_win_lit_mat.emission = Color(1.0, 0.82, 0.5)
+	_win_lit_mat.emission_energy_multiplier = 0.0
+	lit.material = _win_lit_mat
+	var lit_mm := _add_mm(lit, _win_lit_xfs)
+	# Panes are flat stickers on the wall: keep them out of the shadow map.
+	for pane in [glass_mm, lit_mm]:
+		if pane != null:
+			pane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-func _add_mm(mesh: PrimitiveMesh, xfs: Array[Transform3D]) -> void:
+func _add_mm(mesh: PrimitiveMesh, xfs: Array[Transform3D]) -> MultiMeshInstance3D:
 	var node := MeshTools.make_multimesh(mesh, xfs)
 	if node != null:
 		add_child(node)
+	return node
 
+
+func _add_windows(pos: Vector3, size: Vector3) -> void:
+	## Facade pass for district towers: a grid of dark panes on each
+	## street-facing wall; a fixed random subset glows after dark. Short
+	## huts (h < 9) stay plain plaster — they read as shops, not offices.
+	if size.y < 9.0:
+		return
+	for side in 4:
+		var theta := float(side) * PI / 2.0
+		var nrm := Vector3(sin(theta), 0.0, cos(theta))
+		var across := Vector3(nrm.z, 0.0, -nrm.x)
+		var wall_len: float = nrm.z * size.x + nrm.x * size.z
+		var cols := int((wall_len - 4.0) / 3.0)
+		var rows := int((size.y - 5.0) / 3.6)
+		if cols < 1 or rows < 1:
+			continue
+		var half_out: float = (absf(nrm.x) * size.x + absf(nrm.z) * size.z) * 0.5
+		for r in rows:
+			for c in cols:
+				var u: float = (float(c) + 0.5 - cols * 0.5) * 3.0
+				var at := pos + Vector3(0.0, 2.6 + float(r) * 3.6, 0.0) \
+						+ across * u + nrm * (half_out + 0.06)
+				var xf := Transform3D(Basis(Vector3.UP, theta), at)
+				_win_xfs.append(xf)
+				if _rng.randf() < 0.42:
+					_win_lit_xfs.append(xf.translated(nrm * 0.06))
 
 func _add_building(pos: Vector3, size: Vector3, color: Color) -> void:
 	var body := StaticBody3D.new()
@@ -954,6 +1009,11 @@ func _update_day(delta: float) -> void:
 	env.ambient_light_energy = lerpf(0.16, 0.7, daylight)
 	env.ambient_light_color = Color(0.42, 0.48, 0.66).lerp(Color(0.7, 0.75, 0.85), daylight)
 	sun.shadow_enabled = _sun_shadows_wanted and daylight > 0.12
+	# Dusk falls, the city lights up: window panes start glowing as the sun
+	# drops and reach full warm brightness through the night.
+	if _win_lit_mat != null:
+		_win_lit_mat.emission_energy_multiplier = lerpf(1.9, 0.0,
+				clampf(daylight * 1.4, 0.0, 1.0))
 	var sky := SKY_NIGHT.lerp(SKY_DAY, daylight)
 	var dusk: float = clampf(1.0 - absf(daylight - 0.5) * 2.0, 0.0, 1.0)
 	sky = sky.lerp(SKY_DUSK, dusk * 0.5)
