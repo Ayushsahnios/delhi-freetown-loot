@@ -16,6 +16,7 @@ const HealthScript := preload("res://scripts/health.gd")
 const PoliceScript := preload("res://scripts/police.gd")
 const MissionScript := preload("res://scripts/missions.gd")
 const AudioScript := preload("res://scripts/audio.gd")
+const RadioScript := preload("res://scripts/radio.gd")
 const MiniMapScript := preload("res://scripts/minimap.gd")
 const FoodScript := preload("res://scripts/food.gd")
 const WeatherScript := preload("res://scripts/weather.gd")
@@ -53,12 +54,14 @@ var _landmarks: Array[Dictionary] = []
 var _dead := false
 var _impact_cd := 0.0
 var _audio: Node
+var _radio: Node
 var _minimap: Control
 var _food: Node
 var _hud_hp_bg: ColorRect
 var _hud_hp_fill: ColorRect
 var _hud_hp_text: Label
 var _hud_stars: Label
+var _hud_radio: Label
 var _police: Node
 var _missions: Node
 var _chaos_cd := 0.0
@@ -99,6 +102,9 @@ func _ready() -> void:
 	_audio = AudioScript.new()
 	add_child(_audio)
 	_audio.setup()
+	_radio = RadioScript.new()
+	add_child(_radio)
+	_radio.setup()
 	camera = Camera3D.new()
 	add_child(camera)
 	_build_hud()
@@ -466,6 +472,12 @@ func _build_hud() -> void:
 	_hud_stars.add_theme_color_override("font_color", Color(1.0, 0.83, 0.25))
 	_hud_stars.visible = false
 	layer.add_child(_hud_stars)
+	_hud_radio = Label.new()
+	_hud_radio.position = Vector2(824, 46)
+	_hud_radio.add_theme_font_size_override("font_size", 15)
+	_hud_radio.add_theme_color_override("font_color", Color(1.0, 0.83, 0.25))
+	_hud_radio.visible = false
+	layer.add_child(_hud_radio)
 	_flash = ColorRect.new()
 	_flash.color = Color(0.8, 0.05, 0.05, 0.0)
 	_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -552,7 +564,7 @@ func _build_select_ui() -> void:
 		box.add_child(btn)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · Q/R street food · Tab switch character · F9 save · X debug hurt · C debug drop"
+	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · N radio · Q/R street food · Tab switch character · F9 save · X debug hurt · C debug drop"
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
@@ -649,6 +661,9 @@ func _process(delta: float) -> void:
 			_switch_character()
 		if Input.is_action_just_pressed("horn"):
 			_audio.horn()
+		if current_auto != null and Input.is_action_just_pressed("radio"):
+			_hud_radio.text = _radio.cycle_station()
+			_show_toast(_hud_radio.text)
 		if Input.is_action_just_pressed("debug_hurt"):
 			_health.damage(25.0)
 		if current_auto == null and Input.is_action_just_pressed("debug_fall"):
@@ -686,6 +701,7 @@ func _toggle_vehicle() -> void:
 		player.visible = true
 		current_auto.driver_inside = false
 		current_auto = null
+		_radio_off()
 		return
 	var best: CharacterBody3D = null
 	var best_d := 6.0
@@ -698,6 +714,7 @@ func _toggle_vehicle() -> void:
 		current_auto = best
 		current_auto.driver_inside = true
 		player.visible = false
+		_radio_on()
 		return
 	# No parked vehicle nearby: take over the closest ambient traffic vehicle.
 	# Traffic brakes for the player standing in its lane, so the nearest one
@@ -712,6 +729,19 @@ func _toggle_vehicle() -> void:
 		current_auto = v
 		current_auto.driver_inside = true
 		player.visible = false
+		_radio_on()
+
+
+func _radio_on() -> void:
+	## Ignition: head unit resumes the last station, HUD strip lights up.
+	_radio.set_active(true)
+	_hud_radio.text = _radio.label()
+	_hud_radio.visible = true
+
+
+func _radio_off() -> void:
+	_radio.set_active(false)
+	_hud_radio.visible = false
 
 
 # ---------------------------------------------------------------- switch
@@ -899,6 +929,7 @@ func _on_died() -> void:
 		current_auto.driver_inside = false
 		current_auto = null
 		player.visible = true
+		_radio_off()
 	player.controls_enabled = false
 	var lm := _nearest_landmark(player.global_position)
 	_hud_msg.text = "DOWN & OUT"
@@ -959,6 +990,7 @@ func _start_busted_flow() -> void:
 		current_auto.driver_inside = false
 		current_auto = null
 		player.visible = true
+		_radio_off()
 	player.controls_enabled = false
 	if _flash_tween != null and _flash_tween.is_valid():
 		_flash_tween.kill()
