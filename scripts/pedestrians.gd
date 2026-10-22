@@ -8,6 +8,7 @@ extends Node
 ## playing its own walk/run clips — the old MultiMesh box bodies are gone.
 
 const Chars := preload("res://scripts/characters.gd")
+const ShadowBlob := preload("res://scripts/shadowblob.gd")
 
 const COUNT := 26
 const EDGE := 1.4
@@ -371,6 +372,7 @@ func _dress(v: Dictionary) -> void:
 	## The model's own AnimationPlayer drives the walk.
 	var path: String = MODELS[_rng.randi_range(0, MODELS.size() - 1)]
 	var node := _chars.spawn(path, PED_HEIGHT)
+	ShadowBlob.attach(node, 0.48)
 	var skin: Color = SKIN_TONES[_rng.randi_range(0, SKIN_TONES.size() - 1)]
 	var shirt: Color = SHIRTS[_rng.randi_range(0, SHIRTS.size() - 1)]
 	var pants: Color = PANTS[_rng.randi_range(0, PANTS.size() - 1)]

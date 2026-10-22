@@ -9,6 +9,7 @@ const KINDS := {
 }
 const MeshTools := preload("res://scripts/meshtools.gd")
 const Vehicles := preload("res://scripts/vehicles.gd")
+const ShadowBlob := preload("res://scripts/shadowblob.gd")
 
 var driver_inside := false
 ## Traction 0..1 — monsoon wetness lowers it: wider turns, longer
@@ -35,6 +36,7 @@ func setup(pos: Vector3, heading: float, kind := "auto") -> void:
 			_build_van()
 		_:
 			_build_auto()
+	ShadowBlob.attach(self, 1.6, 0.07)
 
 
 func _build_auto() -> void:
