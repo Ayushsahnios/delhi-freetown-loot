@@ -16,6 +16,7 @@ const OFFSETS := {
 	"Connaught Place": Vector3(-14.0, 0.0, 8.0),
 	"India Gate": Vector3(14.0, 0.0, 2.0),
 	"Purani Dilli Fort": Vector3(10.0, 0.0, 4.0),
+	"Chandni Chowk": Vector3(-5.0, 0.0, -5.0),
 	"Neighbourhood Park": Vector3(10.0, 0.0, 10.0),
 	"Police Station": Vector3(-12.0, 0.0, 8.0),
 }

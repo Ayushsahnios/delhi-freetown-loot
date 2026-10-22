@@ -19,6 +19,11 @@ const PANIC_SPEED := 8.0
 const SCATTER_RADIUS := 18.0
 const REJOIN_SPEED := 5.5
 const REJOIN_LIMIT := 4.0
+const ZONE_EXTRA := 12
+const ZONE_WAKE := 130.0
+const ZONE_RECYCLE := 150.0
+const ZONE_SPAWN_MIN := 26.0
+const ZONE_BIAS := 42.0
 
 const SKIN_TONES := [
 	Color(0.79, 0.57, 0.40), Color(0.72, 0.50, 0.33),
@@ -42,6 +47,9 @@ var _pitch := 0.0
 var _road_w := 0.0
 var _roads := 0
 var _placed := false
+var _zone_center := Vector3.ZERO
+var _zone_radius := 0.0
+var _zone_set := false
 
 
 func setup(world_size: float, pitch: float, road_width: float, road_count: int) -> void:
@@ -61,6 +69,29 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 			"speed": 3.0, "panic": 0.0, "panic_dir": Vector3.ZERO,
 			"rejoin": 0.0, "cd": 0.0, "phase": _rng.randf() * TAU,
 		})
+	# Bazaar crowd squad: extra shoppers that only wake around the crowd
+	# zone (see set_crowd_zone) — the district's density boost.
+	for _i in range(ZONE_EXTRA):
+		var znode := Node3D.new()
+		var zlimbs := _build_ped(znode)
+		znode.visible = false
+		add_child(znode)
+		_peds.append({
+			"node": znode, "legs": zlimbs["legs"], "arms": zlimbs["arms"],
+			"along_z": true, "road": 0.0, "t": 0.0, "dir": 1,
+			"speed": 3.0, "panic": 0.0, "panic_dir": Vector3.ZERO,
+			"rejoin": 0.0, "cd": 0.0, "phase": _rng.randf() * TAU,
+			"zone": true,
+		})
+
+
+func set_crowd_zone(center: Vector3, radius: float) -> void:
+	## Crowd density boost: ZONE_EXTRA extra shoppers walk the sidewalk
+	## lines around `center` while the player is nearby; they sleep (and
+	## cost nothing) when the district is far away.
+	_zone_center = center
+	_zone_radius = radius
+	_zone_set = true
 
 
 func register_player(p: Node3D) -> void:
@@ -73,18 +104,35 @@ func _physics_process(delta: float) -> void:
 	if not _placed:
 		_placed = true
 		for v in _peds:
-			_place(v)
+			if not bool(v.get("zone", false)):
+				_place(v)
 	if Input.is_action_just_pressed("horn"):
 		_scatter(_player.global_position)
 	for v in _peds:
+		var is_zone := bool(v.get("zone", false))
+		if is_zone:
+			if not _zone_awake():
+				if v.node.visible:
+					v.node.visible = false
+					v.panic = 0.0
+					v.rejoin = 0.0
+				continue
+			if not v.node.visible:
+				_place_zone(v)
 		if v.cd > 0.0:
 			v.cd -= delta
 		if v.panic > 0.0 or v.rejoin > 0.0:
 			_flee_tick(v, delta)
 		else:
 			_walk_tick(v, delta)
-			if _flat_dist(v) > RECYCLE_DIST:
-				_place(v)
+			var recycle := RECYCLE_DIST
+			if is_zone:
+				recycle = ZONE_RECYCLE
+			if _flat_dist(v) > recycle:
+				if is_zone:
+					_place_zone(v)
+				else:
+					_place(v)
 		_animate(v)
 
 
@@ -216,6 +264,38 @@ func _place(v: Dictionary) -> void:
 		v.t = base + _rng.randf_range(-1.0, 1.0) * SPAWN_ALONG
 		_apply(v)
 		if _flat_dist(v) >= SPAWN_MIN_DIST:
+			break
+	v.node.visible = true
+
+
+func _zone_awake() -> bool:
+	## The bazaar squad is only simulated while the player can plausibly
+	## see the district.
+	if not _zone_set:
+		return false
+	var p: Vector3 = _player.global_position
+	return Vector2(p.x - _zone_center.x, p.z - _zone_center.z).length() <= ZONE_WAKE
+
+
+func _place_zone(v: Dictionary) -> void:
+	## (Re)spawn a bazaar shopper on a sidewalk line near the crowd zone,
+	## biased toward whichever side the player is watching from.
+	v.along_z = _rng.randf() < 0.5
+	var along_center: float = _zone_center.z if v.along_z else _zone_center.x
+	v.road = _nearest_line(_zone_center.x if v.along_z else _zone_center.z) \
+			+ (1.0 if _rng.randf() < 0.5 else -1.0) * _offset()
+	v.dir = 1 if _rng.randf() < 0.5 else -1
+	v.speed = _rng.randf_range(WALK_MIN, WALK_MAX)
+	v.panic = 0.0
+	v.rejoin = 0.0
+	v.cd = _rng.randf_range(0.5, 2.5)
+	var p: Vector3 = _player.global_position
+	var p_along: float = p.z if v.along_z else p.x
+	for _attempt in range(6):
+		v.t = clampf(p_along + _rng.randf_range(-1.0, 1.0) * ZONE_BIAS,
+				along_center - _zone_radius, along_center + _zone_radius)
+		_apply(v)
+		if _flat_dist(v) >= ZONE_SPAWN_MIN:
 			break
 	v.node.visible = true
 
