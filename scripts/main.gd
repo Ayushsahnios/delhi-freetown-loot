@@ -41,6 +41,9 @@ var camera: Camera3D
 var sun: DirectionalLight3D
 var world_env: WorldEnvironment
 var _sun_shadows_wanted := true
+var _sky_mat: ProceduralSkyMaterial = null
+var _cloud_layer: Node3D = null
+var _cloud_mat: StandardMaterial3D = null
 
 var day_t := 0.32
 var current_auto: CharacterBody3D = null
@@ -151,14 +154,67 @@ func _on_joy_connection_changed(_device: int, connected: bool) -> void:
 
 func _build_environment() -> void:
 	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = SKY_DAY
+	env.background_mode = Environment.BG_SKY
+	_sky_mat = ProceduralSkyMaterial.new()
+	_sky_mat.sky_top_color = SKY_DAY
+	_sky_mat.sky_horizon_color = SKY_DAY
+	_sky_mat.ground_bottom_color = Color(0.22, 0.24, 0.22)
+	_sky_mat.ground_horizon_color = Color(0.55, 0.60, 0.62)
+	var sky := Sky.new()
+	sky.sky_material = _sky_mat
+	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.7, 0.75, 0.85)
 	env.ambient_light_energy = 0.7
+	# Filmic tonemap + soft bloom: sunlit facades and the emissive night
+	# windows get gentle halos instead of clipping to white.
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 1.05
+	env.glow_enabled = true
+	env.glow_intensity = 0.6
+	env.glow_bloom = 0.08
+	env.glow_hdr_threshold = 1.0
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	world_env = WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
+	_build_clouds()
+
+func _build_clouds() -> void:
+	## Drifting puff layer: one MultiMesh of soft radial-gradient quads high
+	## above the city; the whole layer rotates slowly so cover always moves.
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 1.0, 1.0, 0.85))
+	grad.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+	var tex := GradientTexture2D.new()
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	tex.gradient = grad
+	tex.width = 128
+	tex.height = 128
+	_cloud_mat = StandardMaterial3D.new()
+	_cloud_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_cloud_mat.albedo_texture = tex
+	_cloud_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_cloud_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var puff := QuadMesh.new()
+	puff.size = Vector2(46.0, 27.0)
+	puff.material = _cloud_mat
+	var flat := Basis(Vector3(1.0, 0.0, 0.0), PI / 2.0)
+	var xfs: Array[Transform3D] = []
+	for i in 48:
+		var a := _rng.randf() * TAU
+		var r := _rng.randf_range(40.0, WORLD * 0.75)
+		xfs.append(Transform3D(flat.scaled(Vector3(
+				_rng.randf_range(0.7, 1.8), _rng.randf_range(0.7, 1.4), 1.0)),
+				Vector3(cos(a) * r, 88.0 + _rng.randf_range(-6.0, 10.0), sin(a) * r)))
+	_cloud_layer = Node3D.new()
+	add_child(_cloud_layer)
+	var mmi := MeshTools.make_multimesh(puff, xfs)
+	if mmi != null:
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_cloud_layer.add_child(mmi)
 
 	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-55, 40, 0)
@@ -1018,7 +1074,15 @@ func _update_day(delta: float) -> void:
 	var dusk: float = clampf(1.0 - absf(daylight - 0.5) * 2.0, 0.0, 1.0)
 	sky = sky.lerp(SKY_DUSK, dusk * 0.5)
 	sky = sky.lerp(STORM_SKY, _weather.cloud * 0.6)
-	world_env.environment.background_color = sky
+	if _sky_mat != null:
+		_sky_mat.sky_top_color = sky * 0.85
+		_sky_mat.sky_horizon_color = sky.lerp(SKY_DUSK, dusk * 0.3)
+	if _cloud_layer != null:
+		_cloud_layer.rotate_y(delta * 0.004)
+		var cover := clampf(_weather.cloud * 0.7 + 0.12, 0.0, 1.0)
+		var tint := Color(1.0, 1.0, 1.0).lerp(Color(0.32, 0.33, 0.38), 1.0 - daylight * 0.8)
+		tint.a = 0.28 + cover * 0.62
+		_cloud_mat.albedo_color = tint
 	if _playing:
 		var hours: float = fmod(day_t * 24.0 + 6.0, 24.0)
 		var hh := int(hours)
