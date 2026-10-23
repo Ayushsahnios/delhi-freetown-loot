@@ -62,6 +62,20 @@ Web export (any static host):
 godot --headless --export-release "Web" build/index.html
 ```
 
+## QA screenshots
+
+The game can be rendered server-side so every PR can be reviewed visually:
+
+```bash
+godot --headless --import .
+xvfb-run -a -s "-screen 0 1280x720x24" godot --path . \
+  --rendering-driver opengl3 res://scenes/screenshot.tscn \
+  -- --out shot.png --frames 120 [--tp X,Z]
+```
+
+CI renders `spawn.png` and `center.png` on every PR and uploads them as a
+`gameplay-screenshots` artifact — check it before merging visual changes.
+
 ## Roadmap
 v0.2 Streets Alive (traffic AI, pedestrians, minimap, audio) →
 v0.3 Wanted (police, heat) → v0.4 Paisa (missions, economy) →
