@@ -295,8 +295,14 @@ func _build_city() -> void:
 
 
 func _block_center(ix: int, iz: int) -> Vector3:
-	var half := (GRID - 1) / 2.0
-	return Vector3((ix - half) * PITCH, 0.0, (iz - half) * PITCH)
+	## Roads, traffic, pedestrians, police, minimap and the metro all place
+	## their lines at -W/2 + i*PITCH - BLOCK/2 (roads.gd build(), traffic/
+	## pedestrian/police setup math). Blocks fill the gaps BETWEEN road
+	## lines: block i sits midway between road i and road i+1, so its
+	## 34 m footprint spans exactly [road_i + 6, road_{i+1} - 6] and never
+	## touches asphalt (issue #67).
+	return Vector3(-WORLD / 2.0 + ix * PITCH + ROAD / 2.0, 0.0,
+			-WORLD / 2.0 + iz * PITCH + ROAD / 2.0)
 
 
 func _builder_for(ix: int, iz: int) -> MeshTools:
@@ -308,9 +314,11 @@ func _builder_for(ix: int, iz: int) -> MeshTools:
 
 
 func _builder_at(p: Vector3) -> MeshTools:
-	var half := (GRID - 1) / 2.0
-	return _builder_for(clampi(roundi(p.x / PITCH + half), 0, GRID - 1),
-			clampi(roundi(p.z / PITCH + half), 0, GRID - 1))
+	## Nearest-block index under the road-aligned block grid (see
+	## _block_center): i = roundi((v + W/2 - ROAD/2) / PITCH).
+	return _builder_for(
+			clampi(roundi((p.x + WORLD / 2.0 - ROAD / 2.0) / PITCH), 0, GRID - 1),
+			clampi(roundi((p.z + WORLD / 2.0 - ROAD / 2.0) / PITCH), 0, GRID - 1))
 
 
 func _dist_box(size: Vector3, center: Vector3, color: Color) -> void:
@@ -442,14 +450,17 @@ func _grass(pos: Vector3) -> void:
 func _build_cp(x: float, z: float) -> void:
 	_grass(Vector3(x, 0, z))
 	var pm := CylinderMesh.new()
-	pm.top_radius = 11.0
-	pm.bottom_radius = 11.0
+	pm.top_radius = 9.5
+	pm.bottom_radius = 9.5
 	pm.height = 0.7
 	_cur_district.add_mesh(pm, Transform3D(Basis(), Vector3(x, 0.35, z)), Color(0.18, 0.56, 0.27))
 	_add_building(Vector3(x, 0, z), Vector3(18.0, 1.0, 18.0), Color(0.18, 0.56, 0.27))
+	# Ring colonnade hugs the central green inside the block: radius 13.4
+	# keeps every footprint within +-17 m of the block center, clear of the
+	# road/sidewalk band that starts at the block edge (issue #67).
 	for a in range(8):
 		var ang := TAU * a / 8.0
-		var bp := Vector3(x + cos(ang) * 21.0, 0, z + sin(ang) * 21.0)
+		var bp := Vector3(x + cos(ang) * 13.4, 0, z + sin(ang) * 13.4)
 		var h := 14.0 + (a % 3) * 4.0
 		_add_building(bp, Vector3(7.0, h, 7.0), Color(0.94, 0.92, 0.85))
 
