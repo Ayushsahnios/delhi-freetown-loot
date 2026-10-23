@@ -98,9 +98,9 @@ func _draw() -> void:
 		for pt in _police_pts:
 			_blip(pt, flash, 3.0, true)
 	var north := _center + Vector2(0.0, -1.0).rotated(_heading) \
-			* (SIZE / 2.0 - 12.0)
-	draw_string(ThemeDB.fallback_font, north + Vector2(-3.0, 4.0), "N",
-			HORIZONTAL_ALIGNMENT_LEFT, -1.0, 10, Color(1.0, 1.0, 1.0, 0.8))
+			* (SIZE / 2.0 - 18.0)
+	draw_string(ThemeDB.fallback_font, north + Vector2(-4.0, 4.0), "N",
+			HORIZONTAL_ALIGNMENT_CENTER, 8.0, 10, Color(1.0, 1.0, 1.0, 0.8))
 	var tip := _center + Vector2(0.0, -8.0)
 	var right := _center + Vector2(6.0, 6.0)
 	var left := _center + Vector2(-6.0, 6.0)
@@ -151,8 +151,17 @@ func _blip(world_pos: Vector3, color: Color, radius: float, clamp_edge: bool,
 	draw_arc(pt, radius + 1.5, 0.0, TAU, 12, Color(0.0, 0.0, 0.0, 0.55), 1.5,
 			true)
 	if letter != "" and not pinned:
-		draw_string(ThemeDB.fallback_font, pt + Vector2(radius + 3.0, 4.0),
-				letter, HORIZONTAL_ALIGNMENT_LEFT, -1.0, 9,
+		# Inset the label inside the circle (issue #81): rim-side blips
+		# lay their initials toward the centre so nothing is cut off at
+		# the edge; centremost blips keep the plain right-side label.
+		var off := pt - _center
+		var lp := pt + Vector2(radius + 3.0, 4.0)
+		var align := HORIZONTAL_ALIGNMENT_LEFT
+		if off.length() >= 14.0:
+			lp = pt - off.normalized() * (radius + 3.0) + Vector2(0.0, 4.0)
+			align = HORIZONTAL_ALIGNMENT_RIGHT if off.x >= 0.0 \
+					else HORIZONTAL_ALIGNMENT_LEFT
+		draw_string(ThemeDB.fallback_font, lp, letter, align, -1.0, 9,
 				Color(1.0, 1.0, 1.0, 0.9))
 
 
