@@ -374,6 +374,18 @@ func _commit_props() -> void:
 	pillar.height = 12.0
 	pillar.material = MeshTools.shared_material(Color(0.55, 0.58, 0.62))
 	_add_mm(pillar, _pillar_xfs)
+	# Pier capitals (issue #78): the pillar tops used to vanish into the
+	# deck's shadow side, so from street level a lone column read as a
+	# pole terminating mid-air against the buildings behind it. A wider
+	# capital under each deck makes the joint read as carrying it.
+	var cap := BoxMesh.new()
+	cap.size = Vector3(2.2, 0.8, 2.2)
+	cap.material = MeshTools.shared_material(Color(0.48, 0.51, 0.55))
+	var cap_xfs: Array[Transform3D] = []
+	for xf: Transform3D in _pillar_xfs:
+		var o: Vector3 = xf.origin
+		cap_xfs.append(Transform3D(Basis(), Vector3(o.x, 11.9, o.z)))
+	_add_mm(cap, cap_xfs)
 	var seg := BoxMesh.new()
 	seg.size = Vector3(ROAD - 2.0, 1.2, 22.0)
 	seg.material = MeshTools.shared_material(Color(0.32, 0.35, 0.42))
@@ -643,8 +655,8 @@ func _build_police_station(x: float, z: float) -> void:
 	for s in [-4.4, 0.0, 4.4]:
 		_dist_box(Vector3(0.45, 4.6, 0.45), Vector3(x + s, 2.3, z + 1.2), white)
 	_add_building(Vector3(x + 9.0, 0, z - 9.0), Vector3(3.2, 12.0, 3.2), navy)
-	_dist_box(Vector3(0.9, 0.9, 0.9), Vector3(x + 8.4, 12.6, z - 9.0), Color(0.95, 0.08, 0.12))
-	_dist_box(Vector3(0.9, 0.9, 0.9), Vector3(x + 9.6, 12.6, z - 9.0), Color(0.10, 0.30, 0.98))
+	_dist_box(Vector3(0.9, 0.9, 0.9), Vector3(x + 8.4, 12.45, z - 9.0), Color(0.95, 0.08, 0.12))
+	_dist_box(Vector3(0.9, 0.9, 0.9), Vector3(x + 9.6, 12.45, z - 9.0), Color(0.10, 0.30, 0.98))
 
 
 func _build_metro(x: float, z_line: float) -> void:

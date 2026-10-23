@@ -37,6 +37,7 @@ const FRAME := Color(0.15, 0.16, 0.18)
 const PANEL := Color(0.74, 0.78, 0.80)
 const SIGN_BG := Color(0.97, 0.78, 0.20)
 const SIGN_STRIPE := Color(0.12, 0.12, 0.14)
+const PLINTH := Color(0.62, 0.63, 0.66)
 const BUMP_BODY := Color(0.17, 0.17, 0.18)
 const BUMP_PAINT := Color(0.92, 0.76, 0.14)
 
@@ -133,7 +134,9 @@ static func _stop_mesh() -> ArrayMesh:
 	_sb(b, Vector3(0.09, 2.5, 0.09), Vector3(1.05, 1.25, 0.15), STEEL)
 	_sb(b, Vector3(2.6, 0.08, 1.5), Vector3(0, 2.52, -0.05), ROOF)
 	_sb(b, Vector3(2.3, 1.05, 0.05), Vector3(0, 1.30, 0.42), PANEL)
-	# route sign
+	# route sign (anchored: base plinth on the sidewalk, board
+	# captive on the pole so neither end reads as floating — issue #78)
+	_sb(b, Vector3(0.34, 0.22, 0.34), Vector3(1.45, 0.11, -0.55), PLINTH)
 	_sb(b, Vector3(0.08, 2.9, 0.08), Vector3(1.45, 1.45, -0.55), STEEL)
 	_sb(b, Vector3(0.75, 0.50, 0.06), Vector3(1.45, 2.62, -0.55), SIGN_BG)
 	_sb(b, Vector3(0.75, 0.13, 0.07), Vector3(1.45, 2.62, -0.55), SIGN_STRIPE)
