@@ -40,7 +40,11 @@ var _choice_box: VBoxContainer
 
 
 func _ready() -> void:
-	layer = 12
+	# Above prompts/toasts (12) and touch pads (15), below pause (30):
+	# the dialogue box owns the bottom of the screen while it runs
+	# (issue #80).
+	layer = 20
+	add_to_group("dialogue")
 	_build_ui()
 
 
@@ -124,7 +128,7 @@ func _line_complete() -> void:
 	if _idx + 1 >= _script.size() and not choices.is_empty():
 		_open_choices(choices)
 		return
-	_hint.text = "Space — continue ▸" if _idx + 1 < _script.size() else "Space — close ▸"
+	_hint.text = "Space — continue >" if _idx + 1 < _script.size() else "Space — close >"
 	_hint.visible = true
 
 

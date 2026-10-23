@@ -70,6 +70,12 @@ func _process(delta: float) -> void:
 	if near == null or not _player.controls_enabled:
 		_prompt.visible = false
 		return
+	# A running dialogue owns the bottom of the screen — keep the stall
+	# prompt out of its box (issue #80).
+	for d in get_tree().get_nodes_in_group("dialogue"):
+		if d.is_running():
+			_prompt.visible = false
+			return
 	_prompt.text = "CHAI Rs %d [Q]  ·  SAMOSA Rs %d [R]  ·  stall food is hot" % [CHAI["price"], SAMOSA["price"]]
 	_prompt.visible = true
 	if Input.is_action_just_pressed("buy_chai"):
