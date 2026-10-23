@@ -13,6 +13,7 @@ var _horn_player: AudioStreamPlayer
 var _ambient_player: AudioStreamPlayer
 var _rain_player: AudioStreamPlayer
 var _thunder_player: AudioStreamPlayer
+var _thunk_player: AudioStreamPlayer
 var _distant_players: Array[AudioStreamPlayer] = []
 var _rng := RandomNumberGenerator.new()
 var _distant_cd := 3.0
@@ -43,9 +44,12 @@ func setup() -> void:
 	_thunder_player = AudioStreamPlayer.new()
 	_thunder_player.stream = _make_thunder()
 	add_child(_thunder_player)
+	_thunk_player = AudioStreamPlayer.new()
+	_thunk_player.stream = _make_thunk()
+	add_child(_thunk_player)
 	# Settings sliders scale the Ambient bus, never these players directly.
-	for p in [_horn_player, _ambient_player, _rain_player, _thunder_player] \
-			+ _distant_players:
+	for p in [_horn_player, _ambient_player, _rain_player, _thunder_player,
+			_thunk_player] + _distant_players:
 		p.bus = "Ambient"
 
 
@@ -75,6 +79,17 @@ func thunder() -> void:
 	_thunder_player.pitch_scale = _rng.randf_range(0.8, 1.15)
 	_thunder_player.volume_db = _rng.randf_range(-10.0, -5.0)
 	_thunder_player.play()
+
+
+func thunk(strength := 1.0) -> void:
+	## Chassis taking a speed bump (issue #69): low thud behind a click,
+	## heavier and louder the faster the crossing.
+	if _thunk_player == null:
+		return
+	var s := clampf(strength, 0.0, 1.0)
+	_thunk_player.pitch_scale = lerpf(0.75, 1.15, s)
+	_thunk_player.volume_db = lerpf(-15.0, -5.0, s)
+	_thunk_player.play()
 
 
 func _process(delta: float) -> void:
@@ -193,6 +208,26 @@ func _make_thunder() -> AudioStreamWAV:
 		var env: float = minf(i / attack, 1.0) * pow(maxf(1.0 - t / 3.2, 0.0), 2.3)
 		var sub := sin(TAU * 50.0 * t) * env * 0.5
 		var sample := int(clampf((brown * 2.2 + sub) * env * 0.5, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+
+func _make_thunk() -> AudioStreamWAV:
+	## One-shot suspension thud (issue #69): an 80-to-44 Hz sine drop
+	## behind a short noise click, decaying over 160 ms.
+	var frames := int(MIX_RATE * 0.16)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var phase := 0.0
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		phase += TAU * lerpf(82.0, 44.0, t / 0.16) / MIX_RATE
+		var env := pow(maxf(1.0 - t / 0.16, 0.0), 2.6)
+		var click := 0.0
+		if t < 0.012:
+			click = _rng.randf_range(-1.0, 1.0) * (1.0 - t / 0.012) * 0.8
+		var sample := int(clampf((sin(phase) * 0.85 + click) * env * 0.55,
+				-1.0, 1.0) * 32767.0)
 		bytes.encode_s16(i * 2, sample)
 	return _wav(bytes, false)
 
