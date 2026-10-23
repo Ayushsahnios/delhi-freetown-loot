@@ -98,6 +98,7 @@ var _districts := {}
 var _cur_district: MeshTools = null
 var _tree_trunk_xfs: Array[Transform3D] = []
 var _tree_crown_xfs: Array[Transform3D] = []
+var _bunt_pole_xfs: Array[Vector3] = []
 var _pillar_xfs: Array[Transform3D] = []
 var _metro_seg_xfs: Array[Transform3D] = []
 var _win_xfs: Array[Transform3D] = []
@@ -264,6 +265,18 @@ func _build_city() -> void:
 	if furn.node != null:
 		add_child(furn.node)
 	_speed_bumps = furn.bumps
+	# Physics pass (issue #77): bus-stop shelters are solid — one box per
+	# stop footprint (bench, posts and roof) so vehicles cannot drive
+	# through the waiting bays on the sidewalk.
+	if not furn.stops.is_empty():
+		var stops := StaticBody3D.new()
+		stops.name = "ShelterColliders"
+		for stop in furn.stops:
+			var xf: Transform3D = stop
+			stops.add_child(_coll_box(Vector3(3.0, 2.7, 1.5),
+					xf * Transform3D(Basis(),
+					Vector3(0.4, RoadsScript.CURB_H + 1.35, -0.05))))
+		add_child(stops)
 
 	# blocks — static visuals accumulate into per-district merged meshes
 	for ix in range(GRID):
@@ -365,6 +378,20 @@ func _commit_props() -> void:
 	seg.size = Vector3(ROAD - 2.0, 1.2, 22.0)
 	seg.material = MeshTools.shared_material(Color(0.32, 0.35, 0.42))
 	_add_mm(seg, _metro_seg_xfs)
+	# Physics pass (issue #77): repeated props get real collision too —
+	# one StaticBody3D holding a box per tree trunk, metro pillar and
+	# bazaar bunting pole, matched to the visual footprints, so neither
+	# characters nor vehicles can phase through them anymore.
+	var solid := StaticBody3D.new()
+	solid.name = "PropColliders"
+	for xf in _tree_trunk_xfs:
+		solid.add_child(_coll_box(Vector3(0.9, 2.6, 0.9), xf))
+	for xf in _pillar_xfs:
+		solid.add_child(_coll_box(Vector3(1.8, 12.0, 1.8), xf))
+	for pole in _bunt_pole_xfs:
+		solid.add_child(_coll_box(Vector3(0.44, 6.2, 0.44), Transform3D(Basis(), pole)))
+	if solid.get_child_count() > 0:
+		add_child(solid)
 	# Facade glazing: every tower window is one quad instance; a fixed
 	# random subset carries the warm emissive material that glows at night.
 	var glass := QuadMesh.new()
@@ -395,6 +422,18 @@ func _add_mm(mesh: PrimitiveMesh, xfs: Array[Transform3D]) -> MultiMeshInstance3
 	if node != null:
 		add_child(node)
 	return node
+
+
+func _coll_box(size: Vector3, xf: Transform3D) -> CollisionShape3D:
+	## One box collision shape at `xf` — the solid half of a repeated
+	## prop (issue #77). Shapes share one parent StaticBody3D so the
+	## broadphase sees a single body per prop family.
+	var col := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	col.shape = box
+	col.transform = xf
+	return col
 
 
 func _add_windows(pos: Vector3, size: Vector3) -> void:
@@ -567,8 +606,9 @@ func _bunting(street: float, bz: float) -> void:
 	## Festival flags strung across the market lane, hung between two
 	## poles with a gentle sag.
 	for side in [-7.2, 7.2]:
-		_dist_box(Vector3(0.2, 6.2, 0.2), Vector3(street + side, 3.1, bz),
-				Color(0.30, 0.22, 0.15))
+		var pole := Vector3(street + side, 3.1, bz)
+		_dist_box(Vector3(0.2, 6.2, 0.2), pole, Color(0.30, 0.22, 0.15))
+		_bunt_pole_xfs.append(pole)
 	var cols := [Color(0.95, 0.45, 0.12), Color(0.85, 0.20, 0.45), Color(0.20, 0.60, 0.25),
 		Color(0.95, 0.85, 0.25), Color(0.25, 0.55, 0.90)]
 	for f in range(9):
@@ -580,8 +620,15 @@ func _bunting(street: float, bz: float) -> void:
 
 func _build_park(x: float, z: float) -> void:
 	_grass(Vector3(x, 0, z))
+	## Keep the respawn clearing free of trunks (see _build_landmarks:
+	## parks respawn at block center + z+12) — nobody spawns inside a
+	## tree once trunks are solid (issue #77).
+	var keep_out := Vector2(x, z + 12.0)
 	for t in range(7):
-		_tree(Vector3(x + _rng.randf_range(-13, 13), 0, z + _rng.randf_range(-13, 13)))
+		var p := Vector2(x + _rng.randf_range(-13, 13), z + _rng.randf_range(-13, 13))
+		if p.distance_to(keep_out) < 3.5:
+			continue
+		_tree(Vector3(p.x, 0, p.y))
 
 
 func _build_police_station(x: float, z: float) -> void:

@@ -43,9 +43,11 @@ const BUMP_PAINT := Color(0.92, 0.76, 0.14)
 
 static func build(world: float, pitch: float, road_w: float,
 		count: int) -> Dictionary:
-	## Returns {"node": Node3D (null when empty), "bumps": Array}. The
-	## node holds the merged shelters and bump strips; the bumps array
-	## feeds the scripted physics in auto.gd / traffic.gd.
+	## Returns {"node": Node3D (null when empty), "bumps": Array,
+	## "stops": Array[Transform3D]}. The node holds the merged shelters
+	## and bump strips; the bumps array feeds the scripted physics in
+	## auto.gd / traffic.gd; the stops array feeds the shelter collision
+	## boxes (issue #77).
 	var stops := _stop_transforms(world, pitch, road_w)
 	var bumps := _bump_list(world, pitch, road_w)
 	var root := Node3D.new()
@@ -70,7 +72,7 @@ static func build(world: float, pitch: float, road_w: float,
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		root.add_child(mi)
 		added = true
-	return {"node": root if added else null, "bumps": bumps}
+	return {"node": root if added else null, "bumps": bumps, "stops": stops}
 
 
 # ------------------------------------------------------------ bus stops
