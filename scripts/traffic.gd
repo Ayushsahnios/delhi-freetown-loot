@@ -27,6 +27,7 @@ var _auto_mm: MultiMesh = null
 var _car_mms: Array[MultiMesh] = []
 var _mm_used := {}
 var _mm_free := {}
+var _bumps: Array = []
 
 
 func setup(world_size: float, pitch: float, road_width: float, road_count: int) -> void:
@@ -46,6 +47,12 @@ func register_player(p: Node3D) -> void:
 	_player = p
 
 
+func set_speed_bumps(bumps: Array) -> void:
+	## Street furniture (issue #69): ambient traffic brakes for the
+	## raised strips and bobs as its wheels take them.
+	_bumps = bumps
+
+
 func _spawn() -> Dictionary:
 	var along_z := _rng.randf() < 0.5
 	var road_i := _rng.randi_range(0, _roads - 1)
@@ -60,7 +67,7 @@ func _spawn() -> Dictionary:
 		"heading": 0.0, "along_z": along_z, "road": road, "dir": dir,
 		"kind": ("auto" if is_auto else "car"),
 		"t": _rng.randf_range(-_world / 2.0, _world / 2.0),
-		"speed": cruise, "cruise": cruise,
+		"speed": cruise, "cruise": cruise, "bob": 0.0,
 	}
 	_apply_transform(v)
 	return v
@@ -70,6 +77,8 @@ func _physics_process(delta: float) -> void:
 	for v in _vehicles:
 		var target: float = minf(v.cruise, _player_limit(v))
 		target = minf(target, _traffic_limit(v))
+		target = minf(target, _bump_limit(v))
+		v.bob = maxf(v.bob - delta / 0.5, 0.0)
 		var rate := BRAKE if target < v.speed else ACCEL
 		v.speed = move_toward(v.speed, target, rate * delta)
 		v.t += v.dir * v.speed * delta
@@ -82,11 +91,13 @@ func _physics_process(delta: float) -> void:
 
 
 func _apply_transform(v: Dictionary) -> void:
+	var bob: float = v.get("bob", 0.0)
+	var y := 0.09 * sin((1.0 - bob) * PI) if bob > 0.0 else 0.0
 	if v.along_z:
-		v.pos = Vector3(v.road + LANE * v.dir, 0.0, v.t)
+		v.pos = Vector3(v.road + LANE * v.dir, y, v.t)
 		v.heading = PI if v.dir > 0 else 0.0
 	else:
-		v.pos = Vector3(v.t, 0.0, v.road - LANE * v.dir)
+		v.pos = Vector3(v.t, y, v.road - LANE * v.dir)
 		v.heading = -PI / 2.0 * v.dir
 	v.mm.set_instance_transform(v.idx,
 			Transform3D(Basis(Vector3.UP, v.heading), v.pos))
@@ -120,6 +131,27 @@ func _traffic_limit(v: Dictionary) -> float:
 		var gap: float = (w.t - v.t) * v.dir
 		if gap > 0.5 and gap < 12.0:
 			limit = minf(limit, w.speed * clampf(gap / 12.0, 0.0, 1.0))
+	return limit
+
+
+func _bump_limit(v: Dictionary) -> float:
+	## Speed bumps (issue #69): brake for a strip ahead on our road and
+	## bob the chassis while the wheels are on it. A z-running lane only
+	## meets strips laid across it (along_x == false), and vice versa.
+	var limit: float = v.cruise
+	if _bumps.is_empty():
+		return limit
+	for bump: Dictionary in _bumps:
+		if v.along_z == bump.along_x:
+			continue
+		var road_c: float = bump.x if v.along_z else bump.z
+		if absf(road_c - v.road) > 1.0:
+			continue
+		var s: float = (bump.z if v.along_z else bump.x) - v.t
+		if s * v.dir > 0.0 and s * v.dir < 10.0:
+			limit = minf(limit, 5.5)
+			if absf(s) < 1.3:
+				v.bob = 1.0
 	return limit
 
 

@@ -25,6 +25,7 @@ const TouchControlsScript := preload("res://scripts/touch_controls.gd")
 const PauseScript := preload("res://scripts/pause.gd")
 const MeshTools := preload("res://scripts/meshtools.gd")
 const RoadsScript := preload("res://scripts/roads.gd")
+const FurnitureScript := preload("res://scripts/street_furniture.gd")
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
@@ -49,6 +50,7 @@ var _cloud_mat: StandardMaterial3D = null
 var day_t := 0.32
 var current_auto: CharacterBody3D = null
 var _autos: Array[CharacterBody3D] = []
+var _speed_bumps: Array = []
 var _rng := RandomNumberGenerator.new()
 var _playing := false
 var _traffic: Node
@@ -122,6 +124,7 @@ func _ready() -> void:
 	_traffic = TrafficScript.new()
 	add_child(_traffic)
 	_traffic.setup(WORLD, PITCH, ROAD, GRID + 1)
+	_traffic.set_speed_bumps(_speed_bumps)
 	_peds = PedestrianScript.new()
 	add_child(_peds)
 	_peds.setup(WORLD, PITCH, ROAD, GRID + 1)
@@ -251,6 +254,13 @@ func _build_city() -> void:
 	# the whole network still darkens as rain soaks in
 	_road_mat = RoadsScript.make_asphalt_material()
 	add_child(RoadsScript.build(WORLD, PITCH, ROAD, GRID + 1, _road_mat))
+
+	# street furniture (issue #69): bus-stop shelters on the sidewalks of
+	# the major roads, speed bumps around Chandni Chowk and Connaught Place
+	var furn := FurnitureScript.build(WORLD, PITCH, ROAD, GRID + 1)
+	if furn.node != null:
+		add_child(furn.node)
+	_speed_bumps = furn.bumps
 
 	# blocks — static visuals accumulate into per-district merged meshes
 	for ix in range(GRID):
@@ -838,6 +848,8 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 		var a := AutoScript.new()
 		a.setup(spot[0], spot[1], spot[2])
 		add_child(a)
+		a.set_speed_bumps(_speed_bumps)
+		a.bump_hit.connect(_on_bump_hit)
 		_autos.append(a)
 
 	_playing = true
@@ -917,6 +929,11 @@ func _process(delta: float) -> void:
 		_minimap.set_police(_police.jeep_positions())
 
 
+func _on_bump_hit(strength: float) -> void:
+	## The driven vehicle took a speed bump (issue #69): chassis thunk.
+	_audio.thunk(strength)
+
+
 func _toggle_vehicle() -> void:
 	if current_auto != null:
 		var exit_pos: Vector3 = current_auto.global_position + current_auto.global_transform.basis.x * 3.2
@@ -947,6 +964,8 @@ func _toggle_vehicle() -> void:
 		var v := AutoScript.new()
 		v.setup(hit["pos"], hit["heading"], hit["kind"])
 		add_child(v)
+		v.set_speed_bumps(_speed_bumps)
+		v.bump_hit.connect(_on_bump_hit)
 		_autos.append(v)
 		_traffic.take_vehicle(int(hit["id"]))
 		current_auto = v
