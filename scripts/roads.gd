@@ -2,8 +2,10 @@ extends RefCounted
 ## Road & ground dressing (issue #56): the road grid gets procedural
 ## asphalt with lane wear, painted center dashes and edge lines, tiled
 ## sidewalks with curb faces at every block edge, and zebra crossings at
-## each intersection — one merged mesh, three surfaces. All textures are
-## generated at load (deterministic hash noise), no assets, no imports.
+## each intersection. Road-wear decals (issue #68): potholes, tar repair
+## patches and rain-gloss puddle spots strung along the wheel bands. One
+## merged mesh, six surfaces. All textures are generated at load
+## (deterministic hash noise), no assets, no imports.
 
 const TILE_U := 8.0  ## meters of road per asphalt texture repeat (along)
 const WALK_TILE := 2.2  ## meters per sidewalk texture repeat
@@ -13,12 +15,22 @@ const PAINT_Y := 0.084  ## zebra quads, a hair above the asphalt
 const ZEBRA_LEN := 3.15  ## crossing band depth (along traffic direction)
 const ZEBRA_W := 0.62  ## one stripe width
 const ZEBRA_PITCH_V := 1.08  ## spacing between stripes (across the road)
+const DECAL_MARGIN := 5.0  ## metres kept clear of span ends (zebra zones)
+const POT_Y := 0.095  ## pothole decals: well above paint, no z-fight
+const PATCH_Y := 0.105  ## repair-patch decals
+const PUDDLE_Y := 0.115  ## puddle spots; gloss driven by set_wetness()
 
 static var _asphalt_tex: ImageTexture = null
 static var _walk_tex: ImageTexture = null
 static var _paint_tex: ImageTexture = null
+static var _pothole_tex: ImageTexture = null
+static var _patch_tex: ImageTexture = null
+static var _puddle_tex: ImageTexture = null
 static var _walk_mat: StandardMaterial3D = null
 static var _paint_mat: StandardMaterial3D = null
+static var _pothole_mat: StandardMaterial3D = null
+static var _patch_mat: StandardMaterial3D = null
+static var _puddle_mat: StandardMaterial3D = null
 
 
 # ------------------------------------------------------------ textures
@@ -163,6 +175,87 @@ static func paint_texture() -> ImageTexture:
 	return _paint_tex
 
 
+static func pothole_texture() -> ImageTexture:
+	## Radial crater: ragged near-black core, gravel-grey rim, feathered
+	## alpha edge — reads as a deep chuckhole from car height (issue #68).
+	if _pothole_tex != null:
+		return _pothole_tex
+	const S := 96
+	var data := PackedByteArray()
+	data.resize(S * S * 4)
+	for y in S:
+		for x in S:
+			var d := Vector2(float(x) / S - 0.5, float(y) / S - 0.5).length() * 2.0
+			d += (_vnoise(x, y, 5, 31) - 0.5) * 0.34  # ragged rim
+			var core := clampf(1.0 - d / 0.58, 0.0, 1.0)
+			var rim := clampf((d - 0.5) / 0.5, 0.0, 1.0)
+			var lum := 0.045 + (1.0 - core) * 0.05 + rim * 0.16 \
+					+ (_hash(x, y, 32) - 0.5) * 0.09
+			var al := clampf(1.0 - d, 0.0, 1.0) * clampf(core * 4.0 + rim * 1.2, 0.0, 1.0)
+			var i := (y * S + x) * 4
+			data[i] = clampi(int(lum * 255.0), 0, 255)
+			data[i + 1] = clampi(int(lum * 250.0), 0, 255)
+			data[i + 2] = clampi(int(lum * 240.0), 0, 255)
+			data[i + 3] = clampi(int(al * 255.0), 0, 255)
+	var pimg := Image.create_from_data(S, S, false, Image.FORMAT_RGBA8, data)
+	pimg.generate_mipmaps()
+	_pothole_tex = ImageTexture.create_from_image(pimg)
+	return _pothole_tex
+
+
+static func patch_texture() -> ImageTexture:
+	## Rectangular tar repair: darker, coarser mix than the road, seam
+	## border and trowel streaks along the repair axis (issue #68).
+	if _patch_tex != null:
+		return _patch_tex
+	const S := 96
+	var data := PackedByteArray()
+	data.resize(S * S * 3)
+	for y in S:
+		for x in S:
+			var u := float(x) / S
+			var v := float(y) / S
+			var lum := 0.13 + (_vnoise(x, y, 7, 41) - 0.5) * 0.06
+			lum += (_hash(x, y, 42) - 0.5) * 0.10
+			lum *= 1.0 - 0.10 * absf(sin(v * TAU * 3.0 + _vnoise(x, y, 12, 43) * 2.0))
+			var edge := minf(minf(u, 1.0 - u), minf(v, 1.0 - v))
+			if edge < 0.06:
+				lum *= 0.72  # tar seam ring
+			var j := (y * S + x) * 3
+			data[j] = clampi(int(lum * 255.0), 0, 255)
+			data[j + 1] = clampi(int(lum * 250.0), 0, 255)
+			data[j + 2] = clampi(int(lum * 240.0), 0, 255)
+	var rimg := Image.create_from_data(S, S, false, Image.FORMAT_RGB8, data)
+	rimg.generate_mipmaps()
+	_patch_tex = ImageTexture.create_from_image(rimg)
+	return _patch_tex
+
+
+static func puddle_texture() -> ImageTexture:
+	## Soft-edged dark water blot; reflectivity is weather-driven via the
+	## material (set_wetness), the texture only shapes the pool (issue #68).
+	if _puddle_tex != null:
+		return _puddle_tex
+	const S := 96
+	var data := PackedByteArray()
+	data.resize(S * S * 4)
+	for y in S:
+		for x in S:
+			var d := Vector2(float(x) / S - 0.5, float(y) / S - 0.5).length() * 2.0
+			d *= 1.0 + (_vnoise(x, y, 6, 51) - 0.5) * 0.5  # irregular outline
+			var al := clampf((0.85 - d) * 3.0, 0.0, 1.0)
+			var lum := 0.10 + (1.0 - al) * 0.08
+			var i := (y * S + x) * 4
+			data[i] = clampi(int(lum * 235.0), 0, 255)
+			data[i + 1] = clampi(int(lum * 245.0), 0, 255)
+			data[i + 2] = clampi(int(lum * 255.0), 0, 255)
+			data[i + 3] = clampi(int(al * 255.0), 0, 255)
+	var wimg := Image.create_from_data(S, S, false, Image.FORMAT_RGBA8, data)
+	wimg.generate_mipmaps()
+	_puddle_tex = ImageTexture.create_from_image(wimg)
+	return _puddle_tex
+
+
 static func _walk_material() -> StandardMaterial3D:
 	if _walk_mat == null:
 		_walk_mat = StandardMaterial3D.new()
@@ -178,6 +271,43 @@ static func _paint_material() -> StandardMaterial3D:
 		_paint_mat.albedo_texture = paint_texture()
 		_paint_mat.roughness = 0.9
 	return _paint_mat
+
+
+static func _pothole_material() -> StandardMaterial3D:
+	if _pothole_mat == null:
+		_pothole_mat = StandardMaterial3D.new()
+		_pothole_mat.albedo_texture = pothole_texture()
+		_pothole_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_pothole_mat.roughness = 1.0
+	return _pothole_mat
+
+
+static func _patch_material() -> StandardMaterial3D:
+	if _patch_mat == null:
+		_patch_mat = StandardMaterial3D.new()
+		_patch_mat.albedo_texture = patch_texture()
+		_patch_mat.roughness = 0.96
+	return _patch_mat
+
+
+static func _puddle_material() -> StandardMaterial3D:
+	if _puddle_mat == null:
+		_puddle_mat = StandardMaterial3D.new()
+		_puddle_mat.albedo_texture = puddle_texture()
+		_puddle_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_puddle_mat.roughness = 0.85
+	return _puddle_mat
+
+
+static func set_wetness(w: float) -> void:
+	## Puddle spots gain gloss with rain wetness (issue #68): dry streets
+	## show faint damp patches, soaked streets show reflective pools.
+	## Called from Main's _apply_wetness alongside the asphalt tint.
+	if _puddle_mat == null:
+		return
+	_puddle_mat.roughness = lerpf(0.85, 0.07, w)
+	_puddle_mat.metallic = lerpf(0.0, 0.55, w)
+	_puddle_mat.albedo_color = Color(1.0, 1.0, 1.0, lerpf(0.38, 0.95, w))
 
 
 # -------------------------------------------------------------- mesh
@@ -245,7 +375,8 @@ static func build(world: float, pitch: float, road_w: float, count: int,
 		asphalt_mat: StandardMaterial3D) -> MeshInstance3D:
 	## The whole road network: asphalt strips segmented around intersection
 	## tiles, sidewalk bands with curb faces, corner pads and zebra
-	## crossings — merged into one three-surface mesh.
+	## crossings — plus pothole/patch/puddle decals along every span —
+	## merged into one six-surface mesh.
 	var r := new()
 	var hw := road_w / 2.0
 	var sw := WALK_TILE
@@ -254,6 +385,9 @@ static func build(world: float, pitch: float, road_w: float, count: int,
 	var asphalt := r._bucket()
 	var walk := r._bucket()
 	var paint := r._bucket()
+	var pot := r._bucket()
+	var patch := r._bucket()
+	var puddle := r._bucket()
 	var lines: Array[float] = []
 	for i in count:
 		lines.append(-world / 2.0 + i * pitch - block_half)
@@ -302,6 +436,7 @@ static func build(world: float, pitch: float, road_w: float, count: int,
 					else:
 						r._quad_up(asphalt, rc - hw, a, rc + hw, bnd, ROAD_Y,
 								a / TILE_U, 0.0, bnd / TILE_U, 1.0)
+				r._decal_span(pot, patch, puddle, rc, a, bnd, hw, along_x)
 
 	# Intersection tiles, corner pads and zebra crossings.
 	for cx: float in cross:
@@ -346,10 +481,69 @@ static func build(world: float, pitch: float, road_w: float, count: int,
 	r._surface(am, asphalt, asphalt_mat)
 	r._surface(am, walk, _walk_material())
 	r._surface(am, paint, _paint_material())
+	r._surface(am, pot, _pothole_material())
+	r._surface(am, patch, _patch_material())
+	r._surface(am, puddle, _puddle_material())
 	var mi := MeshInstance3D.new()
 	mi.mesh = am
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
+
+
+func _decal_span(pot: Dictionary, patch: Dictionary, puddle: Dictionary,
+		rc: float, lo: float, hi: float, hw: float, along_x: bool) -> void:
+	## Road-wear decals along one asphalt span (issue #68): potholes, tar
+	## repair patches and puddle spots strung along the wheel-wear bands
+	## (asphalt lanes sit at +-2.8 m, wheel pairs 0.85 m either side), with
+	## a DECAL_MARGIN kept clear at both span ends for the zebra zones.
+	## Hash-deterministic: every player meets the same potholes.
+	var lo_m := lo + DECAL_MARGIN
+	var hi_m := hi - DECAL_MARGIN
+	if hi_m - lo_m < 2.0:
+		return
+	var key := int(round(rc * 4.0)) + (977 if along_x else 311)
+	var bands := [-3.65, -1.95, 1.95, 3.65]
+	var t := lo_m + _hash(key, 0, 68) * 3.0
+	var k := 1
+	while t < hi_m:
+		var kind := _hash(key, k, 69)
+		var band := int(_hash(key, k, 70) * 4.0) & 3
+		var lane: float = float(bands[band]) \
+				+ (_hash(key, k, 71) - 0.5) * 0.7
+		var c := rc + clampf(lane, -(hw - 1.1), hw - 1.1)
+		var s1 := _hash(key, k, 72)
+		var s2 := _hash(key, k, 73)
+		if kind < 0.18:
+			## Pothole: ragged crater straddling a wheel track.
+			var hs := 0.55 + s1 * 0.5
+			if along_x:
+				_quad_up(pot, t - hs, c - hs, t + hs, c + hs, POT_Y,
+						0.0, 0.0, 1.0, 1.0)
+			else:
+				_quad_up(pot, c - hs, t - hs, c + hs, t + hs, POT_Y,
+						0.0, 0.0, 1.0, 1.0)
+		elif kind < 0.36:
+			## Tar repair patch laid along the wear band.
+			var hl := 1.4 + s1 * 1.7
+			var wd := 0.9 + s2 * 0.7
+			if along_x:
+				_quad_up(patch, t - hl, c - wd, t + hl, c + wd, PATCH_Y,
+						0.0, 0.0, 1.0, 1.0)
+			else:
+				_quad_up(patch, c - wd, t - hl, c + wd, t + hl, PATCH_Y,
+						0.0, 0.0, 1.0, 1.0)
+		elif kind < 0.58:
+			## Puddle spot pooling in the rut; gloss is weather-driven.
+			var pl := 0.8 + s1 * 1.0
+			var pw := 0.55 + s2 * 0.6
+			if along_x:
+				_quad_up(puddle, t - pl, c - pw, t + pl, c + pw, PUDDLE_Y,
+						0.0, 0.0, 1.0, 1.0)
+			else:
+				_quad_up(puddle, c - pw, t - pl, c + pw, t + pl, PUDDLE_Y,
+						0.0, 0.0, 1.0, 1.0)
+		t += 6.5 + s1 * 4.5
+		k += 1
 
 
 func _surface(am: ArrayMesh, b: Dictionary, mat: Material) -> void:
