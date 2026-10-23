@@ -31,6 +31,9 @@ const ZONE_SPAWN_MIN := 26.0
 const ZONE_BIAS := 42.0
 const PED_HEIGHT := 4.7
 const WALK_CLIP_SPEED := 3.8
+const ROAD_Y := 0.08  ## asphalt surface height (roads.gd ROAD_Y)
+const WALK_H := 0.14  ## sidewalk top height (roads.gd CURB_H)
+const WALK_W := 2.2   ## sidewalk band width (roads.gd WALK_TILE)
 const MODELS := [
 	Chars.FEMALE_A, Chars.FEMALE_B, Chars.FEMALE_C, Chars.FEMALE_D, Chars.MALE,
 ]
@@ -329,6 +332,20 @@ func _flat_dist(v: Dictionary) -> float:
 	return Vector2(np.x - p.x, np.z - p.z).length()
 
 
+func _ground_y(x: float, z: float) -> float:
+	## Analytic ground height under a point (mirrors roads.gd build()):
+	## asphalt strips at ROAD_Y, sidewalk bands at CURB_H, block interiors
+	## at 0. Walkers are kinematic, so they read the street shape instead
+	## of raycasting every frame (issue #75: no more floating/sunk peds).
+	var dx := absf(x - _nearest_line(x))
+	var dz := absf(z - _nearest_line(z))
+	var hw := _road_w / 2.0
+	if dx <= hw or dz <= hw:
+		return ROAD_Y
+	if dx <= hw + WALK_W or dz <= hw + WALK_W:
+		return WALK_H
+	return 0.0
+
 func _face(v: Dictionary, dir: Vector3) -> void:
 	if dir.length_squared() > 0.001:
 		v.heading = atan2(-dir.x, -dir.z)
@@ -340,7 +357,8 @@ func _animate(v: Dictionary) -> void:
 	var node: Node3D = v.node
 	if node == null:
 		return
-	node.global_transform = Transform3D(Basis(Vector3.UP, v.heading), v.pos)
+	var grounded := Vector3(v.pos.x, _ground_y(v.pos.x, v.pos.z), v.pos.z)
+	node.global_transform = Transform3D(Basis(Vector3.UP, v.heading), grounded)
 	if v.panic > 0.0 or v.rejoin > 0.0:
 		_chars.play(v.anims, v.ap, "run", 1.1)
 	else:
