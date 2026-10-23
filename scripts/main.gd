@@ -168,15 +168,18 @@ func _build_environment() -> void:
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.7, 0.75, 0.85)
-	env.ambient_light_energy = 0.7
+	env.ambient_light_energy = 0.6
 	# Filmic tonemap + soft bloom: sunlit facades and the emissive night
-	# windows get gentle halos instead of clipping to white.
+	# windows get gentle halos instead of clipping to white. The web build
+	# runs the compatibility renderer, where glow composites in LDR (no HDR
+	# buffer), so intensity/bloom stay conservative and the threshold high
+	# or the whole frame washes out (issue #76).
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.05
+	env.tonemap_exposure = 0.95
 	env.glow_enabled = true
-	env.glow_intensity = 0.6
-	env.glow_bloom = 0.08
-	env.glow_hdr_threshold = 1.0
+	env.glow_intensity = 0.35
+	env.glow_bloom = 0.05
+	env.glow_hdr_threshold = 1.29
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	world_env = WorldEnvironment.new()
 	world_env.environment = env
@@ -1098,7 +1101,7 @@ func _update_day(delta: float) -> void:
 	# Night falls: ambient dims and cools toward moonlight, and the shadow
 	# map sleeps once the sun stops casting anything worth drawing.
 	var env := world_env.environment
-	env.ambient_light_energy = lerpf(0.16, 0.7, daylight)
+	env.ambient_light_energy = lerpf(0.16, 0.6, daylight)
 	env.ambient_light_color = Color(0.42, 0.48, 0.66).lerp(Color(0.7, 0.75, 0.85), daylight)
 	sun.shadow_enabled = _sun_shadows_wanted and daylight > 0.12
 	# Dusk falls, the city lights up: window panes start glowing as the sun
