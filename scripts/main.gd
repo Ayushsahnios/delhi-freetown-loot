@@ -808,6 +808,18 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	player = PlayerScript.new()
 	player.setup(def)
 	player.position = Vector3(ROAD / 2.0 + 2.0, 1.0, 2.0 * PITCH - BLOCK)
+	# Spawn safety: slide along the road until solid ground sits right below,
+	# so a fresh game never opens inside or atop stray geometry.
+	var space := get_world_3d().direct_space_state
+	if space != null:
+		for i in 12:
+			var probe := player.position + Vector3(i * 1.5, 0.0, 0.0)
+			var pq := PhysicsRayQueryParameters3D.create(
+					probe + Vector3(0, 3.0, 0), probe + Vector3(0, -1.0, 0))
+			var phit := space.intersect_ray(pq)
+			if phit and absf(float(phit.position.y) - probe.y) < 2.2:
+				player.position = probe
+				break
 	add_child(player)
 	_traffic.register_player(player)
 	_peds.register_player(player)
@@ -1058,8 +1070,23 @@ func _update_camera(delta: float) -> void:
 		up = 7.0
 	var want: Vector3 = target.global_position + target.global_transform.basis.z * back + Vector3(0, up, 0)
 	_cam_anchor = _cam_anchor.lerp(want, minf(delta * 4.5, 1.0))
-	camera.position = _cam_anchor
-	camera.look_at(target.global_position + Vector3(0, 2.5, 0))
+	var look_from := target.global_position + Vector3(0, 2.5, 0)
+	# Obstruction handling: ray from the target toward the anchor — if static
+	# world geometry blocks it, snap the camera in front of the occluder.
+	# Pull-in is instant (never see through a wall); the eased anchor swings
+	# the camera back out once the line of sight is clear again.
+	var pos := _cam_anchor
+	if camera.get_world_3d() != null:
+		var q := PhysicsRayQueryParameters3D.create(look_from, _cam_anchor)
+		q.exclude = [player.get_rid()]
+		if current_auto != null:
+			q.exclude.append(current_auto.get_rid())
+		var hit := camera.get_world_3d().direct_space_state.intersect_ray(q)
+		if hit and (hit.collider is StaticBody3D or hit.collider is AnimatableBody3D):
+			var clear_len := maxf(look_from.distance_to(hit.position) - 0.4, 0.6)
+			pos = look_from + (_cam_anchor - look_from).limit_length(clear_len)
+	camera.position = pos
+	camera.look_at(look_from)
 
 
 func _update_day(delta: float) -> void:
