@@ -1083,8 +1083,9 @@ func _update_day(delta: float) -> void:
 
 
 func _apply_wetness() -> void:
-	## Storm-darkened, glossy asphalt as the streets soak; skipped when
-	## wetness has not moved enough to matter.
+	## Storm-darkened, glossy asphalt as the streets soak — and the puddle
+	## spots from the road-decal pass gloss up into mirrors (issue #68);
+	## skipped when wetness has not moved enough to matter.
 	var w := _weather.wetness
 	if absf(w - _applied_wet) < 0.02:
 		return
@@ -1094,6 +1095,7 @@ func _apply_wetness() -> void:
 	_road_mat.albedo_color = ROAD_TINT_DRY.lerp(ROAD_TINT_WET, w)
 	_road_mat.roughness = 1.0 - 0.62 * w
 	_road_mat.metallic = 0.28 * w
+	RoadsScript.set_wetness(w)
 
 
 func _on_thunder(strength: float) -> void:
