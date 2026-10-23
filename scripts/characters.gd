@@ -18,6 +18,9 @@ const BONE_PAD := 1.12
 ## mesh's raw vertex box is meaningless (bind space), the skeleton is not.
 static var _span_cache := {}
 
+## Cached height basis per model file (see _size_basis).
+static var _basis_cache := {}
+
 
 ## Instantiate `path` sized to `height` world units, facing -Z (the
 ## project's forward). Returns a holder node; the model is its child.
@@ -27,13 +30,69 @@ func spawn(path: String, height: float) -> Node3D:
 		push_error("character model missing: " + path)
 		return null
 	var model: Node3D = ps.instantiate()
-	var span := _bone_span(model)
-	if span > 0.001:
-		model.scale = Vector3.ONE * (height / (span * BONE_PAD))
+	var basis := _size_basis(model)
+	if basis > 0.001:
+		model.scale = Vector3.ONE * (height / basis)
 	var holder := Node3D.new()
 	holder.rotation.y = PI
 	holder.add_child(model)
 	return holder
+
+
+## Height to size this model against, in model units. Bone-rest span is
+## the honest measure when the rig is in sane units — but some exports
+## (the female walkers) keep the skeleton in tiny authoring units while
+## the mesh nodes carry the display scale, so a bone span far shorter
+## than the mesh it skews cannot size the model (issue #82: walkers
+## spawned hundreds of units tall, off in the sky). In that case fall
+## back to the model's visible mesh box, which is what actually renders.
+func _size_basis(model: Node3D) -> float:
+	var key := String(model.scene_file_path)
+	if _basis_cache.has(key):
+		return _basis_cache[key]
+	var bone := _bone_span(model)
+	var visual := _visual_height(model)
+	var basis := visual
+	if bone > 0.001 and (visual <= 0.001 or bone >= visual * 0.5):
+		basis = bone * BONE_PAD
+	if basis <= 0.001:
+		basis = 0.0
+	_basis_cache[key] = basis
+	return basis
+
+
+## Upright extent of every mesh instance combined, in model-root space.
+## Unlike the raw vertex box this accounts for each node's transform, so
+## baked-in authoring scale (the 100x mesh nodes in the female exports)
+## is included — this is the box the renderer actually draws.
+func _visual_height(model: Node3D) -> float:
+	var box := AABB()
+	var has := false
+	for mi_node in model.find_children("*", "MeshInstance3D", true, false):
+		var mi: MeshInstance3D = mi_node
+		if mi.mesh == null:
+			continue
+		var xf := _relative_transform(model, mi)
+		var part: AABB = xf * mi.mesh.get_aabb()
+		if has:
+			box = box.merge(part)
+		else:
+			box = part
+			has = true
+	if not has or box.size.y <= 0.0:
+		return 0.0
+	return box.size.y
+
+
+## Transform of `node` relative to ancestor `model` (both outside the
+## tree, so node locals are chained manually).
+func _relative_transform(model: Node3D, node: Node3D) -> Transform3D:
+	var xf := Transform3D.IDENTITY
+	var cur: Node3D = node
+	while cur != null and cur != model:
+		xf = cur.transform * xf
+		cur = cur.get_parent() as Node3D
+	return xf
 
 
 ## {"idle": String, "walk": String, "run": String} clip names for the
