@@ -152,6 +152,7 @@ func _build_defs() -> void:
 				},
 			],
 			"giver": Vector3(8.0, 0.0, 50.0),
+			"intro": true,
 			"objective": {
 				"kind": "reach",
 				"label": "Reach India Gate",
@@ -314,6 +315,10 @@ func _process(delta: float) -> void:
 		if g["ring"].visible:
 			g["ring"].rotate_y(delta * 1.4)
 			g["beam"].position.y = float(def["giver"].y) + 4.6 + sin(_t * 2.2) * 0.35
+			var lb: Label3D = g["label"]
+			if lb != null:
+				# START HERE tag: only until the intro job is run once
+				lb.visible = int(completed.get(id, 0)) == 0
 		match String(_states[id]):
 			"cooldown":
 				_cds[id] = float(_cds[id]) - delta
@@ -480,8 +485,22 @@ func _spawn_giver(def: Dictionary) -> void:
 	beam.mesh = bm
 	beam.position = pos + Vector3(0.0, 4.5, 0.0)
 	add_child(beam)
+	var label: Label3D = null
+	if bool(def.get("intro", false)):
+		# Issue #95: the first mission giver carries a billboarded
+		# START HERE tag so a fresh player knows exactly where job one is.
+		label = Label3D.new()
+		label.text = "START HERE"
+		label.font_size = 44
+		label.outline_size = 12
+		label.modulate = Color(1.0, 0.92, 0.45)
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.fixed_size = true
+		label.no_depth_test = true
+		label.position = pos + Vector3(0.0, 8.6, 0.0)
+		add_child(label)
 	_states[String(def["id"])] = "available"
-	_givers[String(def["id"])] = {"ring": ring, "beam": beam}
+	_givers[String(def["id"])] = {"ring": ring, "beam": beam, "label": label}
 
 
 func _spawn_objective(obj: Dictionary) -> void:
@@ -611,6 +630,9 @@ func _show_giver(id: String, on: bool) -> void:
 	var g: Dictionary = _givers[id]
 	g["ring"].visible = on
 	g["beam"].visible = on
+	var lb: Label3D = g["label"]
+	if lb != null:
+		lb.visible = on
 
 
 func _xmat(color: Color, alpha: float) -> StandardMaterial3D:

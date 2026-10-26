@@ -33,3 +33,22 @@ teleporting to each district center. Captured 2026-10-26.
 - Repeated prop defects (floating stall tables, canopy clipping, hanging
   decorations intersecting stall frames) appear across several districts.
   Filed for a placement pass.
+
+## First-60-seconds captures (issue #95)
+
+Fresh-save boot documentation for the spawn-framing pass: the opening
+shot holds the player, the gold START HERE beacon and the mall road;
+the dismissable first-boot controls card overlays until any key or the
+GOT IT button clears it. Captured with the same pipeline; the new
+`--no-card` knob dismisses the card before settling.
+
+| Capture | Shows |
+|---|---|
+| spawn-intro-card.png | Fresh boot: controls card over the spawn shot |
+| spawn-beacon.png | Card dismissed: player + START HERE beacon |
+
+- The START HERE billboard label, the beacon column and the player all
+  render and read clearly in both phases.
+- The distant arch is washed out by the known software-GL sky issue
+  (see the sweep findings above); the framing itself matches the
+  intro-camera intent regardless.

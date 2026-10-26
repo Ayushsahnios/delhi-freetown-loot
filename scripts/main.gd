@@ -82,6 +82,9 @@ var _chaos_cd := 0.0
 var _flash: ColorRect
 var _fade: ColorRect
 var _hud_msg: Label
+var _hud_msg_sub: Label
+var _controls_card: CanvasLayer = null
+var _card_alive := 0.0
 var _flash_tween: Tween
 var _toast: Label
 var _toast_tween: Tween
@@ -737,6 +740,16 @@ func _build_hud() -> void:
 	_hud_msg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_msg.visible = false
 	layer.add_child(_hud_msg)
+	_hud_msg_sub = Label.new()
+	_hud_msg_sub.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_hud_msg_sub.offset_top = 64.0
+	_hud_msg_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hud_msg_sub.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_hud_msg_sub.add_theme_font_size_override("font_size", 15)
+	_hud_msg_sub.add_theme_color_override("font_color", Color(0.93, 0.93, 0.86))
+	_hud_msg_sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_msg_sub.visible = false
+	layer.add_child(_hud_msg_sub)
 	_toast = Label.new()
 	_toast.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_toast.offset_bottom = -46.0
@@ -905,7 +918,13 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	add_child(_missions)
 	_missions.register_player(player)
 	_food.register(player, _health, _missions)
+	# First-boot spawn framing (issue #95): park the camera high on the
+	# mall road behind spawn so the opening shot holds the player, the
+	# gold START HERE beacon and the road toward India Gate — then the
+	# normal follow lerp eases in. Returning saves spawn tight.
 	_cam_anchor = player.position
+	if save.is_empty():
+		_cam_anchor = player.position + Vector3(0.0, 10.0, 17.0)
 	_audio.start_ambient()
 	_minimap.visible = true
 
@@ -930,11 +949,72 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_touch.set_active(true)
 	if not save.is_empty():
 		_apply_save(save)
+	else:
+		_show_controls_card()
+
+
+# ---------------------------------------------------------------- first boot
+
+func _show_controls_card() -> void:
+	## Issue #95: first boot only — a dismissable card with the controls
+	## and where the first job waits, so a fresh player is never lost.
+	_controls_card = CanvasLayer.new()
+	_controls_card.layer = 15
+	add_child(_controls_card)
+	var scrim := ColorRect.new()
+	scrim.color = Color(0.0, 0.0, 0.0, 0.35)
+	scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_controls_card.add_child(scrim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_controls_card.add_child(center)
+	var panel := PanelContainer.new()
+	center.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+	var title := Label.new()
+	title.text = "FIRST DAY ON THE STREET"
+	title.add_theme_font_size_override("font_size", 22)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	var body := Label.new()
+	body.text = "WASD move · Shift sprint · E enter or exit vehicles\nH horn · N radio · Q chai · R samosa · Tab switch legend · Esc pause\nYour first job waits at the gold START HERE beacon up the road"
+	body.add_theme_font_size_override("font_size", 14)
+	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(body)
+	var ok := Button.new()
+	ok.text = "GOT IT — HIT THE STREET"
+	ok.pressed.connect(_dismiss_controls_card)
+	box.add_child(ok)
+	_card_alive = 0.6
+
+
+func _dismiss_controls_card() -> void:
+	if _controls_card != null and is_instance_valid(_controls_card):
+		_controls_card.queue_free()
+	_controls_card = null
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	## Any key, pad button or click clears the first-boot card (once the
+	## instant-open guard has passed); the event is consumed so the same
+	## press does not also trigger gameplay.
+	if _controls_card == null or not is_instance_valid(_controls_card):
+		return
+	if _card_alive > 0.0:
+		return
+	if event is InputEventKey or event is InputEventJoypadButton or event is InputEventMouseButton:
+		_dismiss_controls_card()
+		get_viewport().set_input_as_handled()
 
 
 # ---------------------------------------------------------------- loop
 
 func _process(delta: float) -> void:
+	_card_alive = maxf(_card_alive - delta, 0.0)
 	_update_day(delta)
 	_weather.tick(delta, day_t, camera)
 	var grip := 1.0 - _weather.wetness * 0.55
@@ -1286,6 +1366,8 @@ func _on_died() -> void:
 	var lm := _nearest_landmark(player.global_position)
 	_hud_msg.text = "DOWN & OUT"
 	_hud_msg.visible = true
+	_hud_msg_sub.text = "Health hit zero — the street knocked you out.\nRunning job dropped · cash safe · waking at the nearest landmark"
+	_hud_msg_sub.visible = true
 	var tw := create_tween()
 	tw.tween_property(_fade, "color:a", 1.0, 0.7)
 	tw.tween_callback(_do_respawn.bind(lm))
@@ -1307,6 +1389,7 @@ func _do_respawn(lm: Dictionary) -> void:
 
 func _respawn_done() -> void:
 	_hud_msg.visible = false
+	_hud_msg_sub.visible = false
 	_dead = false
 	player.controls_enabled = true
 	if _missions != null:
@@ -1351,6 +1434,8 @@ func _start_busted_flow() -> void:
 	_flash_tween.tween_property(_flash, "color:a", 0.0, 0.6)
 	_hud_msg.text = "BUSTED"
 	_hud_msg.visible = true
+	_hud_msg_sub.text = "Caught at %d-star heat — Rs %d seized from your job wallet.\nHeat cleared · released outside the police station" % [stars, fine]
+	_hud_msg_sub.visible = true
 	var tw := create_tween()
 	tw.tween_property(_fade, "color:a", 1.0, 0.7)
 	tw.tween_callback(_do_busted_respawn.bind(fine))
