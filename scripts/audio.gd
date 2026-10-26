@@ -9,6 +9,20 @@ const XFADE_SECONDS := 0.25
 const DISTANT_MIN_GAP := 5.0
 const DISTANT_MAX_GAP := 13.0
 
+# Mix pass (issue #94): every channel's level lives here as a named dB
+# constant so the loudness check can assert the balance stays put.
+const HORN_DB := -4.0          # audible over the bed, never painful
+const AMBIENT_DB := -7.0       # street bed under speech and music
+const RAIN_TOP_DB := -9.0      # full downpour bed
+const THUNDER_MIN_DB := -12.0  # soft-clipped one-shot, kept under the horn
+const THUNDER_MAX_DB := -8.0
+const THUNK_MIN_DB := -15.0    # speed-bump thud scales with crossing speed
+const THUNK_MAX_DB := -5.0
+const DISTANT_MIN_DB := -18.0  # phantom traffic honking inside the bed
+const DISTANT_MAX_DB := -11.0
+const DIALOGUE_DUCK_DB := 9.0   # beds dip while a dialogue box is up
+const DUCK_RAMP_S := 0.15
+
 var _horn_player: AudioStreamPlayer
 var _ambient_player: AudioStreamPlayer
 var _rain_player: AudioStreamPlayer
@@ -18,6 +32,7 @@ var _distant_players: Array[AudioStreamPlayer] = []
 var _rng := RandomNumberGenerator.new()
 var _distant_cd := 3.0
 var _ambient_on := false
+var _duck := 0.0  # 0 = normal mix, 1 = fully ducked for dialogue
 
 
 func setup() -> void:
@@ -25,6 +40,7 @@ func setup() -> void:
 	var horn := _make_horn()
 	_horn_player = AudioStreamPlayer.new()
 	_horn_player.stream = horn
+	_horn_player.volume_db = HORN_DB
 	add_child(_horn_player)
 	# Spare players replay the same horn pitch-shifted and quiet,
 	# as distant traffic honking inside the ambience.
@@ -35,7 +51,7 @@ func setup() -> void:
 		_distant_players.append(p)
 	_ambient_player = AudioStreamPlayer.new()
 	_ambient_player.stream = _make_ambient()
-	_ambient_player.volume_db = -7.0
+	_ambient_player.volume_db = AMBIENT_DB
 	add_child(_ambient_player)
 	_rain_player = AudioStreamPlayer.new()
 	_rain_player.stream = _make_rain()
@@ -70,14 +86,14 @@ func set_rain(level: float) -> void:
 	## Rain bed volume follows the weather intensity (silent when dry).
 	var l := clampf(level, 0.0, 1.0)
 	if _rain_player != null:
-		_rain_player.volume_db = -60.0 if l <= 0.03 else lerpf(-34.0, -9.0, l)
+		_rain_player.volume_db = -60.0 if l <= 0.03 else lerpf(-34.0, RAIN_TOP_DB, l)
 
 
 func thunder() -> void:
 	if _thunder_player == null:
 		return
 	_thunder_player.pitch_scale = _rng.randf_range(0.8, 1.15)
-	_thunder_player.volume_db = _rng.randf_range(-10.0, -5.0)
+	_thunder_player.volume_db = _rng.randf_range(THUNDER_MIN_DB, THUNDER_MAX_DB)
 	_thunder_player.play()
 
 
@@ -88,13 +104,15 @@ func thunk(strength := 1.0) -> void:
 		return
 	var s := clampf(strength, 0.0, 1.0)
 	_thunk_player.pitch_scale = lerpf(0.75, 1.15, s)
-	_thunk_player.volume_db = lerpf(-15.0, -5.0, s)
+	_thunk_player.volume_db = lerpf(THUNK_MIN_DB, THUNK_MAX_DB, s)
 	_thunk_player.play()
 
 
 func _process(delta: float) -> void:
 	if not _ambient_on:
 		return
+	_duck = move_toward(_duck, 1.0 if _wants_duck() else 0.0, delta / DUCK_RAMP_S)
+	_ambient_player.volume_db = AMBIENT_DB - _duck * DIALOGUE_DUCK_DB
 	_distant_cd -= delta
 	if _distant_cd > 0.0:
 		return
@@ -102,10 +120,53 @@ func _process(delta: float) -> void:
 	for p in _distant_players:
 		if p.playing:
 			continue
-		p.volume_db = _rng.randf_range(-16.0, -9.0)
+		p.volume_db = _rng.randf_range(DISTANT_MIN_DB, DISTANT_MAX_DB) \
+				- _duck * DIALOGUE_DUCK_DB
 		p.pitch_scale = _rng.randf_range(0.55, 0.85)
 		p.play()
 		break
+
+
+func _wants_duck() -> bool:
+	## Any running dialogue box ducks the street beds (issue #94).
+	for d in get_tree().get_nodes_in_group("dialogue"):
+		if d.has_method("is_running") and d.is_running():
+			return true
+	return false
+
+
+func loudness_profile() -> Array:
+	## Worst-case per-channel levels for the scripted loudness check:
+	## {name, peak_db, rms_db} measured on the synthesized buffers with
+	## the channel's loudest volume_db applied (rain at full downpour,
+	## thunder at THUNDER_MAX_DB, distant honks at DISTANT_MAX_DB).
+	if _ambient_player == null:
+		return []
+	return [
+		_measure("horn", _horn_player.stream, HORN_DB),
+		_measure("thunder", _thunder_player.stream, THUNDER_MAX_DB),
+		_measure("thunk", _thunk_player.stream, THUNK_MAX_DB),
+		_measure("ambient", _ambient_player.stream, AMBIENT_DB),
+		_measure("rain", _rain_player.stream, RAIN_TOP_DB),
+		_measure("distant_horn", _distant_players[0].stream, DISTANT_MAX_DB),
+	]
+
+
+func _measure(name: String, wav: AudioStreamWAV, channel_db: float) -> Dictionary:
+	var data := wav.data
+	var frames := data.size() / 2
+	var peak := 0.0
+	var sum_sq := 0.0
+	for i in frames:
+		var v := float(data.decode_s16(i * 2)) / 32768.0
+		peak = maxf(peak, absf(v))
+		sum_sq += v * v
+	var rms := sqrt(sum_sq / maxf(frames, 1.0))
+	return {
+		"name": name,
+		"peak_db": 20.0 * log(maxf(peak, 1e-6)) / log(10.0) + channel_db,
+		"rms_db": 20.0 * log(maxf(rms, 1e-6)) / log(10.0) + channel_db,
+	}
 
 
 # ---------------------------------------------------------------- synthesis
@@ -207,7 +268,10 @@ func _make_thunder() -> AudioStreamWAV:
 		brown *= 0.994
 		var env: float = minf(i / attack, 1.0) * pow(maxf(1.0 - t / 3.2, 0.0), 2.3)
 		var sub := sin(TAU * 50.0 * t) * env * 0.5
-		var sample := int(clampf((brown * 2.2 + sub) * env * 0.5, -1.0, 1.0) * 32767.0)
+		# Soft saturation instead of a hard clamp so a near-bolt crack
+		# rounds off instead of digitally clipping (issue #94).
+		var sample := int(clampf(tanh((brown * 2.2 + sub) * env * 0.5) * 0.9,
+				-1.0, 1.0) * 32767.0)
 		bytes.encode_s16(i * 2, sample)
 	return _wav(bytes, false)
 
