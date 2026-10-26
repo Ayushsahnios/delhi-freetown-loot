@@ -83,6 +83,16 @@ func _setup_audio_buses() -> void:
 	## their own volume_db untouched; sliders scale the bus instead.
 	_ensure_bus("Ambient")
 	_ensure_bus("Radio")
+	# Master limiter (issue #94): every channel sums here, so stacked beds
+	# plus a horn plus thunder can never slam past full scale.
+	var master := AudioServer.get_bus_index("Master")
+	for e in AudioServer.get_bus_effect_count(master):
+		if AudioServer.get_bus_effect(master, e) is AudioEffectLimiter:
+			return
+	var limiter := AudioEffectLimiter.new()
+	limiter.ceiling_db = -0.2
+	limiter.threshold_db = -1.5
+	AudioServer.add_bus_effect(master, limiter)
 
 
 func _ensure_bus(bus_name: String) -> void:

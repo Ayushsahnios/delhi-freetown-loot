@@ -23,6 +23,10 @@ jobs:
       - name: Headless import
         run: godot --headless --import .
 
+      - name: Loudness balance check (audio mix)
+        run: |
+          timeout 180 godot --headless --path . res://scenes/loudness_check.tscn
+
       - name: Smoke run (5s, zero script errors)
         run: |
           set -o pipefail

@@ -10,6 +10,7 @@ const STATION_LABELS := [
 	"FM 92.6 · TUMBI GROOVE",
 	"FM 78.9 · MONSOON LOUNGE",
 ]
+const CABIN_DB := -8.0  # head-unit level: present, never dominating (issue #94)
 
 var _player: AudioStreamPlayer
 var _loops: Array[AudioStreamWAV] = []
@@ -27,7 +28,7 @@ func setup() -> void:
 	]
 	_player = AudioStreamPlayer.new()
 	_player.stream = _loops[0]
-	_player.volume_db = -6.0
+	_player.volume_db = CABIN_DB
 	_player.bus = "Radio"
 	add_child(_player)
 
@@ -54,6 +55,29 @@ func cycle_station() -> String:
 
 func label() -> String:
 	return STATION_LABELS[_station]
+
+
+func loudness_profile() -> Array:
+	## Loudest station's level for the scripted loudness check,
+	## measured on the synthesized loop with CABIN_DB applied.
+	if _player == null:
+		return []
+	var loudest := {"name": "radio", "peak_db": -99.0, "rms_db": -99.0}
+	for wav in _loops:
+		var data: PackedByteArray = wav.data
+		var frames := data.size() / 2
+		var peak := 0.0
+		var sum_sq := 0.0
+		for i in frames:
+			var v := float(data.decode_s16(i * 2)) / 32768.0
+			peak = maxf(peak, absf(v))
+			sum_sq += v * v
+		var rms := sqrt(sum_sq / maxf(frames, 1.0))
+		loudest["peak_db"] = maxf(float(loudest["peak_db"]),
+				20.0 * log(maxf(peak, 1e-6)) / log(10.0) + CABIN_DB)
+		loudest["rms_db"] = maxf(float(loudest["rms_db"]),
+				20.0 * log(maxf(rms, 1e-6)) / log(10.0) + CABIN_DB)
+	return [loudest]
 
 
 # ---------------------------------------------------------------- stations
