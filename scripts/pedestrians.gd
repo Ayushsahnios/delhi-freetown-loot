@@ -24,7 +24,7 @@ const PANIC_SPEED := 8.0
 const SCATTER_RADIUS := 18.0
 const REJOIN_SPEED := 5.5
 const REJOIN_LIMIT := 4.0
-const ZONE_EXTRA := 12
+const ZONE_EXTRA := 18
 const ZONE_WAKE := 130.0
 const ZONE_RECYCLE := 150.0
 const ZONE_SPAWN_MIN := 26.0
@@ -59,9 +59,7 @@ var _pitch := 0.0
 var _road_w := 0.0
 var _roads := 0
 var _placed := false
-var _zone_center := Vector3.ZERO
-var _zone_radius := 0.0
-var _zone_set := false
+var _zones: Array[Dictionary] = []
 var _chars := Chars.new()
 var _last_model := -1
 
@@ -81,11 +79,10 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 
 func set_crowd_zone(center: Vector3, radius: float) -> void:
 	## Crowd density boost: ZONE_EXTRA extra shoppers walk the sidewalk
-	## lines around `center` while the player is nearby; they sleep (and
-	## cost nothing) when the district is far away.
-	_zone_center = center
-	_zone_radius = radius
-	_zone_set = true
+	## lines around each registered zone while the player is nearby; they
+	## sleep (and cost nothing) when every zone is far away. Districts
+	## each register their own zone (issue #97).
+	_zones.append({"c": center, "r": radius})
 
 
 func register_player(p: Node3D) -> void:
@@ -266,20 +263,27 @@ func _place(v: Dictionary) -> void:
 
 
 func _zone_awake() -> bool:
-	## The bazaar squad is only simulated while the player can plausibly
-	## see the district.
-	if not _zone_set:
+	## The crowd squads are only simulated while the player can plausibly
+	## see one of the registered districts.
+	if _zones.is_empty():
 		return false
 	var p: Vector3 = _player.global_position
-	return Vector2(p.x - _zone_center.x, p.z - _zone_center.z).length() <= ZONE_WAKE
+	for zone in _zones:
+		var c: Vector3 = zone["c"]
+		if Vector2(p.x - c.x, p.z - c.z).length() <= ZONE_WAKE:
+			return true
+	return false
 
 
 func _place_zone(v: Dictionary) -> void:
-	## (Re)spawn a bazaar shopper on a sidewalk line near the crowd zone,
-	## biased toward whichever side the player is watching from.
+	## (Re)spawn a crowd shopper on a sidewalk line near one of the crowd
+	## zones, biased toward whichever side the player is watching from.
+	var zone: Dictionary = _zones[_rng.randi_range(0, _zones.size() - 1)]
+	var zc: Vector3 = zone["c"]
+	var zr: float = zone["r"]
 	v.along_z = _rng.randf() < 0.5
-	var along_center: float = _zone_center.z if v.along_z else _zone_center.x
-	v.road = _nearest_line(_zone_center.x if v.along_z else _zone_center.z) \
+	var along_center: float = zc.z if v.along_z else zc.x
+	v.road = _nearest_line(zc.x if v.along_z else zc.z) \
 			+ (1.0 if _rng.randf() < 0.5 else -1.0) * _offset()
 	v.dir = 1 if _rng.randf() < 0.5 else -1
 	v.speed = _rng.randf_range(WALK_MIN, WALK_MAX)
@@ -290,7 +294,7 @@ func _place_zone(v: Dictionary) -> void:
 	var p_along: float = p.z if v.along_z else p.x
 	for _attempt in range(6):
 		v.t = clampf(p_along + _rng.randf_range(-1.0, 1.0) * ZONE_BIAS,
-				along_center - _zone_radius, along_center + _zone_radius)
+				along_center - zr, along_center + zr)
 		_apply(v)
 		if _flat_dist(v) >= ZONE_SPAWN_MIN:
 			break
