@@ -26,6 +26,7 @@ const PauseScript := preload("res://scripts/pause.gd")
 const MeshTools := preload("res://scripts/meshtools.gd")
 const RoadsScript := preload("res://scripts/roads.gd")
 const FurnitureScript := preload("res://scripts/street_furniture.gd")
+const DressingScript := preload("res://scripts/delhi_dressing.gd")
 const MetroScript := preload("res://scripts/metro.gd")
 const TaxiScript := preload("res://scripts/taxi.gd")
 const CourierScript := preload("res://scripts/courier.gd")
@@ -344,6 +345,11 @@ func _build_city() -> void:
 					xf * Transform3D(Basis(),
 					Vector3(0.4, RoadsScript.CURB_H + 1.35, -0.05))))
 		add_child(stops)
+
+	# Delhi street dressing (issue #129): tangled overhead wiring on
+	# concrete poles, yellow-black painted kerbs, thela produce carts
+	# and a chai stall — the reference-driven Old Delhi street look.
+	add_child(DressingScript.build(WORLD, PITCH, ROAD))
 
 	# blocks — static visuals accumulate into per-district merged meshes
 	for ix in range(GRID):
