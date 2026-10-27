@@ -78,6 +78,24 @@ func _add(node: Node) -> void:
 	_visuals.append(node)
 
 
+func suspend_for_ride() -> void:
+	## Carried by the shuttle (issue #112): the carriage has no floor
+	## collision, so a simulating body banks fall speed the whole trip,
+	## drops between frames and slams down — or "lands hard" on alight
+	## from banked velocity. Park the physics until the ride ends.
+	set_physics_process(false)
+	velocity = Vector3.ZERO
+	_air_vy = 0.0
+	_was_on_floor = true
+
+
+func resume_after_ride() -> void:
+	set_physics_process(true)
+	velocity = Vector3.ZERO
+	_air_vy = 0.0
+	_was_on_floor = true
+
+
 func _physics_process(delta: float) -> void:
 	if not is_inside_tree():
 		return

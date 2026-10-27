@@ -1321,7 +1321,7 @@ func _metro_board(idx: int) -> void:
 	_metro_board_idx = idx
 	player.visible = false
 	player.controls_enabled = false
-	player.velocity = Vector3.ZERO
+	player.suspend_for_ride()
 	_cam_anchor = camera.global_position
 	_cam_look_pt = _metro.cam_look()
 	_show_toast("BOARDED · NEXT STOP " + _metro.station_name(_metro.other_idx(idx)))
@@ -1334,7 +1334,7 @@ func _metro_alight() -> void:
 	player.visible = true
 	player.controls_enabled = true
 	player.global_position = _metro.alight_pos(idx)
-	player.velocity = Vector3.ZERO
+	player.resume_after_ride()
 	_show_toast("STEP OUT · " + _metro.station_name(idx))
 
 
@@ -1344,6 +1344,7 @@ func _metro_clear_ride() -> void:
 	_metro_wait = -1
 	_metro_board_idx = -1
 	player.visible = true
+	player.resume_after_ride()
 
 
 func _on_metro_arrived(idx: int, stop_name: String) -> void:
@@ -1364,6 +1365,7 @@ func _capture_board_metro() -> void:
 	_metro_board_idx = maxi(_metro.dwelling_idx(), 0)
 	player.visible = false
 	player.controls_enabled = false
+	player.suspend_for_ride()
 	_cam_anchor = camera.global_position
 	_cam_look_pt = _metro.cam_look()
 
