@@ -43,6 +43,14 @@ const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
 const SKY_NIGHT := Color(0.04, 0.06, 0.19)
 const STORM_SKY := Color(0.22, 0.25, 0.30)
+## Dust-haze atmosphere + warm grade (issue 132): warm-noon sun
+## (~5800K per the art reference), warm-gray aerial haze, ground bias.
+const SUN_DAY := Color(1.0, 0.93, 0.80)
+const SUN_NIGHT := Color(0.55, 0.62, 0.80)
+const FOG_DAY := 0.007
+const FOG_NIGHT := 0.0012
+const FOG_COL_DAY := Color(0.87, 0.80, 0.66)
+const FOG_COL_NIGHT := Color(0.10, 0.12, 0.18)
 const ROAD_TINT_DRY := Color(1.0, 1.0, 1.0)
 const ROAD_TINT_WET := Color(0.45, 0.47, 0.58)
 const PALETTE := [
@@ -212,6 +220,34 @@ func _build_environment() -> void:
 	env.glow_bloom = 0.05
 	env.glow_hdr_threshold = 1.29
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	# Dust-haze atmosphere (issue 132): exponential aerial fog with a
+	# warm-gray tint and a subtle ground-height bias — distance reads
+	# hazy Delhi noon, not crisp generic. Density and color are
+	# day-driven in _update_day so night keeps its lamp pools.
+	env.fog_enabled = true
+	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
+	env.fog_density = FOG_DAY
+	env.fog_light_color = FOG_COL_DAY
+	env.fog_sky_affect = 0.25
+	env.fog_height = 2.0
+	env.fog_height_density = 0.08
+	# Warm North-India grade: gentle contrast, slightly desaturated
+	# palette, lifted warm shadows via a procedural 1-D grade (no LUT
+	# asset needed). Renderers without color-correction support fall
+	# back to the plain grade gracefully.
+	env.adjustment_enabled = true
+	env.adjustment_brightness = 1.02
+	env.adjustment_contrast = 1.08
+	env.adjustment_saturation = 0.9
+	var grade := Gradient.new()
+	grade.offsets = PackedFloat32Array([0.0, 0.28, 0.72, 1.0])
+	grade.colors = PackedColorArray([
+		Color(0.055, 0.048, 0.042), Color(0.32, 0.28, 0.24),
+		Color(0.78, 0.75, 0.68), Color(1.0, 0.985, 0.945),
+	])
+	var grade_tex := GradientTexture1D.new()
+	grade_tex.gradient = grade
+	env.adjustment_color_correction = grade_tex
 	world_env = WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
@@ -256,6 +292,7 @@ func _build_clouds() -> void:
 	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-55, 40, 0)
 	sun.light_energy = 1.0
+	sun.light_color = SUN_DAY
 	# Real-time sun shadows: two split bands (near actors + far buildings)
 	# tuned so the web/mobile renderers stay smooth and skin never acnes.
 	sun.shadow_enabled = true
@@ -1517,6 +1554,12 @@ func _update_day(delta: float) -> void:
 	var env := world_env.environment
 	env.ambient_light_energy = lerpf(0.16, 0.6, daylight)
 	env.ambient_light_color = Color(0.42, 0.48, 0.66).lerp(Color(0.7, 0.75, 0.85), daylight)
+	# Dust haze breathes with the day (issue 132): thick warm haze at
+	# noon, near-clear cool haze at night so the lamp pools keep
+	# reading, and the sun swings warm-noon to moon-cool.
+	env.fog_density = lerpf(FOG_NIGHT, FOG_DAY, daylight)
+	env.fog_light_color = FOG_COL_NIGHT.lerp(FOG_COL_DAY, daylight)
+	sun.light_color = SUN_NIGHT.lerp(SUN_DAY, daylight)
 	sun.shadow_enabled = _sun_shadows_wanted and daylight > 0.12
 	# Dusk falls, the city lights up: window panes start glowing as the sun
 	# drops and reach full warm brightness through the night.
