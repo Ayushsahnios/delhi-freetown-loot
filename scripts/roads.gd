@@ -21,7 +21,11 @@ const PATCH_Y := 0.105  ## repair-patch decals
 const PUDDLE_Y := 0.115  ## puddle spots; gloss driven by set_wetness()
 
 static var _asphalt_tex: ImageTexture = null
+static var _asphalt_rough: ImageTexture = null
+static var _asphalt_norm: ImageTexture = null
 static var _walk_tex: ImageTexture = null
+static var _walk_rough: ImageTexture = null
+static var _walk_norm: ImageTexture = null
 static var _paint_tex: ImageTexture = null
 static var _pothole_tex: ImageTexture = null
 static var _patch_tex: ImageTexture = null
@@ -60,10 +64,17 @@ static func _vnoise(x: int, y: int, cell: int, seed: int) -> float:
 
 static func make_asphalt_material() -> StandardMaterial3D:
 	## Shared asphalt material; main.gd drives its tint with the weather.
+	## Issue 130: roughness + normal maps make the wear read physical —
+	## polished wheel bands, glossy oil stains, micro-aggregate relief.
 	var m := StandardMaterial3D.new()
 	m.albedo_texture = asphalt_texture()
 	m.albedo_color = Color(1.0, 1.0, 1.0)
 	m.roughness = 1.0
+	m.roughness_texture = _asphalt_rough
+	m.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+	m.normal_enabled = true
+	m.normal_texture = _asphalt_norm
+	m.normal_scale = 1.1
 	m.metallic = 0.0
 	return m
 
@@ -77,11 +88,27 @@ static func asphalt_texture() -> ImageTexture:
 	const S := 256
 	var data := PackedByteArray()
 	data.resize(S * S * 3)
+	var rdat := PackedByteArray()  # roughness (red channel)
+	rdat.resize(S * S)
+	var ndat := PackedByteArray()  # normal map
+	ndat.resize(S * S * 3)
 	# Wheel-track v offsets (across the road) for lanes at +-2.8 m, wheel
 	# pairs 0.85 m either side of each lane center, on a 12 m-wide road.
 	var bands := PackedFloat32Array(
 			[0.5 - 3.65 / 12.0, 0.5 - 1.95 / 12.0,
 			0.5 + 1.95 / 12.0, 0.5 + 3.65 / 12.0])
+	# Height field first: aggregate relief the normal map derives from.
+	var height := PackedFloat32Array()
+	height.resize(S * S)
+	for y in S:
+		var vv0 := float(y) / S
+		for x in S:
+			var bf := 0.0
+			for bc: float in bands:
+				bf = maxf(bf, clampf(1.0 - absf(vv0 - bc) / 0.032, 0.0, 1.0))
+			var hf := _vnoise(x, y, 16, 71) * 0.55 + _vnoise(x, y, 32, 72) * 0.30
+			hf += (_hash(x, y, 73) - 0.5) * (1.0 - 0.6 * bf) * 0.15
+			height[y * S + x] = hf
 	for y in S:
 		var v := float(y) / S
 		for x in S:
@@ -90,10 +117,13 @@ static func asphalt_texture() -> ImageTexture:
 			lum += (_vnoise(x, y, 16, 1) - 0.5) * 0.045
 			lum += (_vnoise(x, y, 4, 2) - 0.5) * 0.035
 			var speck := (_hash(x, y, 3) - 0.5) * 0.085
+			var band_f := 0.0
 			for bc: float in bands:
 				var f := clampf(1.0 - absf(v - bc) / 0.032, 0.0, 1.0)
 				lum *= 1.0 - 0.11 * f
 				speck *= 1.0 - 0.6 * f
+				band_f = maxf(band_f, f)
+			var oil_f := 0.0
 			for st in 6:
 				var scx := _hash(st, 11, 7) * S
 				var scy := _hash(st, 23, 7) * S
@@ -101,6 +131,7 @@ static func asphalt_texture() -> ImageTexture:
 				var ds := Vector2(x - scx, y - scy).length()
 				if ds < rad:
 					lum *= 1.0 - 0.22 * (1.0 - ds / rad)
+					oil_f = maxf(oil_f, 1.0 - ds / rad)
 			var r := lum + speck * 0.97
 			var g := lum + speck * 0.99
 			var b := lum + speck * 1.03
@@ -108,7 +139,8 @@ static func asphalt_texture() -> ImageTexture:
 			# eroded by noise so the paint reads chipped.
 			var dash := u > 0.10 and u < 0.46 and absf(v - 0.5) < 0.0065
 			var edge := absf(v - 0.0583) < 0.0065 or absf(v - 0.9417) < 0.0065
-			if (dash or edge) and _hash(x, y, 9) > 0.32:
+			var painted := (dash or edge) and _hash(x, y, 9) > 0.32
+			if painted:
 				var pr := 0.72 if dash else 0.78
 				var wear := 0.55 + _hash(x, y, 10) * 0.2
 				r = lerpf(r, pr * 0.98, wear)
@@ -118,20 +150,66 @@ static func asphalt_texture() -> ImageTexture:
 			data[i] = clampi(int(r * 255.0), 0, 255)
 			data[i + 1] = clampi(int(g * 255.0), 0, 255)
 			data[i + 2] = clampi(int(b * 255.0), 0, 255)
+			# Roughness: raw asphalt is matte, wheel paths burnish smoother,
+			# oil stains go glossy, paint sits a touch shinier.
+			var rough := 0.94 + (_hash(x, y, 74) - 0.5) * 0.06
+			rough *= 1.0 - 0.42 * band_f
+			rough = lerpf(rough, 0.24, oil_f)
+			if painted:
+				rough = lerpf(rough, 0.66, 0.8)
+			rdat[y * S + x] = clampi(int(clampf(rough, 0.05, 1.0) * 255.0), 0, 255)
+			# Wrapped central-difference normal from the height field;
+			# wheel bands flatten (traffic polishes them smooth).
+			var amp := 2.4 * (1.0 - 0.65 * band_f)
+			var hl := height[y * S + (x + S - 1) % S]
+			var hr := height[y * S + (x + 1) % S]
+			var hd := height[((y + S - 1) % S) * S + x]
+			var hu := height[((y + 1) % S) * S + x]
+			var nx := (hl - hr) * amp
+			var ny := (hd - hu) * amp
+			var inv := 1.0 / sqrt(nx * nx + ny * ny + 1.0)
+			ndat[i] = clampi(int((nx * inv * 0.5 + 0.5) * 255.0), 0, 255)
+			ndat[i + 1] = clampi(int((ny * inv * 0.5 + 0.5) * 255.0), 0, 255)
+			ndat[i + 2] = clampi(int(inv * 255.0), 0, 255)
 	var img := Image.create_from_data(S, S, false, Image.FORMAT_RGB8, data)
 	img.generate_mipmaps()
 	_asphalt_tex = ImageTexture.create_from_image(img)
+	var rimg := Image.create_from_data(S, S, false, Image.FORMAT_R8, rdat)
+	rimg.generate_mipmaps()
+	_asphalt_rough = ImageTexture.create_from_image(rimg)
+	var nimg := Image.create_from_data(S, S, false, Image.FORMAT_RGB8, ndat)
+	nimg.generate_mipmaps()
+	_asphalt_norm = ImageTexture.create_from_image(nimg)
 	return _asphalt_tex
 
 
 static func walk_texture() -> ImageTexture:
 	## Concrete pavers: a 4x4 grid of 0.55 m tiles with grout seams,
-	## per-tile tint jitter and soft mottle.
+	## per-tile tint jitter and soft mottle. Issue 130 adds the PBR pair:
+	## recessed grout in the normal map, per-tile roughness jitter, glossy
+	## worn paths across the tile faces.
 	if _walk_tex != null:
 		return _walk_tex
 	const S := 256
 	var data := PackedByteArray()
 	data.resize(S * S * 3)
+	var rdat := PackedByteArray()
+	rdat.resize(S * S)
+	var ndat := PackedByteArray()
+	ndat.resize(S * S * 3)
+	var height := PackedFloat32Array()
+	height.resize(S * S)
+	for y in S:
+		for x in S:
+			var hf := 0.55 + _vnoise(x, y, 8, 12) * 0.18 \
+					+ (_hash(x, y, 13) - 0.5) * 0.06
+			var lx := x % 64
+			var ly := y % 64
+			if lx < 2 or lx > 63 or ly < 2 or ly > 63:
+				hf = 0.12 + _hash(x, y, 14) * 0.05  # grout groove
+			elif lx < 5 or lx > 60 or ly < 5 or ly > 60:
+				hf *= 0.88  # worn chamfer dips
+			height[y * S + x] = hf
 	for y in S:
 		for x in S:
 			var lum := 0.70 + _hash(x / 64, y / 64, 11) * 0.10
@@ -139,7 +217,8 @@ static func walk_texture() -> ImageTexture:
 			lum += (_hash(x, y, 13) - 0.5) * 0.05
 			var lx := x % 64
 			var ly := y % 64
-			if lx < 2 or lx > 63 or ly < 2 or ly > 63:
+			var grout := lx < 2 or lx > 63 or ly < 2 or ly > 63
+			if grout:
 				lum = 0.48 + _hash(x, y, 14) * 0.06  # grout seam
 			elif lx < 5 or lx > 60 or ly < 5 or ly > 60:
 				lum *= 0.93  # worn chamfer
@@ -147,9 +226,34 @@ static func walk_texture() -> ImageTexture:
 			data[i] = clampi(int(lum * 1.02 * 255.0), 0, 255)
 			data[i + 1] = clampi(int(lum * 255.0), 0, 255)
 			data[i + 2] = clampi(int(lum * 0.95 * 255.0), 0, 255)
+			# Roughness: dusty grout is rough, tile faces vary per tile and
+			# get smoother where feet have worn them.
+			var rough: float
+			if grout:
+				rough = 0.96
+			else:
+				rough = 0.62 + _hash(x / 64, y / 64, 15) * 0.18 \
+					+ (_hash(x, y, 16) - 0.5) * 0.05
+			rdat[y * S + x] = clampi(int(rough * 255.0), 0, 255)
+			var hl := height[y * S + (x + S - 1) % S]
+			var hr := height[y * S + (x + 1) % S]
+			var hd := height[((y + S - 1) % S) * S + x]
+			var hu := height[((y + 1) % S) * S + x]
+			var nx := (hl - hr) * 3.0
+			var ny := (hd - hu) * 3.0
+			var inv := 1.0 / sqrt(nx * nx + ny * ny + 1.0)
+			ndat[i] = clampi(int((nx * inv * 0.5 + 0.5) * 255.0), 0, 255)
+			ndat[i + 1] = clampi(int((ny * inv * 0.5 + 0.5) * 255.0), 0, 255)
+			ndat[i + 2] = clampi(int(inv * 255.0), 0, 255)
 	var img := Image.create_from_data(S, S, false, Image.FORMAT_RGB8, data)
 	img.generate_mipmaps()
 	_walk_tex = ImageTexture.create_from_image(img)
+	var rimg := Image.create_from_data(S, S, false, Image.FORMAT_R8, rdat)
+	rimg.generate_mipmaps()
+	_walk_rough = ImageTexture.create_from_image(rimg)
+	var nimg := Image.create_from_data(S, S, false, Image.FORMAT_RGB8, ndat)
+	nimg.generate_mipmaps()
+	_walk_norm = ImageTexture.create_from_image(nimg)
 	return _walk_tex
 
 
@@ -261,6 +365,11 @@ static func _walk_material() -> StandardMaterial3D:
 		_walk_mat = StandardMaterial3D.new()
 		_walk_mat.albedo_texture = walk_texture()
 		_walk_mat.roughness = 1.0
+		_walk_mat.roughness_texture = _walk_rough
+		_walk_mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+		_walk_mat.normal_enabled = true
+		_walk_mat.normal_texture = _walk_norm
+		_walk_mat.normal_scale = 1.0
 		_walk_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return _walk_mat
 
