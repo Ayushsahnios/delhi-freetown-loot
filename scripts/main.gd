@@ -657,8 +657,10 @@ func _stall(pos: Vector3, face: float, idx: int) -> void:
 
 func _bunting(street: float, bz: float) -> void:
 	## Festival flags strung across the market lane, hung between two
-	## poles with a gentle sag.
-	for side in [-7.2, 7.2]:
+	## poles with a gentle sag. Poles stand at ±6.0 from the lane axis —
+	## inboard of the stall awnings (which reach street∓6.7) so no pole
+	## or flag card intersects a stall frame (issue #103).
+	for side in [-6.0, 6.0]:
 		var pole := Vector3(street + side, 3.1, bz)
 		_dist_box(Vector3(0.2, 6.2, 0.2), pole, Color(0.30, 0.22, 0.15))
 		_bunt_pole_xfs.append(pole)
@@ -667,7 +669,7 @@ func _bunting(street: float, bz: float) -> void:
 	for f in range(9):
 		var t := (f + 1) / 10.0
 		var fy := 6.1 - sin(PI * t) * 0.7
-		_dist_box(Vector3(0.55, 0.7, 0.14), Vector3(street - 7.2 + 14.4 * t, fy, bz),
+		_dist_box(Vector3(0.55, 0.7, 0.14), Vector3(street - 6.0 + 12.0 * t, fy, bz),
 				cols[f % 5])
 
 
@@ -1606,11 +1608,11 @@ func _on_landed_hard(impact: float) -> void:
 func _build_landmarks() -> void:
 	_landmarks = [
 		{"name": "Connaught Place", "center": _block_center(5, 5), "spawn": _block_center(5, 5) + Vector3(14.0, 1.0, 14.0)},
-		{"name": "India Gate", "center": _block_center(5, 3), "spawn": _block_center(5, 3) + Vector3(0.0, 1.0, 10.0)},
-		{"name": "Purani Dilli Fort", "center": _block_center(3, 7), "spawn": _block_center(3, 7) + Vector3(0.0, 1.0, 12.0)},
+		{"name": "India Gate", "center": _block_center(5, 3), "spawn": _block_center(5, 3) + Vector3(8.0, 1.0, 15.0)},
+		{"name": "Purani Dilli Fort", "center": _block_center(3, 7), "spawn": _block_center(3, 7) + Vector3(0.0, 1.0, 13.5)},
 		{"name": "Chandni Chowk", "center": _block_center(4, 7), "spawn": _block_center(4, 7) + Vector3(6.0, 1.0, -14.0)},
 		{"name": "Neighbourhood Park", "center": _block_center(8, 2), "spawn": _block_center(8, 2) + Vector3(0.0, 1.0, 12.0)},
-		{"name": "Police Station", "center": _block_center(7, 5), "spawn": _block_center(7, 5) + Vector3(0.0, 1.0, 10.0), "police": true},
+		{"name": "Police Station", "center": _block_center(7, 5), "spawn": _block_center(7, 5) + Vector3(0.0, 1.0, 14.0), "police": true},
 		{"name": "Hauz Khas", "center": _block_center(2, 8), "spawn": _block_center(2, 8) + Vector3(14.0, 1.0, 0.0)},
 		{"name": "Yamuna Ghats", "center": _block_center(9, 8), "spawn": _block_center(9, 8) + Vector3(-15.0, 1.0, 12.0)},
 	]

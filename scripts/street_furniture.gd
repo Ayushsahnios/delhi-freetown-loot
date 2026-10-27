@@ -129,9 +129,13 @@ static func _stop_mesh() -> ArrayMesh:
 	_sb(b, Vector3(0.07, 0.45, 0.40), Vector3(-0.75, 0.225, -0.15), FRAME)
 	_sb(b, Vector3(0.07, 0.45, 0.40), Vector3(0.75, 0.225, -0.15), FRAME)
 	_sb(b, Vector3(1.8, 0.35, 0.06), Vector3(0, 0.72, 0.10), SLAT)
-	# shelter
-	_sb(b, Vector3(0.09, 2.5, 0.09), Vector3(-1.05, 1.25, 0.15), STEEL)
-	_sb(b, Vector3(0.09, 2.5, 0.09), Vector3(1.05, 1.25, 0.15), STEEL)
+	# shelter — four posts, not two: thicker sticks at the back plus a
+	# matching pair at the road-side corners, so the roof never reads as
+	# a floating slab at capture distance (issue #103 sweep finding)
+	_sb(b, Vector3(0.14, 2.5, 0.14), Vector3(-1.05, 1.25, 0.15), STEEL)
+	_sb(b, Vector3(0.14, 2.5, 0.14), Vector3(1.05, 1.25, 0.15), STEEL)
+	_sb(b, Vector3(0.14, 2.5, 0.14), Vector3(-1.05, 1.25, -0.55), STEEL)
+	_sb(b, Vector3(0.14, 2.5, 0.14), Vector3(1.05, 1.25, -0.55), STEEL)
 	_sb(b, Vector3(2.6, 0.08, 1.5), Vector3(0, 2.52, -0.05), ROOF)
 	_sb(b, Vector3(2.3, 1.05, 0.05), Vector3(0, 1.30, 0.42), PANEL)
 	# route sign (anchored: base plinth on the sidewalk, board
