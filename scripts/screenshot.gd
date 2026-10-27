@@ -22,6 +22,8 @@ func _ready() -> void:
 	var tp := Vector2(INF, INF)
 	var day := -1.0
 	var card := true
+	var finale := false
+	var ending := false
 	var args := OS.get_cmdline_user_args()
 	for i in range(args.size()):
 		var a: String = args[i]
@@ -31,6 +33,10 @@ func _ready() -> void:
 			frames = int(args[i + 1])
 		elif a == "--no-card":
 			card = false
+		elif a == "--finale":
+			finale = true
+		elif a == "--ending":
+			ending = true
 		elif a == "--tp" and i + 1 < args.size():
 			var bits := String(args[i + 1]).split(",")
 			if bits.size() == 2:
@@ -53,6 +59,15 @@ func _ready() -> void:
 	if tp.x != INF and main.get("player") != null:
 		var p: Node3D = main.get("player")
 		p.position = Vector3(tp.x, p.position.y, tp.y)
+
+	if finale or ending:
+		var m: Node = main.get("_missions")
+		if m != null:
+			if finale:
+				# Staged progress capture: chapters one cleared, Finale I unlocked.
+				m.restore(0, {"kahani_sardarji": 1, "kahani_riya": 1, "kahani_monty": 1})
+			if ending and m.has_method("show_ending_preview"):
+				m.show_ending_preview()
 
 	for i in range(frames):
 		await get_tree().process_frame

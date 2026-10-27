@@ -52,3 +52,21 @@ GOT IT button clears it. Captured with the same pipeline; the new
 - The distant arch is washed out by the known software-GL sky issue
   (see the sweep findings above); the framing itself matches the
   intro-camera intent regardless.
+
+## Story v2 finale captures (issue #96)
+
+Staged-progress documentation for the finale arc: the capture pipeline
+pre-clears the three legend chapters (`--finale`) and renders Finale I's
+marker at Sardar Ji's stand with Sardar Ji active; a second capture
+renders the ending card directly (`--ending`).
+
+| Capture | Shows |
+|---|---|
+| story-finale-marker.png | Finale I marker live at the stand once the chapters clear |
+| story-finale-ending.png | The ending card after the final handover |
+
+- The finale markers stay hidden until all three chapter-one stories
+  are done, unlock in order, and each job offers only to its named
+  legend (others get a pointed hint to switch).
+- The ending card closes the story with one line per legend plus the
+  send-off, over a dimmed city.

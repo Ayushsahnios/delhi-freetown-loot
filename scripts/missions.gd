@@ -15,6 +15,7 @@ signal mission_failed(title: String)
 const TRIGGER_R := 3.5
 const OFFER_EXIT_R := 5.5
 const MARKER_CD := 4.0
+const LEGEND_NAMES := {"sardarji": "Sardar Ji", "riya": "Riya", "monty": "Monty"}
 
 var cash := 0
 var enabled := true
@@ -30,6 +31,15 @@ var _offer_def: Dictionary = {}
 var _active := {}
 var _t := 0.0
 var _toast_t := 0.0
+## Finale arc (issue #96): the ending card waits for the final outro
+## to close, and a wrong-legend visitor at a finale marker gets a
+## pointed hint toast instead of a job offer.
+var _ending_pending := false
+var _pending_ending: Dictionary = {}
+var _legend_hint_cd := 0.0
+var _ending_layer: CanvasLayer = null
+var _ending_title: Label = null
+var _ending_lines: VBoxContainer = null
 
 var _ui: CanvasLayer
 var _dlg: CanvasLayer
@@ -56,6 +66,7 @@ func _ready() -> void:
 	_build_ui()
 	for def in _defs:
 		_spawn_giver(def)
+	_refresh_finale_gates()
 
 
 # ---------------------------------------------------------------- public API
@@ -129,6 +140,7 @@ func restore(saved_cash: int, saved_completed: Dictionary) -> void:
 		if int(completed.get(id, 0)) > 0 and not bool(def.get("repeatable", false)):
 			_states[id] = "done"
 			_show_giver(id, false)
+	_refresh_finale_gates()
 
 
 # ---------------------------------------------------------------- data
@@ -299,6 +311,10 @@ func _build_defs() -> void:
 	# read-only source definitions (which aborts mission setup on fresh start).
 	for arc in StoryArcs.STORY_ARCS:
 		_defs.append(arc.duplicate(true))
+	# Finale arc (issue #96): three chained one-shot missions gated on
+	# mission completions ("after") and the named legend ("requires").
+	for fin in StoryArcs.STORY_FINALE:
+		_defs.append(fin.duplicate(true))
 
 
 # ---------------------------------------------------------------- loop
@@ -326,9 +342,18 @@ func _process(delta: float) -> void:
 					_states[id] = "available"
 					_show_giver(id, true)
 			"available":
-				if enabled and _active.is_empty() and _offer_def.is_empty() and not _dlg.is_running() \
-						and _player != null \
-						and _flat_dist(_player.global_position, def["giver"]) < TRIGGER_R:
+				var near := enabled and _player != null \
+						and _flat_dist(_player.global_position, def["giver"]) < TRIGGER_R
+				if near and def.has("requires") and not _legend_matches(def):
+					# Finale jobs offer only to their named legend; anyone
+					# else on the marker gets a pointed hint instead.
+					if _legend_hint_cd <= 0.0:
+						_legend_hint_cd = 6.0
+						_toast.add_theme_color_override("font_color", Color(1.0, 0.72, 0.20))
+						_toast.text = "THE FINALE WAITS FOR %s  ·  TAB SWITCH" % String(LEGEND_NAMES.get(String(def["requires"]), String(def["requires"]))).to_upper()
+						_toast.visible = true
+						_toast_t = 2.2
+				elif near and _active.is_empty() and _offer_def.is_empty() and not _dlg.is_running():
 					_states[id] = "offered"
 					_offer_def = def
 					_dlg.start(def["lines"])
@@ -339,6 +364,12 @@ func _process(delta: float) -> void:
 					_dlg.cancel()
 	if not _active.is_empty():
 		_tick_active(delta)
+	if _legend_hint_cd > 0.0:
+		_legend_hint_cd = maxf(_legend_hint_cd - delta, 0.0)
+	if _ending_layer != null and _ending_layer.visible:
+		if Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("ui_cancel"):
+			_ending_layer.visible = false
+		return
 	if _obj_ring != null and _obj_ring.visible:
 		var pulse := 0.9 + 0.1 * sin(_t * 5.0)
 		_obj_ring.scale = Vector3(pulse, 1.0, pulse)
@@ -377,6 +408,13 @@ func _on_dialogue_finished(picked: int) -> void:
 	## Offer dialogue closed: 0 = take the job, 1 = turned down to the
 	## giver's face (short sulk cooldown), anything else = available.
 	if _offer_def.is_empty():
+		## Outro closing with the ending card queued (issue #96): the
+		## story ends once the finale's last conversation beat closes.
+		if _ending_pending:
+			_ending_pending = false
+			var ending: Dictionary = _pending_ending
+			_pending_ending = {}
+			_show_ending_card(ending)
 		return
 	var def: Dictionary = _offer_def
 	_offer_def = {}
@@ -430,9 +468,13 @@ func _complete_mission() -> void:
 	_toast.visible = true
 	_toast_t = 2.5
 	mission_completed.emit(String(def["title"]), reward)
+	_refresh_finale_gates()
 	_end_mission(def)
 	if def.has("outro"):
 		## Story missions close with a final conversation beat.
+		if def.has("ending"):
+			_ending_pending = true
+			_pending_ending = def["ending"]
 		_dlg.start(def["outro"])
 
 
@@ -501,6 +543,10 @@ func _spawn_giver(def: Dictionary) -> void:
 		add_child(label)
 	_states[String(def["id"])] = "available"
 	_givers[String(def["id"])] = {"ring": ring, "beam": beam, "label": label}
+	if def.has("after"):
+		# Finale chain: locked until every prerequisite mission is done.
+		_states[String(def["id"])] = "locked"
+		_show_giver(String(def["id"]), false)
 
 
 func _spawn_objective(obj: Dictionary) -> void:
@@ -652,6 +698,38 @@ func _fmt_time(s: float) -> String:
 	return "%d:%02d" % [int(t / 60.0), t % 60]
 
 
+func _refresh_finale_gates() -> void:
+	## Finale missions (issue #96) unlock in order: a locked finale
+	## flips available once every mission in its "after" list is done.
+	for def in _defs:
+		if not def.has("after"):
+			continue
+		var fid := String(def["id"])
+		if String(_states.get(fid, "")) != "locked":
+			continue
+		var ready := true
+		for pre in def["after"]:
+			if int(completed.get(String(pre), 0)) == 0:
+				ready = false
+				break
+		if ready:
+			_states[fid] = "available"
+			_show_giver(fid, true)
+
+
+func _legend_matches(def: Dictionary) -> bool:
+	var need := String(def.get("requires", ""))
+	return need.is_empty() or String(Game.selected_character.get("id", "")) == need
+
+
+func show_ending_preview() -> void:
+	## Capture helper: render the finale ending card (screenshot tool).
+	for def in _defs:
+		if def.has("ending"):
+			_show_ending_card(def["ending"])
+			return
+
+
 # ---------------------------------------------------------------- UI
 
 func _build_ui() -> void:
@@ -689,3 +767,57 @@ func _build_ui() -> void:
 	_dlg = DialogueScript.new()
 	add_child(_dlg)
 	_dlg.finished.connect(_on_dialogue_finished)
+
+
+func _show_ending_card(ending: Dictionary) -> void:
+	## Issue #96: full-screen finale card once the last outro closes.
+	if _ending_layer == null:
+		_build_ending_card()
+	_ending_title.text = String(ending.get("title", "THE END"))
+	for l in _ending_lines.get_children():
+		l.queue_free()
+	for line in ending.get("lines", []):
+		var lb := Label.new()
+		lb.add_theme_font_size_override("font_size", 21)
+		lb.add_theme_color_override("font_color", Color(0.93, 0.90, 0.80))
+		lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lb.custom_minimum_size = Vector2(760.0, 0.0)
+		_ending_lines.add_child(lb)
+		lb.text = String(line)
+	_ending_layer.visible = true
+
+
+func _build_ending_card() -> void:
+	## Above the dialogue box (20), below pause (30). All procedural.
+	_ending_layer = CanvasLayer.new()
+	_ending_layer.layer = 25
+	add_child(_ending_layer)
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.02, 0.02, 0.05, 0.94)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ending_layer.add_child(dim)
+	var box := VBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 12)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ending_layer.add_child(box)
+	_ending_title = Label.new()
+	_ending_title.add_theme_font_size_override("font_size", 40)
+	_ending_title.add_theme_color_override("font_color", Color(1.0, 0.84, 0.25))
+	_ending_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_ending_title)
+	_ending_lines = VBoxContainer.new()
+	_ending_lines.alignment = BoxContainer.ALIGNMENT_CENTER
+	_ending_lines.add_theme_constant_override("separation", 8)
+	_ending_lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(_ending_lines)
+	var hint := Label.new()
+	hint.text = "Space — continue >"
+	hint.add_theme_font_size_override("font_size", 12)
+	hint.add_theme_color_override("font_color", Color(0.7, 0.72, 0.78))
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(hint)
+	_ending_layer.visible = false
