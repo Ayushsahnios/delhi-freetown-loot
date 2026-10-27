@@ -133,6 +133,8 @@ func _ready() -> void:
 	add_child(_peds)
 	_peds.setup(WORLD, PITCH, ROAD, GRID + 1)
 	_peds.set_crowd_zone(_block_center(4, 7) + Vector3(6.0, 0.0, 0.0), 46.0)
+	_peds.set_crowd_zone(_block_center(2, 8) + Vector3(0.0, 0.0, -8.0), 40.0)
+	_peds.set_crowd_zone(_block_center(9, 8) + Vector3(-11.0, 0.0, 0.0), 40.0)
 	_audio = AudioScript.new()
 	add_child(_audio)
 	_audio.setup()
@@ -296,6 +298,10 @@ func _build_city() -> void:
 				_build_chandni_chowk(c.x, c.z)
 			elif ix == 7 and iz == 5:
 				_build_police_station(c.x, c.z)
+			elif ix == 2 and iz == 8:
+				_build_hauz_khas(c.x, c.z)
+			elif ix == 9 and iz == 8:
+				_build_yamuna_ghats(c.x, c.z)
 			elif (ix == 8 and iz == 2) or (ix == 2 and iz == 3):
 				_build_park(c.x, c.z)
 			else:
@@ -660,6 +666,137 @@ func _build_police_station(x: float, z: float) -> void:
 	_add_building(Vector3(x + 9.0, 0, z - 9.0), Vector3(3.2, 12.0, 3.2), navy)
 	_dist_box(Vector3(0.9, 0.9, 0.9), Vector3(x + 8.4, 12.45, z - 9.0), Color(0.95, 0.08, 0.12))
 	_dist_box(Vector3(0.9, 0.9, 0.9), Vector3(x + 9.6, 12.45, z - 9.0), Color(0.10, 0.30, 0.98))
+
+
+func _build_hauz_khas(x: float, z: float) -> void:
+	## Lake district (issue #97): a royal tank ringed by domed tomb
+	## pavilions and broken pillars, with a cafe strip on the north edge.
+	## Landmark respawn is on the east rim, clear of the water.
+	_grass(Vector3(x, 0, z))
+	var lake := Vector3(x, 0, z + 3.0)
+	var bank := CylinderMesh.new()
+	bank.top_radius = 12.6
+	bank.bottom_radius = 12.6
+	bank.height = 0.12
+	_cur_district.add_mesh(bank, Transform3D(Basis(),
+			lake + Vector3(0, 0.10, 0)), Color(0.62, 0.55, 0.40))
+	var water := CylinderMesh.new()
+	water.top_radius = 11.8
+	water.bottom_radius = 11.8
+	water.height = 0.1
+	_cur_district.add_mesh(water, Transform3D(Basis(),
+			lake + Vector3(0, 0.16, 0)), Color(0.13, 0.35, 0.38))
+	var stone := Color(0.72, 0.66, 0.55)
+	var cream := Color(0.93, 0.88, 0.74)
+	for deg in [150.0, 180.0, 210.0]:
+		var a := deg_to_rad(deg)
+		var pav := lake + Vector3(cos(a) * 13.8, 0, sin(a) * 13.8)
+		_add_building(pav, Vector3(4.2, 3.4, 4.2), stone)
+		var drum := CylinderMesh.new()
+		drum.top_radius = 1.9
+		drum.bottom_radius = 1.9
+		drum.height = 0.8
+		_cur_district.add_mesh(drum, Transform3D(Basis(),
+				pav + Vector3(0, 3.8, 0)), stone)
+		var dome := SphereMesh.new()
+		dome.radius = 1.9
+		dome.height = 5.2
+		_cur_district.add_mesh(dome,
+				Transform3D(Basis().scaled(Vector3(1, 1.1, 1)),
+				pav + Vector3(0, 4.4, 0)), cream)
+	for stub in [
+		[Vector3(x - 7.0, 0, z + 7.0), 1.1],
+		[Vector3(x - 16.0, 0, z - 5.0), 1.6],
+		[Vector3(x + 14.5, 0, z + 9.0), 0.9],
+		[Vector3(x - 9.0, 0, z - 8.0), 2.1],
+	]:
+		_add_building(stub[0], Vector3(0.8, stub[1], 0.8), stone)
+	var cafe_cols := [Color(0.86, 0.62, 0.44), Color(0.62, 0.71, 0.78),
+			Color(0.85, 0.56, 0.42)]
+	for i in 3:
+		var cx := x + (i - 1) * 10.0
+		_add_building(Vector3(cx, 0, z - 12.5), Vector3(6.0, 3.4, 4.4), cafe_cols[i])
+		var pair: Array = AWNINGS[i]
+		_dist_box(Vector3(6.4, 0.3, 1.6), Vector3(cx, 3.6, z - 11.2), pair[0])
+		_dist_box(Vector3(6.4, 0.3, 1.6), Vector3(cx, 3.6, z - 9.6), pair[1])
+		_dist_box(Vector3(1.8, 0.8, 0.2), Vector3(cx, 4.0, z - 14.6), pair[1])
+	_tree(Vector3(x - 15.0, 0, z + 14.0))
+	_tree(Vector3(x + 15.0, 0, z - 14.0))
+	_tree(Vector3(x - 16.0, 0, z - 9.0))
+
+
+func _build_yamuna_ghats(x: float, z: float) -> void:
+	## Riverfront district (issue #97): broad ghat steps descending east
+	## into the water, moored wooden boats, parasols, a shrine at the head
+	## of the steps and a footbridge over the south end.
+	_dist_box(Vector3(BLOCK - 2.0, 0.06, BLOCK - 2.0), Vector3(x, 0.09, z),
+			Color(0.66, 0.60, 0.50))
+	_dist_box(Vector3(24.0, 0.1, 30.0), Vector3(x + 5.0, 0.1, z),
+			Color(0.28, 0.40, 0.50))
+	var step_cols := [Color(0.78, 0.72, 0.60), Color(0.78, 0.72, 0.60),
+			Color(0.70, 0.66, 0.56), Color(0.70, 0.66, 0.56)]
+	var step_h := [1.2, 0.9, 0.6, 0.3]
+	for i in 4:
+		_add_building(Vector3(x - 11.0 + i * 3.4, 0, z),
+				Vector3(3.4, step_h[i], 26.0), step_cols[i])
+	_add_building(Vector3(x - 14.3, 0, z - 10.0), Vector3(3.0, 2.8, 3.0),
+			Color(0.85, 0.55, 0.25))
+	var sd := SphereMesh.new()
+	sd.radius = 1.3
+	sd.height = 3.4
+	_cur_district.add_mesh(sd, Transform3D(Basis().scaled(Vector3(1, 0.9, 1)),
+			Vector3(x - 14.3, 3.1, z - 10.0)), Color(0.93, 0.88, 0.74))
+	_dist_box(Vector3(0.1, 3.2, 0.1), Vector3(x - 14.3, 1.6, z - 8.2),
+			Color(0.35, 0.25, 0.15))
+	_dist_box(Vector3(0.9, 0.5, 0.06), Vector3(x - 13.8, 2.95, z - 8.2),
+			Color(0.95, 0.55, 0.15))
+	for pd in [
+		[Vector3(x - 14.0, 0, z + 5.0), Color(0.85, 0.25, 0.45)],
+		[Vector3(x - 14.0, 0, z + 9.0), Color(0.15, 0.55, 0.55)],
+		[Vector3(x - 12.0, 0, z + 1.0), Color(0.95, 0.55, 0.15)],
+	]:
+		_dist_box(Vector3(0.12, 2.3, 0.12),
+				pd[0] + Vector3(0, 1.15, 0), Color(0.35, 0.25, 0.15))
+		var disc := CylinderMesh.new()
+		disc.top_radius = 1.4
+		disc.bottom_radius = 1.4
+		disc.height = 0.16
+		_cur_district.add_mesh(disc, Transform3D(Basis(),
+				pd[0] + Vector3(0, 2.32, 0)), pd[1])
+	var boat_cols := [Color(0.50, 0.36, 0.22), Color(0.55, 0.30, 0.18),
+			Color(0.45, 0.32, 0.20)]
+	var boat_at := [[Vector3(x + 4.0, 0.4, z - 6.0), 0.3],
+			[Vector3(x + 9.0, 0.4, z + 4.0), -0.2],
+			[Vector3(x + 13.5, 0.4, z - 1.0), 0.7]]
+	for i in boat_at.size():
+		var at: Vector3 = boat_at[i][0]
+		var ang: float = boat_at[i][1]
+		var bas := Basis(Vector3.UP, ang)
+		var hull := BoxMesh.new()
+		hull.size = Vector3(1.6, 0.5, 5.2)
+		_cur_district.add_mesh(hull, Transform3D(bas, at), boat_cols[i])
+		var bow := BoxMesh.new()
+		bow.size = Vector3(1.2, 0.42, 1.2)
+		_cur_district.add_mesh(bow,
+				Transform3D(Basis(Vector3.UP, ang + PI / 4.0),
+				at + bas * Vector3(0, 0.04, 2.9)), boat_cols[i])
+		var bench := BoxMesh.new()
+		bench.size = Vector3(1.5, 0.15, 0.5)
+		_cur_district.add_mesh(bench,
+				Transform3D(bas, at + bas * Vector3(0, 0.32, 0.6)),
+				Color(0.60, 0.45, 0.28))
+	_add_building(Vector3(x + 1.0, 0, z + 12.0), Vector3(0.8, 3.3, 0.8),
+			Color(0.72, 0.66, 0.55))
+	_add_building(Vector3(x + 13.0, 0, z + 12.0), Vector3(0.8, 3.3, 0.8),
+			Color(0.72, 0.66, 0.55))
+	_dist_box(Vector3(16.0, 0.4, 2.6), Vector3(x + 7.0, 3.3, z + 12.0),
+			Color(0.55, 0.40, 0.26))
+	_dist_box(Vector3(16.0, 0.5, 0.12), Vector3(x + 7.0, 4.05, z + 10.75),
+			Color(0.35, 0.25, 0.15))
+	_dist_box(Vector3(16.0, 0.5, 0.12), Vector3(x + 7.0, 4.05, z + 13.25),
+			Color(0.35, 0.25, 0.15))
+	_tree(Vector3(x - 15.5, 0, z + 14.0))
+	_tree(Vector3(x - 15.5, 0, z - 14.0))
 
 
 func _build_metro(x: float, z_line: float) -> void:
@@ -1334,6 +1471,8 @@ func _build_landmarks() -> void:
 		{"name": "Chandni Chowk", "center": _block_center(4, 7), "spawn": _block_center(4, 7) + Vector3(6.0, 1.0, -14.0)},
 		{"name": "Neighbourhood Park", "center": _block_center(8, 2), "spawn": _block_center(8, 2) + Vector3(0.0, 1.0, 12.0)},
 		{"name": "Police Station", "center": _block_center(7, 5), "spawn": _block_center(7, 5) + Vector3(0.0, 1.0, 10.0), "police": true},
+		{"name": "Hauz Khas", "center": _block_center(2, 8), "spawn": _block_center(2, 8) + Vector3(14.0, 1.0, 0.0)},
+		{"name": "Yamuna Ghats", "center": _block_center(9, 8), "spawn": _block_center(9, 8) + Vector3(-15.0, 1.0, 12.0)},
 	]
 
 

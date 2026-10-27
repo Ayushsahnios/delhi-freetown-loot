@@ -70,3 +70,14 @@ renders the ending card directly (`--ending`).
   legend (others get a pointed hint to switch).
 - The ending card closes the story with one line per legend plus the
   send-off, over a dimmed city.
+
+## Hauz Khas + Yamuna ghats captures (issue #97)
+
+The districts pass adds two new visual districts, both captured with the
+same pipeline (day 0.5, 60 settle frames, teleported near each district
+center).
+
+| Capture | District | Phase |
+|---|---|---|
+| hauz-day.png | Hauz Khas — lake, domed pavilions, cafe strip | day |
+| ghats-day.png | Yamuna Ghats — steps to the water, boats, footbridge | day |
