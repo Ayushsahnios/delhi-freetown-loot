@@ -6,7 +6,8 @@ extends CharacterBody3D
 const WALK_SPEED := 6.5
 const RUN_SPEED := 11.5
 const FALL_SAFE_SPEED := 14.0
-const MODEL_HEIGHT := 5.9
+const MODEL_HEIGHT := 1.80     ## metres — human band (issue #128)
+const MODEL_HEIGHT_RIYA := 1.66
 
 const Chars := preload("res://scripts/characters.gd")
 const ShadowBlob := preload("res://scripts/shadowblob.gd")
@@ -48,8 +49,9 @@ func swap_character(def: Dictionary) -> void:
 func _build_look(def: Dictionary) -> void:
 	run_boost = 1.18 if String(def.get("id")) == "riya" else 1.0
 	var path: String = Chars.FEMALE_A if String(def.get("id")) == "riya" else Chars.MALE
-	var model := _chars.spawn(path, MODEL_HEIGHT)
-	ShadowBlob.attach(model, 0.55)
+	var model := _chars.spawn(path,
+			MODEL_HEIGHT_RIYA if String(def.get("id")) == "riya" else MODEL_HEIGHT)
+	ShadowBlob.attach(model, 0.21)
 	_chars.tint(model, def.get("shirt", Color.WHITE), def.get("pants", Color.BLACK),
 			def.get("skin", Color.WHITE))
 	if def.get("sardar", false):
@@ -66,10 +68,10 @@ func _ensure_collision() -> void:
 	_collision_added = true
 	var col := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.9
-	capsule.height = 6.0
+	capsule.radius = 0.35
+	capsule.height = 1.7
 	col.shape = capsule
-	col.position.y = 3.0
+	col.position.y = 0.85
 	add_child(col)
 
 

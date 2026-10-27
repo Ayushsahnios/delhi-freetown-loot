@@ -14,6 +14,13 @@ const FEMALE_D := "res://assets/characters/female_d.glb"
 ## Skeleton bone spans stop short of scalp and soles — pad to full height.
 const BONE_PAD := 1.12
 
+## Human height band (issue #128): every humanoid spawn — walker, zone
+## shopper, legend, vendor, portrait — is clamped into this band no matter
+## what the caller asks for, so no call-site drift can ever produce micro
+## or dinosaur people again.
+const HUMAN_MIN := 1.55
+const HUMAN_MAX := 1.90
+
 ## Upright bone extent of the rig's rest pose, in model units. The skinned
 ## mesh's raw vertex box is meaningless (bind space), the skeleton is not.
 static var _span_cache := {}
@@ -30,6 +37,7 @@ static var _basis_cache := {}
 ## recycler sets it every physics frame) would wipe a holder-side flip
 ## and make every walker glide backwards.
 func spawn(path: String, height: float) -> Node3D:
+	height = clampf(height, HUMAN_MIN, HUMAN_MAX)
 	var ps: PackedScene = load(path)
 	if ps == null:
 		push_error("character model missing: " + path)
@@ -42,6 +50,28 @@ func spawn(path: String, height: float) -> Node3D:
 	var holder := Node3D.new()
 	holder.add_child(model)
 	return holder
+
+
+## Rendered height of a holder returned by spawn(), in world units: the
+## size basis the model was scaled against times the scale chain down to
+## it. The scale gate (scale_check) reads this to assert every humanoid —
+## walker, vendor, player legend — stands inside the human band. Returns
+## 0.0 when the node holds no character model.
+func height_of(holder: Node3D) -> float:
+	var stack: Array = [[holder, 1.0]]
+	while not stack.is_empty():
+		var entry: Array = stack.pop_back()
+		var parent: Node3D = entry[0]
+		var parent_scale: float = entry[1]
+		for c in parent.get_children():
+			var n := c as Node3D
+			if n == null:
+				continue
+			var s: float = parent_scale * n.scale.y
+			if String(n.scene_file_path).begins_with("res://assets/characters/"):
+				return _size_basis(n) * s
+			stack.append([n, s])
+	return 0.0
 
 
 ## Height to size this model against, in model units. Bone-rest span is

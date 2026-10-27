@@ -170,7 +170,7 @@ func _build_cart(pos: Vector3, face_toward: Vector3) -> Array[Dictionary]:
 		root.add_child(snack)
 	# Vendor: rigged CC0 character (idle clip), tinted like the old apron.
 	var chars := Chars.new()
-	var vendor := chars.spawn(Chars.MALE, 2.7)
+	var vendor := chars.spawn(Chars.MALE, 1.70)
 	chars.tint(vendor, Color(0.9, 0.5, 0.12), Color(0.16, 0.14, 0.13), Color(0.78, 0.55, 0.38))
 	vendor.position = Vector3(0, 0, 1.35)
 	root.add_child(vendor)

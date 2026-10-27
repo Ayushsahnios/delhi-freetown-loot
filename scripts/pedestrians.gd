@@ -29,7 +29,7 @@ const ZONE_WAKE := 130.0
 const ZONE_RECYCLE := 150.0
 const ZONE_SPAWN_MIN := 26.0
 const ZONE_BIAS := 42.0
-const PED_HEIGHT := 4.7
+const PED_HEIGHT := 1.72  ## metres — inside the human band (issue #128)
 const WALK_CLIP_SPEED := 3.8
 const ROAD_Y := 0.08  ## asphalt surface height (roads.gd ROAD_Y)
 const WALK_H := 0.14  ## sidewalk top height (roads.gd CURB_H)
@@ -391,7 +391,7 @@ func _dress(v: Dictionary) -> void:
 	var id: Dictionary = Chars.identity(_rng.randi())
 	v["id"] = id
 	var node := _chars.spawn(path, PED_HEIGHT * float(id["height"]))
-	ShadowBlob.attach(node, 0.48)
+	ShadowBlob.attach(node, 0.19)
 	_chars.dress(node, id)
 	add_child(node)
 	node.visible = false
