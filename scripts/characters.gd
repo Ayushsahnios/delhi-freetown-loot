@@ -24,6 +24,11 @@ static var _basis_cache := {}
 
 ## Instantiate `path` sized to `height` world units, facing -Z (the
 ## project's forward). Returns a holder node; the model is its child.
+## The corrective 180° flip lives on the MODEL child, never on the
+## holder (issue 127): the CC0 walkers all author facing +Z, and drivers
+## that steer the holder's global transform directly (the pedestrian
+## recycler sets it every physics frame) would wipe a holder-side flip
+## and make every walker glide backwards.
 func spawn(path: String, height: float) -> Node3D:
 	var ps: PackedScene = load(path)
 	if ps == null:
@@ -33,8 +38,8 @@ func spawn(path: String, height: float) -> Node3D:
 	var basis := _size_basis(model)
 	if basis > 0.001:
 		model.scale = Vector3.ONE * (height / basis)
+	model.rotation.y = PI
 	var holder := Node3D.new()
-	holder.rotation.y = PI
 	holder.add_child(model)
 	return holder
 
