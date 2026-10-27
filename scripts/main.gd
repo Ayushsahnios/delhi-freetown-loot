@@ -26,6 +26,15 @@ const PauseScript := preload("res://scripts/pause.gd")
 const MeshTools := preload("res://scripts/meshtools.gd")
 const RoadsScript := preload("res://scripts/roads.gd")
 const FurnitureScript := preload("res://scripts/street_furniture.gd")
+const MetroScript := preload("res://scripts/metro.gd")
+
+## Rideable metro shuttle (issue #98 part 2): boarding state, queued
+## boarding while the train is en route, and the interior-cam anchors.
+var _metro: MetroScript = null
+var _metro_riding := false
+var _metro_wait := -1
+var _metro_board_idx := -1
+var _cam_look_pt := Vector3(0.0, 2.0, 0.0)
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
@@ -320,6 +329,13 @@ func _build_city() -> void:
 
 	_cur_district = null
 	_build_metro(0.0, -WORLD / 2.0 + 4.0 * PITCH - BLOCK / 2.0)
+	# Issue #98 part 2: the shuttle itself — train, twin station gates,
+	# interior-cam ride. Signal-driven toasts keep the HUD informed.
+	_metro = MetroScript.new()
+	_metro.setup()
+	add_child(_metro)
+	_metro.arrived.connect(_on_metro_arrived)
+	_metro.departed.connect(_on_metro_departed)
 
 	# Commit: one merged mesh per district, one MultiMesh per repeated prop.
 	for key in _districts:
@@ -961,7 +977,7 @@ func _build_select_ui() -> void:
 		box.add_child(btn)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift run · E vehicle · F mission · H horn · N radio · Q/R street food · Tab switch character · F9 save · X debug hurt · C debug drop · Esc pause\nGamepad · stick move · A interact · B horn · X radio · Y switch · RB sprint · D-pad food · Select pause · Start save · touch pad UI on touchscreens"
+	hint.text = "WASD move · Shift run · E vehicle/metro · F mission · H horn · N radio · Q/R street food · Tab switch character · F9 save · X debug hurt · C debug drop · Esc pause\nGamepad · stick move · A interact · B horn · X radio · Y switch · RB sprint · D-pad food · Select pause · Start save · touch pad UI on touchscreens"
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
@@ -1120,7 +1136,7 @@ func _show_controls_card() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 	var body := Label.new()
-	body.text = "WASD move · Shift sprint · E enter or exit vehicles\nH horn · N radio · Q chai · R samosa · Tab switch legend · Esc pause\nYour first job waits at the gold START HERE beacon up the road"
+	body.text = "WASD move · Shift sprint · E enter or exit vehicles · metro gates board the shuttle\nH horn · N radio · Q chai · R samosa · Tab switch legend · Esc pause\nYour first job waits at the gold START HERE beacon up the road"
 	body.add_theme_font_size_override("font_size", 14)
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(body)
@@ -1194,11 +1210,11 @@ func _process(delta: float) -> void:
 			_show_toast(_hud_radio.text)
 		if Input.is_action_just_pressed("debug_hurt"):
 			_health.damage(25.0)
-		if current_auto == null and Input.is_action_just_pressed("debug_fall"):
+		if current_auto == null and not _metro_riding and Input.is_action_just_pressed("debug_fall"):
 			player.global_position += Vector3(0.0, 22.0, 0.0)
 		if Input.is_action_just_pressed("save"):
 			_save_game()
-		if current_auto == null and _impact_cd <= 0.0:
+		if current_auto == null and not _metro_riding and _impact_cd <= 0.0:
 			var hazard: float = _traffic.worst_hazard_speed(player.global_position)
 			if hazard > 2.5:
 				_health.damage(clampf(4.0 + hazard * 1.4, 8.0, 35.0))
@@ -1214,9 +1230,13 @@ func _process(delta: float) -> void:
 			elif _traffic.ram_speed_at(current_auto.global_position) > 3.0:
 				_police.chaos_ram()
 				_chaos_cd = 0.5
+	elif _metro_riding:
+		player.global_position = _metro.carriage_floor_pos()
 	_update_camera(delta)
 	if _minimap.visible:
 		var focus: Node3D = current_auto if current_auto != null else player
+		if _metro_riding:
+			focus = _metro
 		_minimap.track(focus.global_position, focus.rotation.y)
 		_minimap.set_mission_target(_missions.active_target())
 		_minimap.set_police(_police.jeep_positions())
@@ -1228,6 +1248,12 @@ func _on_bump_hit(strength: float) -> void:
 
 
 func _toggle_vehicle() -> void:
+	if _metro_riding:
+		if _metro.dwelling_idx() < 0:
+			_show_toast("HOLD ON · STEP OUT AT A STATION")
+		else:
+			_metro_alight()
+		return
 	if current_auto != null:
 		var exit_pos: Vector3 = current_auto.global_position + current_auto.global_transform.basis.x * 3.2
 		player.global_position = exit_pos
@@ -1249,6 +1275,13 @@ func _toggle_vehicle() -> void:
 		player.visible = false
 		_radio_on()
 		return
+	# Metro gate (issue #98 part 2): board the elevated shuttle before
+	# falling back to jacking traffic.
+	if _metro != null:
+		var gate: Dictionary = _metro.gate_near(player.global_position, 4.2)
+		if not gate.is_empty():
+			_metro_board(int(gate["idx"]))
+			return
 	# No parked vehicle nearby: take over the closest ambient traffic vehicle.
 	# Traffic brakes for the player standing in its lane, so the nearest one
 	# is usually stopped when you step in front of it.
@@ -1265,6 +1298,67 @@ func _toggle_vehicle() -> void:
 		current_auto.driver_inside = true
 		player.visible = false
 		_radio_on()
+
+
+func _metro_board(idx: int) -> void:
+	## Issue #98 part 2: E at a station gate. If the shuttle is dwelling
+	## here, hop straight on; otherwise queue and board its arrival.
+	if _metro_riding:
+		return
+	if not _metro.is_dwelling_at(idx):
+		_metro_wait = idx
+		_show_toast("METRO · TRAIN EN ROUTE · WAIT AT THE GATE")
+		return
+	_metro_wait = -1
+	_metro_riding = true
+	_metro_board_idx = idx
+	player.visible = false
+	player.controls_enabled = false
+	player.velocity = Vector3.ZERO
+	_cam_anchor = camera.global_position
+	_cam_look_pt = _metro.cam_look()
+	_show_toast("BOARDED · NEXT STOP " + _metro.station_name(_metro.other_idx(idx)))
+
+
+func _metro_alight() -> void:
+	var idx := _metro.dwelling_idx()
+	_metro_riding = false
+	_metro_board_idx = -1
+	player.visible = true
+	player.controls_enabled = true
+	player.global_position = _metro.alight_pos(idx)
+	player.velocity = Vector3.ZERO
+	_show_toast("STEP OUT · " + _metro.station_name(idx))
+
+
+func _metro_clear_ride() -> void:
+	## Death/busted path: nobody rides the shuttle through a respawn.
+	_metro_riding = false
+	_metro_wait = -1
+	_metro_board_idx = -1
+	player.visible = true
+
+
+func _on_metro_arrived(idx: int, stop_name: String) -> void:
+	if _metro_wait == idx:
+		_metro_board(idx)
+	elif _metro_riding:
+		_show_toast("ARRIVED · " + stop_name + " · E TO STEP OUT")
+
+
+func _on_metro_departed(_idx: int, next_name: String) -> void:
+	if _metro_riding:
+		_show_toast("DEPARTING · NEXT STOP " + next_name)
+
+
+func _capture_board_metro() -> void:
+	## Screenshot hook (issue #98): straight onto the shuttle from boot.
+	_metro_riding = true
+	_metro_board_idx = maxi(_metro.dwelling_idx(), 0)
+	player.visible = false
+	player.controls_enabled = false
+	_cam_anchor = camera.global_position
+	_cam_look_pt = _metro.cam_look()
 
 
 func _radio_on() -> void:
@@ -1287,8 +1381,8 @@ func _switch_character() -> void:
 		return
 	if not player.controls_enabled:
 		return
-	if current_auto != null:
-		_show_toast("STEP OUT OF THE VEHICLE TO SWITCH")
+	if current_auto != null or _metro_riding:
+		_show_toast("STEP OUT OF THE RIDE TO SWITCH")
 		return
 	var cur_id := String(Game.selected_character.get("id", ""))
 	_stash_character(cur_id)
@@ -1342,6 +1436,15 @@ func _char_index(id: String) -> int:
 
 
 func _update_camera(delta: float) -> void:
+	if _metro_riding:
+		# Interior cam (issue #98 part 2): aisle eye in the middle car,
+		# eased in from the street view — benches and poles in frame, the
+		# city sliding past the glass.
+		_cam_anchor = _cam_anchor.lerp(_metro.cam_eye(), minf(delta * 3.0, 1.0))
+		_cam_look_pt = _cam_look_pt.lerp(_metro.cam_look(), minf(delta * 3.0, 1.0))
+		camera.position = _cam_anchor
+		camera.look_at(_cam_look_pt)
+		return
 	var target := player
 	var back := 10.0
 	var up := 6.0
@@ -1503,6 +1606,8 @@ func _on_died() -> void:
 		current_auto = null
 		player.visible = true
 		_radio_off()
+	if _metro_riding or _metro_wait >= 0:
+		_metro_clear_ride()
 	player.controls_enabled = false
 	var lm := _nearest_landmark(player.global_position)
 	_hud_msg.text = "DOWN & OUT"
@@ -1567,6 +1672,8 @@ func _start_busted_flow() -> void:
 		current_auto = null
 		player.visible = true
 		_radio_off()
+	if _metro_riding or _metro_wait >= 0:
+		_metro_clear_ride()
 	player.controls_enabled = false
 	if _flash_tween != null and _flash_tween.is_valid():
 		_flash_tween.kill()
@@ -1625,6 +1732,11 @@ func _collect_save() -> Dictionary:
 	if current_auto != null:
 		pos = current_auto.position
 		heading = current_auto.rotation.y
+	if _metro_riding or _metro_wait >= 0:
+		# Never persist a ride: savers step out at the gate they used.
+		var gi := _metro_board_idx if _metro_riding else _metro_wait
+		pos = _metro.alight_pos(gi)
+		heading = PI / 2.0
 	var data := {
 		"character": String(Game.selected_character.get("id", "")),
 		"cash": _missions.cash,

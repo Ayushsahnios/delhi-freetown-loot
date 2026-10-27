@@ -19,6 +19,8 @@ teleporting to each district center. Captured 2026-10-26.
 | police-day.png | Police station | day |
 | park-dusk.png | Neighbourhood Park | dusk |
 | metro-day.png | Elevated metro line | day |
+| metro-gate.png | Metro station gate and shuttle | day |
+| metro-interior.png | Riding the shuttle, interior cam | day |
 
 ## Findings from the sweep
 

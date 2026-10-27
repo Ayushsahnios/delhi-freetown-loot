@@ -24,6 +24,7 @@ func _ready() -> void:
 	var card := true
 	var finale := false
 	var ending := false
+	var metro := false
 	var args := OS.get_cmdline_user_args()
 	for i in range(args.size()):
 		var a: String = args[i]
@@ -33,6 +34,8 @@ func _ready() -> void:
 			frames = int(args[i + 1])
 		elif a == "--no-card":
 			card = false
+		elif a == "--metro":
+			metro = true
 		elif a == "--finale":
 			finale = true
 		elif a == "--ending":
@@ -59,6 +62,9 @@ func _ready() -> void:
 	if tp.x != INF and main.get("player") != null:
 		var p: Node3D = main.get("player")
 		p.position = Vector3(tp.x, p.position.y, tp.y)
+
+	if metro and main.has_method("_capture_board_metro"):
+		main._capture_board_metro()
 
 	if finale or ending:
 		var m: Node = main.get("_missions")
