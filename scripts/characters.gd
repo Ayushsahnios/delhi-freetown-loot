@@ -626,6 +626,7 @@ func dress(holder: Node3D, id: Dictionary) -> void:
 	var kit := _head_kit(holder)
 	if kit.is_empty():
 		return
+	_attach_face(kit, id)
 	if int(id["hair_style"]) > 0:
 		_attach_hair(kit, id)
 	if int(id["headwear"]) > 0:
@@ -709,6 +710,31 @@ func _has_authored_hair(holder: Node3D) -> bool:
 			if base != null and _role(String(base.resource_name)) == "hair":
 				return true
 	return false
+
+
+## Face features (issue #123): readable low-poly faces — one sclera
+## band with two dark pupils and a pair of brows in the walker's hair
+## shade, all bone-attached so they ride every head nod. Sized off the
+## same head units as the hair and headwear kits.
+func _attach_face(kit: Dictionary, id: Dictionary) -> void:
+	var att: BoneAttachment3D = kit["att"]
+	var head_xf: Transform3D = kit["xf"]
+	var u: float = kit["u"]
+	var shade: Color = id["hair"]
+	var band := BoxMesh.new()
+	band.size = Vector3(0.34 * u, 0.09 * u, 0.03 * u)
+	_bone_mesh(att, head_xf, band, _solid(Color(0.95, 0.93, 0.88)),
+			Transform3D(Basis(), Vector3(0.0, 0.42 * u, 0.49 * u)))
+	for side in [-0.085, 0.085]:
+		var pupil := BoxMesh.new()
+		pupil.size = Vector3(0.065 * u, 0.07 * u, 0.032 * u)
+		_bone_mesh(att, head_xf, pupil, _solid(Color(0.07, 0.05, 0.04)),
+				Transform3D(Basis(), Vector3(side * u, 0.42 * u, 0.51 * u)))
+	for side_b in [-0.09, 0.09]:
+		var brow := BoxMesh.new()
+		brow.size = Vector3(0.15 * u, 0.03 * u, 0.035 * u)
+		_bone_mesh(att, head_xf, brow, _solid(shade.darkened(0.15)),
+				Transform3D(Basis(), Vector3(side_b * u, 0.53 * u, 0.495 * u)))
 
 
 func _attach_hair(kit: Dictionary, id: Dictionary) -> void:
