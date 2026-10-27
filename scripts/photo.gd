@@ -1,11 +1,13 @@
 extends Node
-## Photo mode (issue #100, part 1). P toggles a free camera: the world
+## Photo mode (issue #100). P toggles a free camera: the world
 ## freezes, the HUD hides, and the camera orbits the player — drag to
 ## swing, wheel to zoom. F cycles warm/mono/vivid filters, ENTER shoots a
 ## PNG into user://photos, G opens the gallery of saved shots. The mode
 ## runs in PROCESS_MODE_ALWAYS so it keeps working while the tree is
 ## paused; the pause menu skips its own ESC toggle while this is active.
-## All UI built in code; no assets.
+## All UI built in code; no assets. Part 2: a touch button strip makes the
+## mode usable on touchscreens, and web builds download shots through the
+## browser (data-URL click) right after saving or from gallery taps.
 
 const FILTERS := ["OFF", "WARM", "MONO", "VIVID"]
 const PIVOT_H := 1.7
@@ -32,6 +34,7 @@ var _toast: Label
 var _toast_tween: Tween
 var _gallery: Control
 var _grid: GridContainer
+var _strip: VBoxContainer
 
 
 func setup(camera: Camera3D, player: CharacterBody3D, world_env: WorldEnvironment) -> void:
@@ -65,6 +68,7 @@ func _activate() -> void:
 	_snap_to_player()
 	_apply_filter()
 	_show_toast("PHOTO MODE · drag swing · wheel zoom · F filter · ENTER shoot · G gallery · P exit")
+	_strip.visible = _strip_wanted()
 
 
 func _deactivate() -> void:
@@ -72,6 +76,7 @@ func _deactivate() -> void:
 	remove_from_group("photo_mode")
 	if _gallery != null:
 		_gallery.visible = false
+	_strip.visible = false
 	_layer.visible = false
 	_restore_hud()
 	_restore_env()
@@ -175,9 +180,10 @@ func next_filter() -> void:
 func toggle_gallery() -> void:
 	if _gallery.visible:
 		_gallery.visible = false
-		return
-	_fill_gallery()
-	_gallery.visible = true
+	else:
+		_fill_gallery()
+		_gallery.visible = true
+	_strip.visible = _strip_wanted()
 
 
 func shoot() -> void:
@@ -192,15 +198,19 @@ func shoot() -> void:
 		_show_toast("SAVE FAILED (%d)" % err)
 	else:
 		_show_toast("SAVED · %s" % path.get_file())
+		if OS.has_feature("web"):
+			_download_web(path.get_file(), img.save_png_to_buffer())
 
 
 func _hide_for_capture() -> void:
 	_hint.visible = false
 	_toast.visible = false
+	_strip.visible = false
 
 
 func _show_capture_ui() -> void:
 	_hint.visible = true
+	_strip.visible = _strip_wanted()
 
 
 func _apply_filter() -> void:
@@ -249,11 +259,22 @@ func _fill_gallery() -> void:
 		var img: Image = Image.load_from_file("%s/%s" % [PHOTOS_DIR, name])
 		if img == null:
 			continue
-		var frame := TextureRect.new()
-		frame.texture = ImageTexture.create_from_image(img)
-		frame.custom_minimum_size = Vector2(240, 135)
-		frame.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		_grid.add_child(frame)
+		if OS.has_feature("web"):
+			# Web build (issue #100 part 2): tapping a photo hands it to the
+			# browser as a download.
+			var pick := TextureButton.new()
+			pick.texture_normal = ImageTexture.create_from_image(img)
+			pick.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_COVERED
+			pick.custom_minimum_size = Vector2(240, 135)
+			pick.pressed.connect(_download_web.bind(
+				name, FileAccess.get_file_as_bytes("%s/%s" % [PHOTOS_DIR, name])))
+			_grid.add_child(pick)
+		else:
+			var frame := TextureRect.new()
+			frame.texture = ImageTexture.create_from_image(img)
+			frame.custom_minimum_size = Vector2(240, 135)
+			frame.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			_grid.add_child(frame)
 		shown += 1
 		if shown >= 30:
 			break
@@ -298,6 +319,8 @@ func _build_ui() -> void:
 	_toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toast.visible = false
 	_layer.add_child(_toast)
+	_strip = _build_touch_strip()
+	_layer.add_child(_strip)
 	_build_gallery()
 	_layer.visible = false
 
@@ -320,11 +343,19 @@ func _build_gallery() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 16)
 	margin.add_child(box)
+	var head := HBoxContainer.new()
+	box.add_child(head)
 	var title := Label.new()
-	title.text = "GALLERY · newest first · G to close"
+	title.text = "GALLERY · newest first · G to close" + (" · tap a photo to save" if OS.has_feature("web") else "")
 	title.add_theme_font_size_override("font_size", 18)
 	title.add_theme_color_override("font_color", Color(0.9, 0.9, 1.0))
-	box.add_child(title)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	var close := Button.new()
+	close.text = "CLOSE"
+	close.focus_mode = Control.FOCUS_NONE
+	close.pressed.connect(toggle_gallery)
+	head.add_child(close)
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -347,3 +378,64 @@ func _show_toast(text: String) -> void:
 	_toast_tween = create_tween()
 	_toast_tween.tween_interval(2.8)
 	_toast_tween.tween_property(_toast, "modulate:a", 0.0, 0.6)
+
+
+# ---------------------------------------------------------------- touch
+
+func _strip_wanted() -> bool:
+	return _active and not _gallery.visible and DisplayServer.is_touchscreen_available()
+
+
+func _build_touch_strip() -> VBoxContainer:
+	## Touch controls (issue #100 part 2): the regular touch HUD hides
+	## while photo mode is active, so this strip carries the four actions
+	## as tappable buttons. Rectangles instead of circles to read as a
+	## separate overlay.
+	var box := VBoxContainer.new()
+	box.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	box.offset_left = 24.0
+	box.offset_top = -262.0
+	box.offset_right = 172.0
+	box.offset_bottom = -24.0
+	box.add_theme_constant_override("separation", 10)
+	box.visible = false
+	box.add_child(_strip_button("EXIT", Color(0.92, 0.32, 0.32, 0.42), toggle))
+	box.add_child(_strip_button("FILTER", Color(0.30, 0.52, 0.95, 0.42), next_filter))
+	box.add_child(_strip_button("SHOOT", Color(0.32, 0.82, 0.42, 0.42), shoot))
+	box.add_child(_strip_button("GALLERY", Color(0.90, 0.72, 0.34, 0.42), toggle_gallery))
+	return box
+
+
+func _strip_button(label: String, fill: Color, handler: Callable) -> Button:
+	var b := Button.new()
+	b.text = label
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(148, 46)
+	b.add_theme_font_size_override("font_size", 16)
+	b.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.95))
+	var st := StyleBoxFlat.new()
+	st.bg_color = fill
+	st.set_corner_radius_all(10)
+	st.border_color = Color(1.0, 1.0, 1.0, 0.4)
+	st.set_border_width_all(2)
+	for state in ["normal", "hover", "focus", "disabled"]:
+		b.add_theme_stylebox_override(state, st)
+	var held: StyleBoxFlat = st.duplicate()
+	held.bg_color = Color(fill.r, fill.g, fill.b, 0.72)
+	b.add_theme_stylebox_override("pressed", held)
+	b.pressed.connect(handler)
+	return b
+
+
+# ---------------------------------------------------------------- web save
+
+func _download_web(fname: String, png: PackedByteArray) -> void:
+	## Browser download of a shot, web build only (issue #100 part 2):
+	## hand the PNG bytes to the page as a data-URL anchor click. Desktop
+	## and mobile builds save straight to user:// and never reach this.
+	if not OS.has_feature("web") or png.is_empty():
+		return
+	var js := "(function(){var a=document.createElement('a');"
+	js += "a.href='data:image/png;base64," + Marshalls.raw_to_base64(png) + "';"
+	js += "a.download='" + fname + "';a.click();})"
+	JavaScriptBridge.eval(js + "()", true)
