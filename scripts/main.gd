@@ -122,6 +122,9 @@ var _metro_seg_xfs: Array[Transform3D] = []
 var _win_xfs: Array[Transform3D] = []
 var _win_lit_xfs: Array[Transform3D] = []
 var _win_lit_mat: StandardMaterial3D = null
+var _street_lights: Array[OmniLight3D] = []
+var _lamp_pole_xfs: Array[Transform3D] = []
+var _lamp_head_xfs: Array[Transform3D] = []
 
 
 func _ready() -> void:
@@ -137,6 +140,7 @@ func _ready() -> void:
 	_weather.thunder_flash.connect(_on_thunder)
 	_build_city()
 	_build_landmarks()
+	_build_street_lights()
 	_food = FoodScript.new()
 	add_child(_food)
 	_food.setup(_landmarks)
@@ -1515,6 +1519,12 @@ func _update_day(delta: float) -> void:
 	if _win_lit_mat != null:
 		_win_lit_mat.emission_energy_multiplier = lerpf(1.9, 0.0,
 				clampf(daylight * 1.4, 0.0, 1.0))
+	# Street lamps join the windows at dusk: real OmniLights under every
+	# lamp head, so their warm pools render in every pipeline — the
+	# software-GL capture path included (issue #102).
+	var lamp_glow := lerpf(1.7, 0.0, clampf(daylight * 1.4, 0.0, 1.0))
+	for l in _street_lights:
+		l.light_energy = lamp_glow
 	var sky := SKY_NIGHT.lerp(SKY_DAY, daylight)
 	var dusk: float = clampf(1.0 - absf(daylight - 0.5) * 2.0, 0.0, 1.0)
 	sky = sky.lerp(SKY_DUSK, dusk * 0.5)
@@ -1604,6 +1614,52 @@ func _build_landmarks() -> void:
 		{"name": "Hauz Khas", "center": _block_center(2, 8), "spawn": _block_center(2, 8) + Vector3(14.0, 1.0, 0.0)},
 		{"name": "Yamuna Ghats", "center": _block_center(9, 8), "spawn": _block_center(9, 8) + Vector3(-15.0, 1.0, 12.0)},
 	]
+
+func _build_street_lights() -> void:
+	## Night lighting (issue #102): one lamp by every landmark wake-up
+	## spot plus three down the Chandni Chowk market lane. Posts and heads
+	## each draw as a single shared MultiMesh; every lamp carries a real
+	## OmniLight3D so its warm pool renders in every pipeline — the
+	## software-GL capture path included, where emissive windows alone can
+	## read as flat dark.
+	for lm in _landmarks:
+		var sp: Vector3 = lm["spawn"]
+		var d := sp - Vector3(lm["center"])
+		d.y = 0.0
+		if d.length() < 0.5:
+			d = Vector3(1.0, 0.0, 0.0)
+		d = d.normalized() * 3.0
+		_add_lamp(Vector3(sp.x + d.x, 0.0, sp.z + d.z))
+	var cc := _block_center(4, 7)
+	var street := cc.x + 6.0
+	var lane: Array[Vector3] = [
+		Vector3(street - 4.5, 0.0, cc.z - 6.5),
+		Vector3(street + 4.5, 0.0, cc.z + 1.0),
+		Vector3(street - 4.5, 0.0, cc.z + 14.5),
+	]
+	for p in lane:
+		_add_lamp(p)
+	var pole := BoxMesh.new()
+	pole.size = Vector3(0.18, 5.4, 0.18)
+	pole.material = MeshTools.shared_material(Color(0.22, 0.26, 0.24))
+	_add_mm(pole, _lamp_pole_xfs)
+	var head := BoxMesh.new()
+	head.size = Vector3(0.6, 0.3, 0.6)
+	head.material = MeshTools.shared_material(Color(0.98, 0.9, 0.7))
+	_add_mm(head, _lamp_head_xfs)
+
+func _add_lamp(pos: Vector3) -> void:
+	## One straight post lamp: dark pole, warm head, OmniLight tucked
+	## just under the head. Light energy follows _update_day's dusk curve.
+	_lamp_pole_xfs.append(Transform3D(Basis(), pos + Vector3(0.0, 2.7, 0.0)))
+	_lamp_head_xfs.append(Transform3D(Basis(), pos + Vector3(0.0, 5.35, 0.0)))
+	var light := OmniLight3D.new()
+	light.position = pos + Vector3(0.0, 5.1, 0.0)
+	light.light_color = Color(1.0, 0.78, 0.5)
+	light.omni_range = 22.0
+	light.light_energy = 0.0
+	add_child(light)
+	_street_lights.append(light)
 
 
 func _nearest_landmark(pos: Vector3) -> Dictionary:

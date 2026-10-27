@@ -95,3 +95,23 @@ garage.
 | Capture | Shows |
 |---|---|
 | scooter-spawn.png | Parked scooter on the spawn-road shoulder, day |
+
+## Night lighting (issue #102)
+
+Night captures used to show a dark city: no lit windows, no street lamps
+— scenes read as flat-shaded day. Two causes. Window glow is pure
+material emission, which the software-GL capture renderer can drop, and
+the world simply had no street lights at all. The fix adds a real
+OmniLight3D under every lamp head (8 landmark lamps + 3 down the Chandni
+Chowk market lane) so warm pools render in every pipeline, plus a
+headless gate (`res://scenes/night_check.tscn`) asserting windows and
+lamps ramp on at night and off at noon. The night-lamps capture settles
+the original question: under software GL the whole lighting model is
+dropped — geometry renders flat unshaded, so neither lamp pools nor
+window emission can ever show in captures. That is a capture-pipeline
+artifact, not a game bug; on-device (real-GPU) eyeballing is still
+pending the owner.
+
+| Capture | Shows |
+|---|---|
+| night-lamps.png | Chandni Chowk market lane at deep night — dark sky over the stalls; the flat ground is the software-GL capture artifact itself (see below) |
