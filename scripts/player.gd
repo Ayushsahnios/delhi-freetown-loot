@@ -23,6 +23,9 @@ var _chars := Chars.new()
 var _visuals: Array[Node] = []
 var _ap: AnimationPlayer = null
 var _anims := {}
+## Legend personality (issue #121): each legend's idle/walk pace runs
+## at its own rate — Sardar Ji unhurried, Riya quick, Monty even.
+var _anim_rate := 1.0
 var _air_vy := 0.0
 var _was_on_floor := true
 var _collision_added := false
@@ -47,13 +50,11 @@ func swap_character(def: Dictionary) -> void:
 
 func _build_look(def: Dictionary) -> void:
 	run_boost = 1.18 if String(def.get("id")) == "riya" else 1.0
+	_anim_rate = float(def.get("anim_rate", 1.0))
 	var path: String = Chars.FEMALE_A if String(def.get("id")) == "riya" else Chars.MALE
 	var model := _chars.spawn(path, MODEL_HEIGHT)
 	ShadowBlob.attach(model, 0.55)
-	_chars.tint(model, def.get("shirt", Color.WHITE), def.get("pants", Color.BLACK),
-			def.get("skin", Color.WHITE))
-	if def.get("sardar", false):
-		_chars.attach_sardar(model, def.get("turban", Color(1.0, 0.56, 0.12)))
+	_chars.dress_legend(model, def)
 	_ap = _chars.get_player(model)
 	_anims = _chars.anim_names(model)
 	_chars.play(_anims, _ap, "idle", 1.0)
@@ -151,8 +152,8 @@ func _animate(moving: bool) -> void:
 		return
 	var spd := Vector2(velocity.x, velocity.z).length()
 	if not moving and spd < 0.6:
-		_chars.play(_anims, _ap, "idle", 1.0)
+		_chars.play(_anims, _ap, "idle", _anim_rate)
 	elif spd < (WALK_SPEED * run_boost + RUN_SPEED) * 0.5:
-		_chars.play(_anims, _ap, "walk", spd / WALK_SPEED)
+		_chars.play(_anims, _ap, "walk", spd / WALK_SPEED * _anim_rate)
 	else:
-		_chars.play(_anims, _ap, "run", spd / RUN_SPEED)
+		_chars.play(_anims, _ap, "run", spd / RUN_SPEED * _anim_rate)

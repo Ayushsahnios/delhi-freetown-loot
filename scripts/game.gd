@@ -7,10 +7,13 @@ const CHARACTERS := [
 		"name": "Jaspreet 'Sardar Ji' Singh",
 		"role": "Auto-rickshaw legend of Connaught Place",
 		"skin": Color(0.78, 0.55, 0.37),
-		"shirt": Color(0.18, 0.42, 0.20),
+		"shirt": Color(0.93, 0.90, 0.83),
 		"pants": Color(0.15, 0.19, 0.25),
 		"turban": Color(1.0, 0.56, 0.12),
+		"beard": Color(0.44, 0.42, 0.40),
+		"jacket": Color(0.36, 0.17, 0.11),
 		"sardar": true,
+		"anim_rate": 0.85,
 	},
 	{
 		"id": "riya",
@@ -18,9 +21,12 @@ const CHARACTERS := [
 		"role": "Delivery rider, fastest lanes in the city",
 		"skin": Color(0.72, 0.48, 0.31),
 		"shirt": Color(0.84, 0.20, 0.42),
-		"pants": Color(0.12, 0.16, 0.27),
+		"pants": Color(0.13, 0.13, 0.16),
 		"turban": Color(0.1, 0.1, 0.1),
+		"hair": Color(0.14, 0.09, 0.06),
+		"helmet": Color(0.93, 0.91, 0.87),
 		"sardar": false,
+		"anim_rate": 1.18,
 	},
 	{
 		"id": "monty",
@@ -30,7 +36,9 @@ const CHARACTERS := [
 		"shirt": Color(0.54, 0.17, 0.89),
 		"pants": Color(0.07, 0.07, 0.10),
 		"turban": Color(0.1, 0.1, 0.1),
+		"hair": Color(0.05, 0.04, 0.04),
 		"sardar": false,
+		"anim_rate": 1.0,
 	},
 ]
 
