@@ -26,6 +26,15 @@ const PauseScript := preload("res://scripts/pause.gd")
 const MeshTools := preload("res://scripts/meshtools.gd")
 const RoadsScript := preload("res://scripts/roads.gd")
 const FurnitureScript := preload("res://scripts/street_furniture.gd")
+const MetroScript := preload("res://scripts/metro.gd")
+
+## Rideable metro shuttle (issue #98 part 2): boarding state, queued
+## boarding while the train is en route, and the interior-cam anchors.
+var _metro: MetroScript = null
+var _metro_riding := false
+var _metro_wait := -1
+var _metro_board_idx := -1
+var _cam_look_pt := Vector3(0.0, 2.0, 0.0)
 
 const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
@@ -320,6 +329,13 @@ func _build_city() -> void:
 
 	_cur_district = null
 	_build_metro(0.0, -WORLD / 2.0 + 4.0 * PITCH - BLOCK / 2.0)
+	# Issue #98 part 2: the shuttle itself — train, twin station gates,
+	# interior-cam ride. Signal-driven toasts keep the HUD informed.
+	_metro = MetroScript.new()
+	_metro.setup()
+	add_child(_metro)
+	_metro.arrived.connect(_on_metro_arrived)
+	_metro.departed.connect(_on_metro_departed)
 
 	# Commit: one merged mesh per district, one MultiMesh per repeated prop.
 	for key in _districts:
