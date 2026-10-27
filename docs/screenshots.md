@@ -28,13 +28,53 @@ teleporting to each district center. Captured 2026-10-26.
   the metro line and the park render with HUD, minimap and crowd in place.
 - Some frames show a washed-out white sky/ground. The effect is
   inconsistent between captures of the *same* location at different
-  phases, which points at the capture renderer (software GL alpha
-  blending on the cloud layer), not the scene data. Filed for follow-up.
+  phases, which points at the capture renderer, not the scene data.
+  Followed up with controlled captures — see the sky-washout section
+  below; the cloud layer first suspected turned out to be innocent.
 - Night frames show dark sky but no visible window glow — needs a check
   on real-GPU output to tell game bug from capture artifact. Filed.
 - Repeated prop defects (floating stall tables, canopy clipping, hanging
   decorations intersecting stall frames) appear across several districts.
   Filed for a placement pass.
+
+## Sky washout follow-up (issue #104)
+
+Controlled reproduction: two identical captures (Connaught Place center,
+day pinned to noon, controls card dismissed) and one discriminator run
+per suspect, mean colour measured over the top and bottom quarter of
+the frame.
+
+| Capture | Sky band | Ground band |
+|---|---|---|
+| run 1 (baseline) | rgb(0.901, 0.917, 0.921) lum 0.914 | rgb(0.612, 0.907, 0.752) lum 0.833 |
+| run 2 (identical inputs) | rgb(0.892, 0.912, 0.915) lum 0.908 | rgb(0.612, 0.907, 0.752) lum 0.833 |
+| `--nclouds` | rgb(0.899, 0.913, 0.916) lum 0.910 | unchanged |
+| `--noglow` | rgb(0.885, 0.907, 0.913) lum 0.902 | unchanged |
+
+Findings:
+
+- The washout reproduces **deterministically**: identical inputs give
+  the same near-white noon sky (lum ~0.91) every run — not flaky
+  frame-to-frame blending.
+- The intended noon sky is `SKY_DAY * 0.85` = rgb(0.45, 0.69, 0.78)
+  (lum ~0.66), so the measured band is ~0.25 too bright with almost no
+  blue left: the washout is real, not pale palette.
+- **Cloud layer exonerated**: hiding the whole MultiMesh layer (`--nclouds`)
+  moves the sky band by 0.004 — nothing. The original alpha-blending
+  suspicion was wrong.
+- **Glow exonerated**: disabling environment glow (`--noglow`) changes
+  almost nothing, so the LDR-glow-compositing path is not it either.
+- What remains is the sky dome itself under the software-GL capture
+  renderer: night frames (same code path, dark palette) render correct
+  dark skies, bright palettes wash toward white. The capture host has no
+  real GPU, so the game-look verdict on hardware needs a local export;
+  scene data and material settings are verified correct by the numbers
+  above.
+
+Capture knobs added for this investigation (both stay useful):
+
+    --nclouds   hide the drifting cloud layer
+    --noglow    disable environment glow
 
 ## First-60-seconds captures (issue #95)
 
