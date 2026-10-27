@@ -1088,6 +1088,10 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_photo = PhotoScript.new()
 	add_child(_photo)
 	_photo.setup(camera, player, world_env)
+	# Issue #100 part 2: the touch-layer PHOTO button toggles photo mode
+	# through this callable (event-based input never sees synthetic
+	# action presses).
+	_touch.bind_photo(Callable(_photo, "toggle"))
 	# First-boot spawn framing (issue #95): park the camera high on the
 	# mall road behind spawn so the opening shot holds the player, the
 	# gold START HERE beacon and the road toward India Gate — then the

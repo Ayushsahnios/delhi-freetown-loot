@@ -11,6 +11,11 @@ const DEADZONE := 0.08
 const TINT := Color(1.0, 1.0, 1.0, 0.16)
 const TINT_HELD := Color(1.0, 1.0, 1.0, 0.34)
 
+## Photo mode entry toggle, bound by main (issue #100 part 2). Held as a
+## Callable because photo mode listens for events in _unhandled_input,
+## which synthetic action presses from _make_button do not reach.
+var _photo_toggle := Callable()
+
 
 func _ready() -> void:
 	layer = 15
@@ -60,6 +65,9 @@ func _build() -> void:
 	top.add_child(_make_button("RADIO", ["radio"], 72.0))
 	top.add_child(_make_button("HORN", ["horn"], 72.0))
 	top.add_child(_make_button("PAUSE", ["pause"], 72.0))
+	var photo_btn := _make_button("PHOTO", [], 72.0)
+	photo_btn.pressed.connect(_on_photo_pressed)
+	top.add_child(photo_btn)
 
 	var bottom := HBoxContainer.new()
 	bottom.alignment = BoxContainer.ALIGNMENT_END
@@ -105,6 +113,16 @@ func _press(actions: Array) -> void:
 func _release(actions: Array) -> void:
 	for a in actions:
 		Input.action_release(a)
+
+
+func bind_photo(toggle: Callable) -> void:
+	_photo_toggle = toggle
+
+
+func _on_photo_pressed() -> void:
+	## One-shot toggle, not a held action: fire the bound callable directly.
+	if _photo_toggle.is_valid():
+		_photo_toggle.call()
 
 
 func _on_stick(v: Vector2) -> void:
