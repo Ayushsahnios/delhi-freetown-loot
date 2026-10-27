@@ -14,6 +14,12 @@ const FEMALE_D := "res://assets/characters/female_d.glb"
 ## Skeleton bone spans stop short of scalp and soles — pad to full height.
 const BONE_PAD := 1.12
 
+## Human height band (issue 128): every humanoid spawn — player,
+## legends, walkers, vendors — is clamped into this range no matter
+## what its caller requests, so no crowd can grow micros or dinosaurs.
+const HEIGHT_MIN := 1.55
+const HEIGHT_MAX := 1.90
+
 ## Upright bone extent of the rig's rest pose, in model units. The skinned
 ## mesh's raw vertex box is meaningless (bind space), the skeleton is not.
 static var _span_cache := {}
@@ -35,9 +41,17 @@ func spawn(path: String, height: float) -> Node3D:
 		push_error("character model missing: " + path)
 		return null
 	var model: Node3D = ps.instantiate()
+	# Issue 128: clamp the request into the human height band, then
+	# correct the scale against the model's TRUE rendered height — the
+	# bone/visual basis is only a first guess, so a variant whose basis
+	# misfires (tiny authoring units, padded spans) cannot sneak through.
+	var target := clampf(height, HEIGHT_MIN, HEIGHT_MAX)
 	var basis := _size_basis(model)
 	if basis > 0.001:
-		model.scale = Vector3.ONE * (height / basis)
+		model.scale = Vector3.ONE * (target / basis)
+	var rendered := _visual_height(model) * model.scale.y
+	if rendered > 0.001 and absf(rendered - target) > 0.01:
+		model.scale = Vector3.ONE * (target / rendered)
 	model.rotation.y = PI
 	var holder := Node3D.new()
 	holder.add_child(model)

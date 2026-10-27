@@ -1477,15 +1477,19 @@ func _update_camera(delta: float) -> void:
 		camera.look_at(_cam_look_pt)
 		return
 	var target := player
-	var back := 10.0
-	var up := 6.0
+	# On-foot framing follows the 1.78 m player model (issue 128);
+	# the auto branch keeps its wider vehicle framing.
+	var back := 5.5
+	var up := 2.7
+	var look_y := 1.45
 	if current_auto != null:
 		target = current_auto
 		back = 14.0
 		up = 7.0
+		look_y = 2.5
 	var want: Vector3 = target.global_position + target.global_transform.basis.z * back + Vector3(0, up, 0)
 	_cam_anchor = _cam_anchor.lerp(want, minf(delta * 4.5, 1.0))
-	var look_from := target.global_position + Vector3(0, 2.5, 0)
+	var look_from := target.global_position + Vector3(0, look_y, 0)
 	# Obstruction handling: ray from the target toward the anchor — if static
 	# world geometry blocks it, snap the camera in front of the occluder.
 	# Pull-in is instant (never see through a wall); the eased anchor swings
