@@ -9,7 +9,8 @@ open world, built 100% from scratch on [Godot 4](https://godotengine.org)
 ## The city
 Free-roam a stylized low-poly Delhi from minute one — India Gate, Connaught
 Place roundabout, Purani Dilli's red fort and dome, parks, and an elevated
-metro line overhead. Day/night cycle, drivable auto-rickshaws, living
+metro line overhead — boardable at street gates for an interior-cam ride
+across the city. Day/night cycle, drivable auto-rickshaws, living
 traffic and pedestrians, player health with landmark respawns, and a
 wanted system — cause chaos and police jeeps hunt you through the grid;
 lose them and the heat cools; get cornered while wanted or go down hot
