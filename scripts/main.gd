@@ -28,6 +28,7 @@ const RoadsScript := preload("res://scripts/roads.gd")
 const FurnitureScript := preload("res://scripts/street_furniture.gd")
 const MetroScript := preload("res://scripts/metro.gd")
 const TaxiScript := preload("res://scripts/taxi.gd")
+const CourierScript := preload("res://scripts/courier.gd")
 
 ## Rideable metro shuttle (issue #98 part 2): boarding state, queued
 ## boarding while the train is en route, and the interior-cam anchors.
@@ -82,6 +83,7 @@ var _radio: Node
 var _minimap: Control
 var _food: Node
 var _taxi: Node
+var _courier: Node
 var _hud_hp_bg: ColorRect
 var _hud_hp_fill: ColorRect
 var _hud_hp_text: Label
@@ -139,6 +141,9 @@ func _ready() -> void:
 	_taxi = TaxiScript.new()
 	add_child(_taxi)
 	_taxi.setup(_landmarks)
+	_courier = CourierScript.new()
+	add_child(_courier)
+	_courier.setup(_landmarks)
 	_traffic = TrafficScript.new()
 	add_child(_traffic)
 	_traffic.setup(WORLD, PITCH, ROAD, GRID + 1)
@@ -1077,6 +1082,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_missions.register_player(player)
 	_food.register(player, _health, _missions)
 	_taxi.register(player, _missions)
+	_courier.register(player, _missions)
 	# First-boot spawn framing (issue #95): park the camera high on the
 	# mall road behind spawn so the opening shot holds the player, the
 	# gold START HERE beacon and the road toward India Gate — then the
@@ -1247,6 +1253,7 @@ func _process(delta: float) -> void:
 		_minimap.set_mission_target(_missions.active_target())
 		_minimap.set_police(_police.jeep_positions())
 	_taxi.tick(delta, current_auto, player)
+	_courier.tick(delta, player)
 
 
 func _on_bump_hit(strength: float) -> void:
@@ -1607,6 +1614,7 @@ func _on_died() -> void:
 		return
 	_dead = true
 	_taxi.drop_fare("knocked out")
+	_courier.drop_parcel("knocked out")
 	if _police != null:
 		_police.reset()
 	if _missions != null:
@@ -1706,6 +1714,7 @@ func _start_busted_flow() -> void:
 
 func _do_busted_respawn(fine: int) -> void:
 	_taxi.drop_fare("busted")
+	_courier.drop_parcel("busted")
 	var station := _police_station()
 	_health.invulnerable = true
 	_health.respawn_reset()
