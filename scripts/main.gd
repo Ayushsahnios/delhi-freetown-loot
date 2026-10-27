@@ -27,6 +27,7 @@ const MeshTools := preload("res://scripts/meshtools.gd")
 const RoadsScript := preload("res://scripts/roads.gd")
 const FurnitureScript := preload("res://scripts/street_furniture.gd")
 const DressingScript := preload("res://scripts/delhi_dressing.gd")
+const CityDressingScript := preload("res://scripts/city_dressing.gd")
 const MetroScript := preload("res://scripts/metro.gd")
 const TaxiScript := preload("res://scripts/taxi.gd")
 const CourierScript := preload("res://scripts/courier.gd")
@@ -126,6 +127,9 @@ var _cur_district: MeshTools = null
 var _tree_trunk_xfs: Array[Transform3D] = []
 var _tree_crown_xfs: Array[Transform3D] = []
 var _bunt_pole_xfs: Array[Vector3] = []
+var _tank_xfs: Array[Transform3D] = []
+var _ac_xfs: Array[Transform3D] = []
+var _dish_xfs: Array[Transform3D] = []
 var _pillar_xfs: Array[Transform3D] = []
 var _metro_seg_xfs: Array[Transform3D] = []
 var _win_xfs: Array[Transform3D] = []
@@ -350,6 +354,9 @@ func _build_city() -> void:
 	# concrete poles, yellow-black painted kerbs, thela produce carts
 	# and a chai stall — the reference-driven Old Delhi street look.
 	add_child(DressingScript.build(WORLD, PITCH, ROAD))
+	# Delhi street-life dressing (issue #129 slice 2): two incidental
+	# kerbside cows and a roadside shrine near the landmarks.
+	add_child(CityDressingScript.build(WORLD, PITCH, ROAD))
 
 	# blocks — static visuals accumulate into per-district merged meshes
 	for ix in range(GRID):
@@ -384,6 +391,13 @@ func _build_city() -> void:
 					_add_building(bpos, Vector3(w, h, d),
 							PALETTE[_rng.randi_range(0, PALETTE.size() - 1)])
 					_add_windows(bpos, Vector3(w, h, d))
+					# Delhi skyline dressing (issue #129 slice 2): rooftop
+					# water tanks, wall AC units and satellite dishes.
+					var decor := CityDressingScript.building_decor(c, bpos,
+							Vector3(w, h, d))
+					_tank_xfs.append_array(decor["tanks"])
+					_ac_xfs.append_array(decor["acs"])
+					_dish_xfs.append_array(decor["dishes"])
 				_tree(Vector3(c.x - BLOCK / 2.0 + 2.0, 0, c.z - BLOCK / 2.0 + 2.0))
 
 	_cur_district = null
@@ -452,6 +466,11 @@ func _commit_props() -> void:
 	crown.height = 3.4
 	crown.material = MeshTools.shared_material(Color(0.18, 0.49, 0.20))
 	_add_mm(crown, _tree_crown_xfs)
+	# Skyline dressing (issue #129 slice 2): merged prop meshes draw
+	# once per transform like the tree parts above.
+	_add_prop_mm(CityDressingScript.tank_mesh(), _tank_xfs)
+	_add_prop_mm(CityDressingScript.ac_mesh(), _ac_xfs)
+	_add_prop_mm(CityDressingScript.dish_mesh(), _dish_xfs)
 	var pillar := CylinderMesh.new()
 	pillar.top_radius = 0.8
 	pillar.bottom_radius = 1.0
@@ -518,6 +537,23 @@ func _add_mm(mesh: PrimitiveMesh, xfs: Array[Transform3D]) -> MultiMeshInstance3
 	if node != null:
 		add_child(node)
 	return node
+
+
+func _add_prop_mm(mesh: ArrayMesh, xfs: Array[Transform3D]) -> void:
+	## Multi-part prop meshes from the dressing modules: one MultiMesh,
+	## no colliders (tanks sit on roofs, ACs/dishes mount well above
+	## head height).
+	if xfs.is_empty():
+		return
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = xfs.size()
+	for i in xfs.size():
+		mm.set_instance_transform(i, xfs[i])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	add_child(mmi)
 
 
 func _coll_box(size: Vector3, xf: Transform3D) -> CollisionShape3D:
