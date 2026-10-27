@@ -4,16 +4,21 @@ extends RefCounted
 ## draw through MultiMeshes — the whole city renders in a small fraction of
 ## the old node and draw-call count. Purely procedural, no assets.
 
+const PBRTextures := preload("res://scripts/pbr_textures.gd")
+
 static var _mat_cache := {}
 
 
 ## One shared material per color for everything that asks — fewer material
-## swaps between draws.
+## swaps between draws. Every one carries the procedural weathering pass
+## (roughness mottle + grit normal, triplanar) so the merged city stops
+## reading as flat plastic (issue #130).
 static func shared_material(color: Color) -> StandardMaterial3D:
 	var key := color.to_html()
 	if not _mat_cache.has(key):
 		var m := StandardMaterial3D.new()
 		m.albedo_color = color
+		PBRTextures.apply_weathering(m)
 		_mat_cache[key] = m
 	return _mat_cache[key]
 

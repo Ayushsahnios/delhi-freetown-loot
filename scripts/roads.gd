@@ -7,6 +7,8 @@ extends RefCounted
 ## merged mesh, six surfaces. All textures are generated at load
 ## (deterministic hash noise), no assets, no imports.
 
+const PBRTextures := preload("res://scripts/pbr_textures.gd")
+
 const TILE_U := 8.0  ## meters of road per asphalt texture repeat (along)
 const WALK_TILE := 2.2  ## meters per sidewalk texture repeat
 const CURB_H := 0.14  ## sidewalk top height
@@ -60,11 +62,19 @@ static func _vnoise(x: int, y: int, cell: int, seed: int) -> float:
 
 static func make_asphalt_material() -> StandardMaterial3D:
 	## Shared asphalt material; main.gd drives its tint with the weather.
+	## Roughness map adds traffic-polished wheel bands and oil sheen on
+	## top of the matte base; grit normal breaks the surface up close
+	## (issue #130). The weather-driven roughness scalar keeps working —
+	## it multiplies the map, so wet streets still gloss up.
 	var m := StandardMaterial3D.new()
 	m.albedo_texture = asphalt_texture()
 	m.albedo_color = Color(1.0, 1.0, 1.0)
 	m.roughness = 1.0
 	m.metallic = 0.0
+	m.roughness_texture = PBRTextures.asphalt_roughness()
+	m.normal_enabled = true
+	m.normal_texture = PBRTextures.grit_normal()
+	m.normal_scale = 0.35
 	return m
 
 
@@ -261,6 +271,10 @@ static func _walk_material() -> StandardMaterial3D:
 		_walk_mat = StandardMaterial3D.new()
 		_walk_mat.albedo_texture = walk_texture()
 		_walk_mat.roughness = 1.0
+		_walk_mat.roughness_texture = PBRTextures.weathering_roughness()
+		_walk_mat.normal_enabled = true
+		_walk_mat.normal_texture = PBRTextures.grit_normal()
+		_walk_mat.normal_scale = 0.5
 		_walk_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return _walk_mat
 
