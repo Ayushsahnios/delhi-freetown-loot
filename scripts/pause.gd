@@ -35,6 +35,9 @@ func _process(_delta: float) -> void:
 		return
 	if _game == null or not _game._playing:
 		return
+	# Photo mode owns ESC while it is active (issue #100).
+	if get_tree().get_first_node_in_group("photo_mode") != null:
+		return
 	if visible:
 		_resume()
 	else:

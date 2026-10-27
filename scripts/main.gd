@@ -29,6 +29,7 @@ const FurnitureScript := preload("res://scripts/street_furniture.gd")
 const MetroScript := preload("res://scripts/metro.gd")
 const TaxiScript := preload("res://scripts/taxi.gd")
 const CourierScript := preload("res://scripts/courier.gd")
+const PhotoScript := preload("res://scripts/photo.gd")
 
 ## Rideable metro shuttle (issue #98 part 2): boarding state, queued
 ## boarding while the train is en route, and the interior-cam anchors.
@@ -84,6 +85,7 @@ var _minimap: Control
 var _food: Node
 var _taxi: Node
 var _courier: Node
+var _photo: Node
 var _hud_hp_bg: ColorRect
 var _hud_hp_fill: ColorRect
 var _hud_hp_text: Label
@@ -1083,6 +1085,9 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_food.register(player, _health, _missions)
 	_taxi.register(player, _missions)
 	_courier.register(player, _missions)
+	_photo = PhotoScript.new()
+	add_child(_photo)
+	_photo.setup(camera, player, world_env)
 	# First-boot spawn framing (issue #95): park the camera high on the
 	# mall road behind spawn so the opening shot holds the player, the
 	# gold START HERE beacon and the road toward India Gate — then the

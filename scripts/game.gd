@@ -58,6 +58,12 @@ func _setup_inputs() -> void:
 	_add_keys("debug_fall", [KEY_C])
 	_add_keys("save", [KEY_F9])
 	_add_keys("pause", [KEY_ESCAPE])
+	# Photo mode (issue #100): P toggles the free camera, F cycles the
+	# filters, ENTER shoots, G opens the gallery.
+	_add_keys("photo", [KEY_P])
+	_add_keys("photo_filter", [KEY_F])
+	_add_keys("photo_shutter", [KEY_ENTER, KEY_KP_ENTER])
+	_add_keys("photo_gallery", [KEY_G])
 	# Gamepad — the same actions, so every gameplay reader works unchanged:
 	# left stick drives move_* with analog strength, face buttons take the
 	# one-shot actions, D-pad buys street food.
