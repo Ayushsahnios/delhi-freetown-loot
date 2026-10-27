@@ -11,6 +11,10 @@ const FEMALE_B := "res://assets/characters/female_b.glb"
 const FEMALE_C := "res://assets/characters/female_c.glb"
 const FEMALE_D := "res://assets/characters/female_d.glb"
 
+## Procedural liveliness layer (issue 122): every spawned body gets a
+## seeded LivelyRig on its skeleton.
+const LIVELY := preload("res://scripts/lively.gd")
+
 ## Skeleton bone spans stop short of scalp and soles — pad to full height.
 const BONE_PAD := 1.12
 
@@ -53,6 +57,14 @@ func spawn(path: String, height: float) -> Node3D:
 	if rendered > 0.001 and absf(rendered - target) > 0.01:
 		model.scale = Vector3.ONE * (target / rendered)
 	model.rotation.y = PI
+	# Issue 122: liveliness layer on every rigged spawn — seeded head
+	# wander, weight shift, phone idles, turn bank. Self-disabling
+	# no-op on rigs without a head bone.
+	for skel_node in model.find_children("*", "Skeleton3D", true, false):
+		var rig := LIVELY.new()
+		rig.rig_seed = randi()
+		skel_node.add_child(rig)
+		break
 	var holder := Node3D.new()
 	holder.add_child(model)
 	return holder
@@ -159,14 +171,27 @@ func get_player(holder: Node3D) -> AnimationPlayer:
 
 
 ## Crossfade to `clip` (a key of anim_names()) with a playback rate that
-## keeps feet on the ground as speed changes.
+## keeps feet on the ground as speed changes. Fades are per-target
+## (issue 122): panic runs snap in fast, strolls blend, idles settle
+## slowest — uniform 0.15s cuts were part of the robotic look.
+const FADES := {"run": 0.12, "walk": 0.26, "idle": 0.34}
+
+
 func play(anims: Dictionary, ap: AnimationPlayer, clip: String, rate: float) -> void:
 	if ap == null or not anims.has(clip):
 		return
 	var full: StringName = anims[clip]
 	if ap.current_animation != full or not ap.is_playing():
-		ap.play(full, 0.15)
+		ap.play(full, FADES.get(clip, 0.2))
 	ap.speed_scale = clampf(rate, 0.55, 1.75)
+
+
+## First LivelyRig under `holder`, or null — callers use it to flip
+## `talking` for dialogue givers or force a variant pose.
+func lively(holder: Node3D) -> Node:
+	for rig_node in holder.find_children("*", "LivelyRig", true, false):
+		return rig_node
+	return null
 
 
 ## Recolor clothing/skin slots. The GLB materials name their parts
