@@ -30,6 +30,7 @@ const DressingScript := preload("res://scripts/delhi_dressing.gd")
 const CityDressingScript := preload("res://scripts/city_dressing.gd")
 const SignageScript := preload("res://scripts/signage.gd")
 const MetroScript := preload("res://scripts/metro.gd")
+const RailwayScript := preload("res://scripts/railway.gd")
 const TaxiScript := preload("res://scripts/taxi.gd")
 const CourierScript := preload("res://scripts/courier.gd")
 const PhotoScript := preload("res://scripts/photo.gd")
@@ -37,6 +38,7 @@ const PhotoScript := preload("res://scripts/photo.gd")
 ## Rideable metro shuttle (issue #98 part 2): boarding state, queued
 ## boarding while the train is en route, and the interior-cam anchors.
 var _metro: MetroScript = null
+var _railway: RailwayScript = null
 var _metro_riding := false
 var _metro_wait := -1
 var _metro_board_idx := -1
@@ -381,6 +383,8 @@ func _build_city() -> void:
 				_build_hauz_khas(c.x, c.z)
 			elif ix == 9 and iz == 8:
 				_build_yamuna_ghats(c.x, c.z)
+			elif ix == 5 and iz == 0:
+				pass  # railway station district — built by RailwayScript below
 			elif (ix == 8 and iz == 2) or (ix == 2 and iz == 3):
 				_build_park(c.x, c.z)
 			else:
@@ -413,6 +417,17 @@ func _build_city() -> void:
 	add_child(_metro)
 	_metro.arrived.connect(_on_metro_arrived)
 	_metro.departed.connect(_on_metro_departed)
+
+	# Railway station district (issue #133): terminal platforms, truss
+	# canopy, porters, trolleys and a scene train that cycles in from
+	# beyond the north edge. Toasts announce arrivals/departures.
+	_railway = RailwayScript.new()
+	_railway.setup(_block_center(5, 0))
+	add_child(_railway)
+	_railway.arrived.connect(
+			func(): _show_toast("Passenger train arriving — New Delhi platform"))
+	_railway.departed.connect(
+			func(): _show_toast("Passenger train departing — stand clear"))
 
 	# Commit: one merged mesh per district, one MultiMesh per repeated prop.
 	for key in _districts:
@@ -1706,6 +1721,7 @@ func _build_landmarks() -> void:
 		{"name": "Police Station", "center": _block_center(7, 5), "spawn": _block_center(7, 5) + Vector3(0.0, 1.0, 14.0), "police": true},
 		{"name": "Hauz Khas", "center": _block_center(2, 8), "spawn": _block_center(2, 8) + Vector3(14.0, 1.0, 0.0)},
 		{"name": "Yamuna Ghats", "center": _block_center(9, 8), "spawn": _block_center(9, 8) + Vector3(-15.0, 1.0, 12.0)},
+		{"name": "Railway Station", "center": _block_center(5, 0), "spawn": _block_center(5, 0) + Vector3(-10.5, 1.0, 14.0)},
 	]
 
 func _build_street_lights() -> void:
