@@ -28,6 +28,7 @@ const RoadsScript := preload("res://scripts/roads.gd")
 const FurnitureScript := preload("res://scripts/street_furniture.gd")
 const DressingScript := preload("res://scripts/delhi_dressing.gd")
 const CityDressingScript := preload("res://scripts/city_dressing.gd")
+const SignageScript := preload("res://scripts/signage.gd")
 const MetroScript := preload("res://scripts/metro.gd")
 const TaxiScript := preload("res://scripts/taxi.gd")
 const CourierScript := preload("res://scripts/courier.gd")
@@ -357,6 +358,9 @@ func _build_city() -> void:
 	# Delhi street-life dressing (issue #129 slice 2): two incidental
 	# kerbside cows and a roadside shrine near the landmarks.
 	add_child(CityDressingScript.build(WORLD, PITCH, ROAD))
+	# Bilingual signage (issue #131): Devanagari + English boards at
+	# the bazaar, Purani Dilli, the thana and landmark approaches.
+	add_child(SignageScript.build(WORLD, PITCH, ROAD))
 
 	# blocks — static visuals accumulate into per-district merged meshes
 	for ix in range(GRID):
