@@ -119,6 +119,15 @@ func spend(amount: int) -> bool:
 	return true
 
 
+func earn(amount: int) -> void:
+	## Side hustles (issue #99): metered fares and courier payouts land
+	## in the same wallet, so they persist with the save.
+	if amount <= 0:
+		return
+	cash += amount
+	_cash_hud.text = "Rs %d" % cash
+
+
 func set_cash(amount: int) -> void:
 	## Character-switch entry point: swap the visible wallet without
 	## touching mission completion records.
