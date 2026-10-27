@@ -261,6 +261,194 @@ func attach_sardar(holder: Node3D, turban: Color, beard: Color = Color(0.13, 0.0
 			Transform3D(Basis(), Vector3(0.0, 0.33 * u, 0.52 * u)))
 
 
+## ------------------------------------------------------------------ legends
+
+## Legend identity (issue #121): the three playable legends dress far
+## beyond an NPC tint — each def in Game.CHARACTERS carries look keys
+## (hair, jacket, beard, helmet, anim_rate) and this factory adds a
+## procedural identity kit on top of the palette tint, so title-screen
+## portraits and street captures read three unmistakable characters:
+##   sardarji — cream kurta + wool vest panels + dastaar + grey beard
+##   riya     — riding palette + helmet slung on the back + ponytail
+##   monty    — glossy slicked hair + shades + gold chain + open collar
+## Rigs with sane bone units (the universal male) get bone-riding kit
+## that follows idle/walk nods; the authored-hair female rig keeps its
+## tiny authoring bones (issue #82) where bone-space accessories render
+## misplaced, so her pieces are holder-fixed in world units instead.
+func dress_legend(holder: Node3D, def: Dictionary) -> void:
+	tint(holder, def.get("shirt", Color.WHITE), def.get("pants", Color.BLACK),
+			def.get("skin", Color.WHITE), def.get("hair", Color(0.0, 0.0, 0.0, -1.0)))
+	match String(def.get("id", "")):
+		"sardarji":
+			attach_sardar(holder, def.get("turban", Color(1.0, 0.56, 0.12)),
+					def.get("beard", Color(0.44, 0.42, 0.40)))
+			var tk := _torso_kit(holder)
+			if not tk.is_empty():
+				_vest(tk, def.get("jacket", Color(0.36, 0.17, 0.11)))
+		"monty":
+			var kit := _head_kit(holder)
+			if not kit.is_empty():
+				_slick_hair(kit, def.get("hair", Color(0.05, 0.04, 0.04)))
+				_shades(kit)
+			var tk2 := _torso_kit(holder)
+			if not tk2.is_empty():
+					_chain_and_collar(tk2, def.get("skin", Color(0.79, 0.56, 0.39)))
+		"riya":
+			_rider_gear(holder, def)
+
+
+## Sleeveless wool vest: front + back chest panels with a shoulder
+## yoke, bone-attached to the chest so it rides every torso lean. Flat
+## panels instead of a shell keep the swinging arms clear.
+func _vest(tk: Dictionary, jacket: Color) -> void:
+	var att: BoneAttachment3D = tk["att"]
+	var xf: Transform3D = tk["xf"]
+	var u: float = tk["u"]
+	var mat := _solid(jacket)
+	for z in [0.62, -0.62]:
+		var panel := BoxMesh.new()
+		panel.size = Vector3(1.5 * u, 1.6 * u, 0.16 * u)
+		_bone_mesh(att, xf, panel, mat,
+				Transform3D(Basis(), Vector3(0.0, 0.1 * u, z * u)))
+	var yoke := BoxMesh.new()
+	yoke.size = Vector3(1.75 * u, 0.3 * u, 0.85 * u)
+	_bone_mesh(att, xf, yoke, mat,
+			Transform3D(Basis(), Vector3(0.0, 0.85 * u, 0.0)))
+
+
+## Monty's slicked-back hair: the crop sphere with a low-roughness
+## finish so it reads glossy, pushed flat and slightly back.
+func _slick_hair(kit: Dictionary, hair: Color) -> void:
+	var att: BoneAttachment3D = kit["att"]
+	var xf: Transform3D = kit["xf"]
+	var u: float = kit["u"]
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = hair
+	mat.roughness = 0.22
+	var crop := SphereMesh.new()
+	crop.radius = 0.5 * u
+	crop.height = 0.98 * u
+	_bone_mesh(att, xf, crop, mat,
+			Transform3D(Basis().scaled(Vector3(1.02, 0.66, 1.06)),
+					Vector3(0.0, 0.5 * u, -0.02 * u)))
+
+
+## One dark slab across the eyes — sunglasses that read at gameplay
+## scale and ride every head nod.
+func _shades(kit: Dictionary) -> void:
+	var att: BoneAttachment3D = kit["att"]
+	var xf: Transform3D = kit["xf"]
+	var u: float = kit["u"]
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.03, 0.03, 0.04)
+	mat.roughness = 0.3
+	var slab := BoxMesh.new()
+	slab.size = Vector3(0.92 * u, 0.2 * u, 0.12 * u)
+	_bone_mesh(att, xf, slab, mat,
+			Transform3D(Basis(), Vector3(0.0, 0.3 * u, 0.54 * u)))
+
+
+## Gold chain at the collarbone plus an open-collar V of skin below
+## the throat, both riding the chest bone.
+func _chain_and_collar(tk: Dictionary, skin: Color) -> void:
+	var att: BoneAttachment3D = tk["att"]
+	var xf: Transform3D = tk["xf"]
+	var u: float = tk["u"]
+	var gold := StandardMaterial3D.new()
+	gold.albedo_color = Color(1.0, 0.78, 0.25)
+	gold.metallic = 0.8
+	gold.roughness = 0.3
+	var chain := TorusMesh.new()
+	chain.inner_radius = 0.34 * u
+	chain.outer_radius = 0.44 * u
+	chain.rings = 36
+	chain.ring_segments = 8
+	_bone_mesh(att, xf, chain, gold,
+			Transform3D(Basis().scaled(Vector3(1.0, 0.4, 1.0)),
+					Vector3(0.0, 0.95 * u, 0.02 * u)))
+	var collar := BoxMesh.new()
+	collar.size = Vector3(0.5 * u, 0.42 * u, 0.14 * u)
+	_bone_mesh(att, xf, collar, _solid(skin),
+			Transform3D(Basis(Vector3(1.0, 0.0, 0.0), -0.5),
+					Vector3(0.0, 0.72 * u, 0.5 * u)))
+
+
+## Riya's rider gear, holder-fixed in world units (her rig's bones sit
+## in tiny authoring units — issue #82): a helmet slung on the back
+## with a strap down to the shoulder, and a ponytail sweeping off the
+## back of the head. Sized off the model's rendered height so it fits
+## both the title portrait and the street.
+func _rider_gear(holder: Node3D, def: Dictionary) -> void:
+	if holder.get_child_count() == 0:
+		return
+	var model: Node3D = holder.get_child(0)
+	var h := _visual_height(model) * model.scale.y
+	if h <= 0.1:
+		return
+	var gear := Node3D.new()
+	holder.add_child(gear)
+	# Helmet: a rider dome resting between the shoulder blades.
+	var shell := SphereMesh.new()
+	shell.radius = 0.085 * h
+	shell.height = 0.17 * h
+	_held_mesh(gear, shell, _solid(def.get("helmet", Color(0.93, 0.91, 0.87))),
+			Transform3D(Basis(), Vector3(0.0, 0.70 * h, 0.145 * h)))
+	# Strap from the helmet down over the shoulder — jacket-colored.
+	var strap := BoxMesh.new()
+	strap.size = Vector3(0.035 * h, 0.2 * h, 0.03 * h)
+	_held_mesh(gear, strap, _solid(def.get("shirt", Color.WHITE)),
+			Transform3D(Basis(Vector3(0.0, 0.0, 1.0), 0.18),
+					Vector3(0.0, 0.6 * h, 0.135 * h)))
+	# Ponytail: a capsule off the back of the head, swept down-back.
+	var tail := CapsuleMesh.new()
+	tail.radius = 0.02 * h
+	tail.height = 0.15 * h
+	_held_mesh(gear, tail, _solid(def.get("hair", Color(0.14, 0.09, 0.06))),
+			Transform3D(Basis(Vector3(1.0, 0.0, 0.0), 0.6),
+					Vector3(0.0, 0.86 * h, 0.075 * h)))
+
+
+## Holder-fixed mesh at a world-unit transform (no bone riding).
+func _held_mesh(parent: Node3D, mesh: PrimitiveMesh, mat: StandardMaterial3D,
+		desired: Transform3D) -> void:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.transform = desired
+	parent.add_child(mi)
+
+
+## Chest-bone rig for torso kit: finds the upper spine bone (the male
+## rig's spine_03), sizes one unit off the skeleton span, and returns a
+## live attachment plus its rest frame ({} when no chest bone exists).
+func _torso_kit(holder: Node3D) -> Dictionary:
+	var skel: Skeleton3D = null
+	for skel_node in holder.find_children("*", "Skeleton3D", true, false):
+		skel = skel_node
+		break
+	if skel == null:
+		return {}
+	var chest := -1
+	for i in skel.get_bone_count():
+		var n: String = skel.get_bone_name(i).to_lower()
+		if n == "spine_03" or n == "spine_02" or n == "torso":
+			chest = i
+			break
+	if chest < 0:
+		return {}
+	var top := -INF
+	var bottom := INF
+	for i in skel.get_bone_count():
+		var p := skel.get_bone_global_rest(i).origin
+		top = maxf(top, p.y)
+		bottom = minf(bottom, p.y)
+	var u: float = (top - bottom) * 0.155
+	var att := BoneAttachment3D.new()
+	att.bone_idx = chest
+	skel.add_child(att)
+	return {"att": att, "xf": skel.get_bone_global_rest(chest), "u": u}
+
+
 ## ------------------------------------------------------------------ identity
 
 ## Modular NPC identity (issue #120): one integer seed rolls every slot

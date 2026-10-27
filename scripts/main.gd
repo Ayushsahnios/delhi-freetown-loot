@@ -1027,12 +1027,10 @@ func _portrait_card(def: Dictionary) -> Control:
 	vp.add_child(lamp)
 	var path: String = CharactersScript.FEMALE_A if String(def.get("id")) == "riya" else CharactersScript.MALE
 	var model := _chars.spawn(path, 1.72)
-	_chars.tint(model, def.get("shirt", Color.WHITE), def.get("pants", Color.BLACK),
-			def.get("skin", Color.WHITE))
-	if def.get("sardar", false):
-		_chars.attach_sardar(model, def.get("turban", Color(1.0, 0.56, 0.12)))
+	_chars.dress_legend(model, def)
 	vp.add_child(model)
-	_chars.play(_chars.anim_names(model), _chars.get_player(model), "idle", 1.0)
+	_chars.play(_chars.anim_names(model), _chars.get_player(model), "idle",
+			float(def.get("anim_rate", 1.0)))
 	var cam := Camera3D.new()
 	cam.fov = 30.0
 	cam.transform = Transform3D(
