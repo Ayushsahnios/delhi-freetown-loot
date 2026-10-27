@@ -13,6 +13,12 @@ extends Node
 ##   --tp X,Z      teleport player to X,Z before settling
 ##   --day T       force time of day (0..1 of the day cycle) before settling
 ##   --no-card     dismiss the first-boot controls card before settling
+##   --nclouds     hide the drifting cloud layer (issue #104: the alpha-
+##                 blended cloud MultiMesh washes out the whole frame under
+##                 software GL; this knob captures the city cloud-free)
+##   --noglow       disable environment glow (issue #104 discriminator: on
+##                 the compatibility renderer glow composites in LDR, which
+##                 can wash bright noon skies out to white under software GL)
 
 const MAIN_SCENE := preload("res://scenes/main.tscn")
 
@@ -22,6 +28,8 @@ func _ready() -> void:
 	var tp := Vector2(INF, INF)
 	var day := -1.0
 	var card := true
+	var nclouds := false
+	var noglow := false
 	var finale := false
 	var ending := false
 	var metro := false
@@ -34,6 +42,10 @@ func _ready() -> void:
 			frames = int(args[i + 1])
 		elif a == "--no-card":
 			card = false
+		elif a == "--nclouds":
+			nclouds = true
+		elif a == "--noglow":
+			noglow = true
 		elif a == "--metro":
 			metro = true
 		elif a == "--finale":
@@ -58,6 +70,16 @@ func _ready() -> void:
 
 	if day >= 0.0 and "day_t" in main:
 		main.day_t = day
+
+	if nclouds:
+		var clouds: Node3D = main.get("_cloud_layer")
+		if clouds != null:
+			clouds.visible = false
+
+	if noglow:
+		var we: WorldEnvironment = main.get("world_env")
+		if we != null:
+			we.environment.glow_enabled = false
 
 	if tp.x != INF and main.get("player") != null:
 		var p: Node3D = main.get("player")
