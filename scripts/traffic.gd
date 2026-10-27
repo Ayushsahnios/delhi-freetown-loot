@@ -25,6 +25,7 @@ var _road_w := 0.0
 var _roads := 0
 var _auto_mm: MultiMesh = null
 var _car_mms: Array[MultiMesh] = []
+var _scooter_mms: Array[MultiMesh] = []
 var _mm_used := {}
 var _mm_free := {}
 var _bumps: Array = []
@@ -39,6 +40,8 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 	_auto_mm = _new_mm(_auto_mesh())
 	for paint in Vehicles.PAINTS:
 		_car_mms.append(_new_mm(_car_mesh(paint)))
+	for paint in [Vehicles.PAINTS[0], Vehicles.PAINTS[1]]:
+		_scooter_mms.append(_new_mm(_scooter_mesh(paint)))
 	for _i in range(COUNT):
 		_vehicles.append(_spawn())
 
@@ -58,14 +61,26 @@ func _spawn() -> Dictionary:
 	var road_i := _rng.randi_range(0, _roads - 1)
 	var road := -_world / 2.0 + road_i * _pitch - (_pitch - _road_w) / 2.0
 	var dir := 1 if _rng.randf() < 0.5 else -1
-	var is_auto := _rng.randf() < 0.6
-	var cruise := _rng.randf_range(8.0, 11.0) if is_auto else _rng.randf_range(12.0, 15.0)
-	var mm := _auto_mm if is_auto else _car_mms[_rng.randi_range(0, _car_mms.size() - 1)]
+	var roll := _rng.randf()
+	var is_auto := roll < 0.55
+	var is_scooter := roll >= 0.8
+	var kind := "auto"
+	var cruise := _rng.randf_range(8.0, 11.0)
+	var mm := _auto_mm
+	if is_scooter:
+		## Issue #98: scooters zip through the lanes a touch quicker.
+		kind = "scooter"
+		cruise = _rng.randf_range(13.0, 16.0)
+		mm = _scooter_mms[_rng.randi_range(0, _scooter_mms.size() - 1)]
+	elif not is_auto:
+		kind = "car"
+		cruise = _rng.randf_range(12.0, 15.0)
+		mm = _car_mms[_rng.randi_range(0, _car_mms.size() - 1)]
 	_next_id += 1
 	var v := {
 		"id": _next_id, "mm": mm, "idx": _alloc(mm), "pos": Vector3.ZERO,
 		"heading": 0.0, "along_z": along_z, "road": road, "dir": dir,
-		"kind": ("auto" if is_auto else "car"),
+		"kind": kind,
 		"t": _rng.randf_range(-_world / 2.0, _world / 2.0),
 		"speed": cruise, "cruise": cruise, "bob": 0.0,
 	}
@@ -258,5 +273,13 @@ func _car_mesh(paint: Color) -> ArrayMesh:
 	var b := MeshTools.new()
 	Vehicles.build_hatchback_body(b, paint)
 	for spec in Vehicles.HATCH_WHEELS:
+		Vehicles.add_merged_wheel(b, spec)
+	return b.build_mesh()
+
+
+func _scooter_mesh(paint: Color) -> ArrayMesh:
+	var b := MeshTools.new()
+	Vehicles.build_scooter_body(b, paint)
+	for spec in Vehicles.SCOOTER_WHEELS:
 		Vehicles.add_merged_wheel(b, spec)
 	return b.build_mesh()

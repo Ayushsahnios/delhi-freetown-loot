@@ -81,3 +81,15 @@ center).
 |---|---|---|
 | hauz-day.png | Hauz Khas — lake, domed pavilions, cafe strip | day |
 | ghats-day.png | Yamuna Ghats — steps to the water, boats, footbridge | day |
+
+## Scooter rideable capture (issue #98, part 1)
+
+The rideables work starts with the scooter: a procedural step-through
+built like the rest of the fleet, parked at two spawn-road spots and
+mixed into ambient traffic at a quicker cruise — jackable with E like
+every other vehicle. Fastest top speed and sharpest steering in the
+garage.
+
+| Capture | Shows |
+|---|---|
+| scooter-spawn.png | Parked scooter on the spawn-road shoulder, day |
