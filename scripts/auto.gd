@@ -34,8 +34,14 @@ var _speed := 0.0
 var _rng := RandomNumberGenerator.new()
 
 
+## Body kind ("auto"/"car"/"van"/"scooter") — public so systems like
+## the taxi hustle can gate on riding the rickshaw.
+var kind := "auto"
+
+
 func setup(pos: Vector3, heading: float, kind := "auto") -> void:
 	_spec = KINDS.get(kind, KINDS["auto"])
+	self.kind = kind
 	# Local transform: this node may not be in the tree yet when spawned.
 	position = pos
 	rotation.y = heading
