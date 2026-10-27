@@ -388,7 +388,11 @@ func _dress(v: Dictionary) -> void:
 		pick = (pick + 1 + _rng.randi_range(0, MODELS.size() - 2)) % MODELS.size()
 	_last_model = pick
 	var path: String = MODELS[pick]
-	var id: Dictionary = Chars.identity(_rng.randi())
+	# The wardrobe branch (issue #134) rolls per body type: the women's
+	# rigs take saree / kameez, the universal male takes kurta / lungi /
+	# porter duty — so the crowd reads Indian street dress.
+	var female := pick < MODELS.size() - 1
+	var id: Dictionary = Chars.identity(_rng.randi(), female)
 	v["id"] = id
 	var node := _chars.spawn(path, PED_HEIGHT * float(id["height"]))
 	ShadowBlob.attach(node, 0.48)

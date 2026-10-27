@@ -504,13 +504,47 @@ const ID_HATS := [
 ]
 
 
+## Indian street wardrobe (issue #134), reference-driven: the art-ref
+## crowd reads Indian through loose long kurtas, wrapped lungis, saree
+## silhouettes on the women, maroon porter shirts with head-load
+## bundles, and khaki security — layered over the same tint slots.
+const W_WESTERN := 0
+const W_KURTA := 1
+const W_LUNGI := 2
+const W_SAREE := 3
+const KURTA_TOPS := [
+	Color(0.93, 0.90, 0.84), Color(0.96, 0.94, 0.90), Color(0.91, 0.74, 0.32),
+	Color(0.66, 0.79, 0.90), Color(0.88, 0.84, 0.95), Color(0.92, 0.88, 0.70),
+]
+const KURTA_BOTTOMS := [
+	Color(0.92, 0.90, 0.86), Color(0.20, 0.20, 0.24), Color(0.76, 0.71, 0.60),
+]
+const LUNGI_COLORS := [
+	Color(0.93, 0.91, 0.86), Color(0.85, 0.80, 0.68), Color(0.56, 0.61, 0.70),
+	Color(0.63, 0.46, 0.36), Color(0.80, 0.76, 0.66),
+]
+const SAREE_COLORS := [
+	Color(0.95, 0.30, 0.45), Color(0.10, 0.60, 0.55), Color(0.95, 0.55, 0.15),
+	Color(0.75, 0.25, 0.55), Color(0.86, 0.76, 0.20), Color(0.20, 0.50, 0.75),
+]
+const BLOUSE_DARKS := [
+	Color(0.26, 0.07, 0.12), Color(0.10, 0.13, 0.30), Color(0.10, 0.10, 0.11),
+	Color(0.07, 0.25, 0.16),
+]
+const PORTER_RED := Color(0.62, 0.16, 0.12)
+const GUARD_KHAKI := Color(0.56, 0.51, 0.38)
+const GUARD_KHAKI_DARK := Color(0.44, 0.40, 0.30)
+const BUNDLE_CLOTH := Color(0.90, 0.86, 0.78)
+
+
 ## Roll a full identity from `seed`: deterministic, so a given NPC
 ## always dresses the same while different seeds never collide twice in
-## one crowd.
-static func identity(seed: int) -> Dictionary:
+## one crowd. `female` rolls the women's wardrobe branch (saree /
+## kameez) — the caller knows which model it picked.
+static func identity(seed: int, female := false) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
-	return {
+	var id := {
 		"seed": seed,
 		"skin": ID_SKINS[rng.randi_range(0, ID_SKINS.size() - 1)],
 		"shirt": ID_TOPS[rng.randi_range(0, ID_TOPS.size() - 1)],
@@ -523,6 +557,58 @@ static func identity(seed: int) -> Dictionary:
 		"headwear": rng.randi_range(0, 4),
 		"height": rng.randf_range(0.93, 1.07),
 	}
+	_wardrobe_roll(id, rng, female)
+	return id
+
+
+## Layer the Indian street wardrobe onto the identity roll (issue
+## #134): outfit style + role re-style the palette slots so the tint
+## and the wardrobe meshes agree, then meshes are attached in
+## _wardrobe(). Porters wear the maroon long shirt; guards wear khaki
+## plus a cap.
+static func _wardrobe_roll(id: Dictionary, rng: RandomNumberGenerator,
+		female: bool) -> void:
+	var outfit := W_WESTERN
+	var r := rng.randf()
+	if female:
+		outfit = W_SAREE if r < 0.45 else (W_KURTA if r < 0.75 else W_WESTERN)
+	else:
+		outfit = W_KURTA if r < 0.40 else (W_LUNGI if r < 0.70 else W_WESTERN)
+	var role := 0
+	var rr := rng.randf()
+	if not female and rr < 0.10:
+		role = 1
+	elif rr > 0.92:
+		role = 2
+	id["outfit"] = outfit
+	id["role"] = role
+	match role:
+		1:
+			# Porter: maroon long shirt (kurta cut) + dark trousers + head load.
+			id["shirt"] = PORTER_RED
+			id["pants"] = Color(0.16, 0.16, 0.20)
+			id["outfit"] = W_KURTA
+			id["headwear"] = 0
+		2:
+			# Security: khaki shirt + darker khaki trousers + khaki cap.
+			id["shirt"] = GUARD_KHAKI
+			id["pants"] = GUARD_KHAKI_DARK
+			id["hat"] = GUARD_KHAKI_DARK
+			id["headwear"] = 1
+			id["outfit"] = W_WESTERN
+			if female:
+				id["headwear"] = 0
+		_:
+			match outfit:
+				W_KURTA:
+					id["shirt"] = KURTA_TOPS[rng.randi_range(0, KURTA_TOPS.size() - 1)]
+					id["pants"] = KURTA_BOTTOMS[rng.randi_range(0, KURTA_BOTTOMS.size() - 1)]
+				W_LUNGI:
+					id["shirt"] = KURTA_TOPS[rng.randi_range(0, KURTA_TOPS.size() - 1)]
+					id["pants"] = LUNGI_COLORS[rng.randi_range(0, LUNGI_COLORS.size() - 1)]
+				W_SAREE:
+					id["pants"] = SAREE_COLORS[rng.randi_range(0, SAREE_COLORS.size() - 1)]
+					id["shirt"] = BLOUSE_DARKS[rng.randi_range(0, BLOUSE_DARKS.size() - 1)]
 
 
 ## Apply a full identity: palette tint (authored hair recolors to the
@@ -530,9 +616,11 @@ static func identity(seed: int) -> Dictionary:
 ## bald. Authored-hair rigs (the female walkers) keep their modeled
 ## hair: their bones ride tiny authoring units (issue #82), so
 ## bone-space accessories render misplaced — recolor + outfit + body
-## slots carry their variety instead.
+## slots carry their variety instead. Wardrobe meshes (issue #134)
+## attach holder-fixed in world units, so they fit every rig alike.
 func dress(holder: Node3D, id: Dictionary) -> void:
 	tint(holder, id["shirt"], id["pants"], id["skin"], id["hair"])
+	_wardrobe(holder, id)
 	if _has_authored_hair(holder):
 		return
 	var kit := _head_kit(holder)
@@ -542,6 +630,73 @@ func dress(holder: Node3D, id: Dictionary) -> void:
 		_attach_hair(kit, id)
 	if int(id["headwear"]) > 0:
 		_attach_headwear(kit, id)
+
+
+## Wardrobe meshes (issue #134): long kurta skirt, wrapped lungi,
+## saree skirt + pallu, porter head-load bundle. All holder-fixed in
+## world units off the rendered height (the pattern _rider_gear uses,
+## so tiny-authoring-bone female rigs are dressed just as correctly
+## as the universal male) and all procedural primitives.
+func _wardrobe(holder: Node3D, id: Dictionary) -> void:
+	if holder.get_child_count() == 0:
+		return
+	var model: Node3D = holder.get_child(0)
+	var h := _visual_height(model) * model.scale.y
+	if h <= 0.1:
+		return
+	var gear := Node3D.new()
+	holder.add_child(gear)
+	match int(id.get("outfit", W_WESTERN)):
+		W_KURTA:
+			# Kurta/kameez: loose tunic skirt from waist to the knees.
+			var skirt := CylinderMesh.new()
+			skirt.top_radius = 0.085 * h
+			skirt.bottom_radius = 0.125 * h
+			skirt.height = 0.27 * h
+			_held_mesh(gear, skirt, _solid(id["shirt"]),
+					Transform3D(Basis(), Vector3(0.0, 0.40 * h, 0.0)))
+		W_LUNGI:
+			# Lungi: wrapped cloth from waist to the ankles.
+			var wrap := CylinderMesh.new()
+			wrap.top_radius = 0.088 * h
+			wrap.bottom_radius = 0.105 * h
+			wrap.height = 0.50 * h
+			_held_mesh(gear, wrap, _solid(id["pants"]),
+					Transform3D(Basis(), Vector3(0.0, 0.30 * h, 0.0)))
+		W_SAREE:
+			# Saree: fitted-ankle skirt in the saree fabric, plus the
+			# pallu — a long drape from the right hip up over the left
+			# shoulder, so the silhouette reads at gameplay scale.
+			var petticoat := CylinderMesh.new()
+			petticoat.top_radius = 0.078 * h
+			petticoat.bottom_radius = 0.098 * h
+			petticoat.height = 0.50 * h
+			_held_mesh(gear, petticoat, _solid(id["pants"]),
+					Transform3D(Basis(), Vector3(0.0, 0.30 * h, 0.0)))
+			var pallu := BoxMesh.new()
+			pallu.size = Vector3(0.13 * h, 0.62 * h, 0.02 * h)
+			var xf := Transform3D(Basis(Vector3(0.0, 0.0, 1.0), 0.55)
+					* Basis(Vector3.UP, 0.5), Vector3(0.0, 0.56 * h, 0.0))
+			_held_mesh(gear, pallu, _solid(id["pants"]), xf)
+	if int(id.get("role", 0)) == 1:
+		# Porter head-load: a cloth-wrapped bundle balanced on a ring, in
+		# world units off the rendered height (the same holder-fixed
+		# pattern as the skirts — head-bone space proved unreliable for
+		# this offset, the wardrobe gate measures the result instead).
+		var bundle := SphereMesh.new()
+		bundle.radius = 0.055 * h
+		bundle.height = 0.11 * h
+		_held_mesh(gear, bundle, _solid(BUNDLE_CLOTH),
+				Transform3D(Basis().scaled(Vector3(1.15, 0.62, 1.15)),
+						Vector3(0.0, 0.975 * h, 0.0)))
+		var ring := TorusMesh.new()
+		ring.inner_radius = 0.033 * h
+		ring.outer_radius = 0.046 * h
+		ring.rings = 36
+		ring.ring_segments = 8
+		_held_mesh(gear, ring, _solid(BUNDLE_CLOTH),
+				Transform3D(Basis().scaled(Vector3(1.0, 0.5, 1.0)),
+						Vector3(0.0, 0.925 * h, 0.0)))
 
 
 func _has_authored_hair(holder: Node3D) -> bool:
