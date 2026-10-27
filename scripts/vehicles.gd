@@ -42,6 +42,10 @@ const VAN_WHEELS := [
 	{"pos": Vector3(-1.0, 0.55, 1.75), "r": 0.55, "w": 0.36, "steer": false},
 	{"pos": Vector3(1.0, 0.55, 1.75), "r": 0.55, "w": 0.36, "steer": false},
 ]
+const SCOOTER_WHEELS := [
+	{"pos": Vector3(0, 0.30, -0.95), "r": 0.30, "w": 0.14, "steer": true},
+	{"pos": Vector3(0, 0.30, 0.95), "r": 0.30, "w": 0.16, "steer": false},
+]
 
 
 ## ---------------------------------------------------------------- bodies
@@ -101,6 +105,26 @@ static func build_van_body(b: MeshTools, paint: Color) -> void:
 	_panel(b, Vector3(0.34, 0.16, 0.07), Vector3(0.72, 0.85, -2.33), LAMP)
 	_panel(b, Vector3(0.28, 0.16, 0.07), Vector3(-0.88, 1.0, 2.06), TAIL)
 	_panel(b, Vector3(0.28, 0.16, 0.07), Vector3(0.88, 1.0, 2.06), TAIL)
+
+
+static func build_scooter_body(b: MeshTools, paint: Color) -> void:
+	## Issue #98: step-through two-wheeler — floorboard, front apron,
+	## under-seat body, bench seat, rear rack, raked steering column with
+	## handlebar and a small windscreen. Original design, no badges.
+	_panel(b, Vector3(0.5, 0.08, 0.65), Vector3(0, 0.36, 0.18), FRAME)  # floorboard
+	_panel(b, Vector3(0.58, 0.5, 0.42), Vector3(0, 0.62, -0.52), paint)  # front apron
+	_panel(b, Vector3(0.5, 0.4, 0.06), Vector3(0, 0.55, -0.72), paint, 0.35)  # leg shield
+	_panel(b, Vector3(0.52, 0.34, 0.95), Vector3(0, 0.56, 0.42), paint)  # under-seat body
+	_panel(b, Vector3(0.42, 0.12, 0.7), Vector3(0, 0.8, 0.32), SEAT)  # bench seat
+	_panel(b, Vector3(0.46, 0.05, 0.4), Vector3(0, 0.74, 0.92), TRIM)  # rear rack
+	_panel(b, Vector3(0.34, 0.08, 0.7), Vector3(0, 0.63, -0.95), paint)  # front fender
+	b.add_mesh(_cyl_mesh(0.045, 0.62, 8), Transform3D(Basis(Vector3(1, 0, 0), -0.28), Vector3(0, 0.85, -0.6)), TRIM)  # steering column
+	_cyl_x(b, 0.035, 0.95, Vector3(0, 1.1, -0.68), TRIM)  # handlebar
+	_cyl_x(b, 0.05, 0.16, Vector3(-0.48, 1.1, -0.68), FRAME)  # grips
+	_cyl_x(b, 0.05, 0.16, Vector3(0.48, 1.1, -0.68), FRAME)
+	_panel(b, Vector3(0.5, 0.35, 0.05), Vector3(0, 1.22, -0.74), GLASS, 0.22)  # windscreen
+	_cyl_z(b, 0.11, 0.08, Vector3(0, 1.0, -0.84), LAMP)  # headlamp
+	_cyl_z(b, 0.07, 0.06, Vector3(0, 0.6, 0.92), TAIL)  # taillight
 
 
 ## ---------------------------------------------------------------- wheels

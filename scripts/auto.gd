@@ -6,6 +6,7 @@ const KINDS := {
 	"auto": {"max_speed": 26.0, "accel": 13.0, "turn": 1.9},
 	"car": {"max_speed": 34.0, "accel": 16.0, "turn": 1.55},
 	"van": {"max_speed": 21.0, "accel": 9.0, "turn": 1.3},
+	"scooter": {"max_speed": 38.0, "accel": 18.0, "turn": 2.7},
 }
 const MeshTools := preload("res://scripts/meshtools.gd")
 const Vehicles := preload("res://scripts/vehicles.gd")
@@ -43,6 +44,8 @@ func setup(pos: Vector3, heading: float, kind := "auto") -> void:
 			_build_car()
 		"van":
 			_build_van()
+		"scooter":
+			_build_scooter()
 		_:
 			_build_auto()
 	ShadowBlob.attach(self, 1.6, 0.07)
@@ -76,6 +79,18 @@ func _build_van() -> void:
 	for spec in Vehicles.VAN_WHEELS:
 		_add_wheel(spec)
 	_add_collision(Vector3(2.5, 3.0, 4.95), Vector3(0, 1.5, 0))
+
+
+func _build_scooter() -> void:
+	## Issue #98: fast, nimble step-through — quickest top speed and the
+	## sharpest steering of the fleet, sized for threading traffic.
+	var b := MeshTools.new()
+	Vehicles.build_scooter_body(b, _random_paint())
+	_body_mesh = _body_node(b)
+	add_child(_body_mesh)
+	for spec in Vehicles.SCOOTER_WHEELS:
+		_add_wheel(spec)
+	_add_collision(Vector3(1.2, 1.6, 2.7), Vector3(0, 0.8, 0))
 
 
 func _random_paint() -> Color:

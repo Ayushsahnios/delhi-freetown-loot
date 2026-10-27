@@ -1067,6 +1067,8 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 
 	var spots := [
 		[Vector3(ROAD / 2.0 + 1.5, 1.0, 2.0 * PITCH - BLOCK - 12.0), 0.0, "auto"],
+		[Vector3(ROAD / 2.0 + 1.2, 1.0, 2.0 * PITCH - BLOCK + 6.0), 0.0, "scooter"],
+		[Vector3(-ROAD / 2.0 - 1.2, 1.0, 2.0 * PITCH - BLOCK - 10.0), PI, "scooter"],
 		[Vector3(-ROAD / 2.0 - 1.5, 1.0, -PITCH + 6.0), PI, "car"],
 		[Vector3(3.0 * PITCH - BLOCK, 1.0, ROAD / 2.0 + 1.5), PI / 2.0, "car"],
 		[Vector3(-2.0 * PITCH + 8.0, 1.0, ROAD / 2.0 + 1.5), PI / 2.0, "van"],
