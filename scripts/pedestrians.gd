@@ -38,19 +38,6 @@ const MODELS := [
 	Chars.FEMALE_A, Chars.FEMALE_B, Chars.FEMALE_C, Chars.FEMALE_D, Chars.MALE,
 ]
 
-const SKIN_TONES := [
-	Color(0.79, 0.57, 0.40), Color(0.72, 0.50, 0.33),
-	Color(0.64, 0.44, 0.29), Color(0.55, 0.38, 0.26),
-]
-const SHIRTS := [
-	Color(0.95, 0.55, 0.12), Color(0.12, 0.55, 0.55), Color(0.85, 0.20, 0.45),
-	Color(0.92, 0.90, 0.86), Color(0.16, 0.30, 0.60), Color(0.45, 0.50, 0.25),
-]
-const PANTS := [
-	Color(0.14, 0.18, 0.30), Color(0.30, 0.30, 0.34), Color(0.32, 0.24, 0.18),
-	Color(0.10, 0.10, 0.12), Color(0.62, 0.55, 0.40),
-]
-
 var _peds: Array[Dictionary] = []
 var _player: Node3D = null
 var _rng := RandomNumberGenerator.new()
@@ -386,26 +373,26 @@ func _new_ped(zone: bool) -> Dictionary:
 		"along_z": true, "road": 0.0, "t": 0.0, "dir": 1,
 		"speed": 3.0, "panic": 0.0, "panic_dir": Vector3.ZERO,
 		"rejoin": 0.0, "cd": 0.0, "phase": _rng.randf() * TAU,
-		"zone": zone, "node": null, "ap": null, "anims": {},
+		"zone": zone, "node": null, "ap": null, "anims": {}, "id": {},
 	}
 
 
 func _dress(v: Dictionary) -> void:
-	## One rigged walker: random model from the CC0 set, random palette.
-	## The model's own AnimationPlayer drives the walk. A reroll keeps the
-	## same body from spawning twice in a row, so clones rarely stand
-	## shoulder to shoulder (acceptance: crowd visibly varied).
+	## One rigged walker with its own identity seed (issue #120): body,
+	## hair, headwear and outfit all roll from one number, so a walker
+	## keeps its look across recycles while no two dress alike. A reroll
+	## keeps the same body from spawning twice in a row (acceptance:
+	## crowd visibly varied).
 	var pick := _rng.randi_range(0, MODELS.size() - 1)
 	if pick == _last_model and MODELS.size() > 1:
 		pick = (pick + 1 + _rng.randi_range(0, MODELS.size() - 2)) % MODELS.size()
 	_last_model = pick
 	var path: String = MODELS[pick]
-	var node := _chars.spawn(path, PED_HEIGHT)
+	var id: Dictionary = Chars.identity(_rng.randi())
+	v["id"] = id
+	var node := _chars.spawn(path, PED_HEIGHT * float(id["height"]))
 	ShadowBlob.attach(node, 0.48)
-	var skin: Color = SKIN_TONES[_rng.randi_range(0, SKIN_TONES.size() - 1)]
-	var shirt: Color = SHIRTS[_rng.randi_range(0, SHIRTS.size() - 1)]
-	var pants: Color = PANTS[_rng.randi_range(0, PANTS.size() - 1)]
-	_chars.tint(node, shirt, pants, skin)
+	_chars.dress(node, id)
 	add_child(node)
 	node.visible = false
 	v.node = node
