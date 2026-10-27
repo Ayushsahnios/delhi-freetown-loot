@@ -264,6 +264,7 @@ func _auto_mesh() -> ArrayMesh:
 	## animate separately), one surface per color.
 	var b := MeshTools.new()
 	Vehicles.build_rickshaw_body(b)
+	Vehicles.add_driver(b, "auto")
 	for spec in Vehicles.RICKSHAW_WHEELS:
 		Vehicles.add_merged_wheel(b, spec)
 	return b.build_mesh()
@@ -272,6 +273,7 @@ func _auto_mesh() -> ArrayMesh:
 func _car_mesh(paint: Color) -> ArrayMesh:
 	var b := MeshTools.new()
 	Vehicles.build_hatchback_body(b, paint)
+	Vehicles.add_driver(b, "car")
 	for spec in Vehicles.HATCH_WHEELS:
 		Vehicles.add_merged_wheel(b, spec)
 	return b.build_mesh()
@@ -280,6 +282,7 @@ func _car_mesh(paint: Color) -> ArrayMesh:
 func _scooter_mesh(paint: Color) -> ArrayMesh:
 	var b := MeshTools.new()
 	Vehicles.build_scooter_body(b, paint)
+	Vehicles.add_driver(b, "scooter")
 	for spec in Vehicles.SCOOTER_WHEELS:
 		Vehicles.add_merged_wheel(b, spec)
 	return b.build_mesh()

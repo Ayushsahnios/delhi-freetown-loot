@@ -24,6 +24,21 @@ const LAMP := Color(0.98, 0.93, 0.70)
 const TAIL := Color(0.85, 0.10, 0.10)
 const SEAT := Color(0.30, 0.20, 0.14)
 
+## Driver figures + decor (issue #125): skin/shirt tones for low-poly
+## drivers, marigold garland + fringe colors for rickshaw personality.
+const SKIN_A := Color(0.66, 0.46, 0.31)
+const SKIN_B := Color(0.55, 0.38, 0.26)
+const SHIRT_A := Color(0.90, 0.88, 0.80)
+const SHIRT_B := Color(0.55, 0.15, 0.14)
+const SHIRT_C := Color(0.25, 0.45, 0.30)
+const CAP := Color(0.15, 0.15, 0.17)
+const DASH := Color(0.16, 0.16, 0.18)
+const SEAT_DARK := Color(0.22, 0.20, 0.19)
+const MARIGOLD := Color(0.96, 0.63, 0.08)
+const FRINGE_RED := Color(0.80, 0.15, 0.12)
+const FRINGE_GREEN := Color(0.15, 0.45, 0.25)
+const PLATE := Color(0.95, 0.93, 0.88)
+
 ## Wheel layout per vehicle: position, radius, width, steers (front).
 const RICKSHAW_WHEELS := [
 	{"pos": Vector3(0, 0.55, -1.62), "r": 0.55, "w": 0.32, "steer": true},
@@ -50,9 +65,11 @@ const SCOOTER_WHEELS := [
 
 ## ---------------------------------------------------------------- bodies
 
-static func build_rickshaw_body(b: MeshTools) -> void:
+static func build_rickshaw_body(b: MeshTools, decor := true) -> void:
 	## Green-and-yellow three-wheeler: open sides, passenger bench, canvas
 	## canopy, front cowl with handlebar steering and one front wheel.
+	## Issue #125: optional personality decor — canopy fringe, marigold
+	## garland, painted pinstripes, name plate, mudflaps, nose ornament.
 	_panel(b, Vector3(1.8, 0.16, 3.0), Vector3(0, 0.62, 0.1), FRAME)  # floor
 	_panel(b, Vector3(0.07, 0.85, 2.7), Vector3(-0.9, 1.05, 0.3), RICK_GREEN)  # side panels
 	_panel(b, Vector3(0.07, 0.85, 2.7), Vector3(0.9, 1.05, 0.3), RICK_GREEN)
@@ -74,17 +91,24 @@ static func build_rickshaw_body(b: MeshTools) -> void:
 	_cyl_x(b, 0.055, 0.2, Vector3(-0.55, 1.76, -1.66), FRAME)  # grips
 	_cyl_x(b, 0.055, 0.2, Vector3(0.55, 1.76, -1.66), FRAME)
 	_cyl_z(b, 0.13, 0.09, Vector3(0, 1.08, -2.1), LAMP)  # headlamp
+	if decor:
+		add_rickshaw_decor(b)
 
 
-static func build_hatchback_body(b: MeshTools, paint: Color) -> void:
+static func build_hatchback_body(b: MeshTools, paint: Color, interior := true) -> void:
 	## Small city hatchback: one-box silhouette, raked windshield, hatch
-	## rear glass, bumpers, grille, headlights and taillights.
+	## rear glass, bumpers, grille, headlights and taillights. Issue #125:
+	## the front door windows stay open (B-pillar + rear glass) so the
+	## driver and interior read at street level; dash, wheel and seats
+	## behind the opening.
 	_panel(b, Vector3(1.9, 0.66, 3.9), Vector3(0, 0.73, 0), paint)  # body
 	_panel(b, Vector3(1.72, 0.6, 2.05), Vector3(0, 1.4, 0.3), paint)  # cabin
 	_panel(b, Vector3(1.56, 0.58, 0.06), Vector3(0, 1.33, -0.74), GLASS, 0.4)  # windshield
 	_panel(b, Vector3(1.5, 0.5, 0.06), Vector3(0, 1.36, 1.34), GLASS, -0.45)  # hatch glass
-	_panel(b, Vector3(0.05, 0.42, 1.7), Vector3(-0.865, 1.42, 0.3), GLASS)  # side glass
-	_panel(b, Vector3(0.05, 0.42, 1.7), Vector3(0.865, 1.42, 0.3), GLASS)
+	_panel(b, Vector3(0.05, 0.42, 1.05), Vector3(-0.865, 1.42, 0.75), GLASS)  # side glass (rear)
+	_panel(b, Vector3(0.05, 0.42, 1.05), Vector3(0.865, 1.42, 0.75), GLASS)
+	_panel(b, Vector3(0.05, 0.42, 0.07), Vector3(-0.865, 1.42, 0.19), TRIM)  # B-pillars
+	_panel(b, Vector3(0.05, 0.42, 0.07), Vector3(0.865, 1.42, 0.19), TRIM)
 	_panel(b, Vector3(1.94, 0.28, 0.28), Vector3(0, 0.44, -1.97), TRIM)  # bumpers
 	_panel(b, Vector3(1.94, 0.28, 0.28), Vector3(0, 0.44, 1.97), TRIM)
 	_panel(b, Vector3(0.85, 0.13, 0.06), Vector3(0, 0.62, -1.96), FRAME)  # grille
@@ -92,10 +116,13 @@ static func build_hatchback_body(b: MeshTools, paint: Color) -> void:
 	_panel(b, Vector3(0.36, 0.16, 0.07), Vector3(0.6, 0.84, -1.955), LAMP)
 	_panel(b, Vector3(0.3, 0.14, 0.07), Vector3(-0.58, 0.92, 1.955), TAIL)  # taillights
 	_panel(b, Vector3(0.3, 0.14, 0.07), Vector3(0.58, 0.92, 1.955), TAIL)
+	if interior:
+		add_car_interior(b)
 
 
-static func build_van_body(b: MeshTools, paint: Color) -> void:
-	## Delivery van: painted cab up front, tall cargo box behind.
+static func build_van_body(b: MeshTools, paint: Color, interior := true) -> void:
+	## Delivery van: painted cab up front, tall cargo box behind. Issue
+	## #125: cab side windows + interior, so the leaning driver reads.
 	_panel(b, Vector3(2.15, 1.35, 1.35), Vector3(0, 1.3, -1.62), paint)  # cab
 	_panel(b, Vector3(1.9, 0.6, 0.06), Vector3(0, 1.68, -2.3), GLASS, 0.22)  # windshield
 	_panel(b, Vector3(2.3, 2.05, 3.0), Vector3(0, 1.53, 0.55), CARGO)  # cargo box
@@ -105,6 +132,10 @@ static func build_van_body(b: MeshTools, paint: Color) -> void:
 	_panel(b, Vector3(0.34, 0.16, 0.07), Vector3(0.72, 0.85, -2.33), LAMP)
 	_panel(b, Vector3(0.28, 0.16, 0.07), Vector3(-0.88, 1.0, 2.06), TAIL)
 	_panel(b, Vector3(0.28, 0.16, 0.07), Vector3(0.88, 1.0, 2.06), TAIL)
+	_panel(b, Vector3(0.03, 0.34, 0.55), Vector3(-1.08, 1.95, -1.62), GLASS)  # cab windows
+	_panel(b, Vector3(0.03, 0.34, 0.55), Vector3(1.08, 1.95, -1.62), GLASS)
+	if interior:
+		add_van_interior(b)
 
 
 static func build_scooter_body(b: MeshTools, paint: Color) -> void:
@@ -125,6 +156,112 @@ static func build_scooter_body(b: MeshTools, paint: Color) -> void:
 	_panel(b, Vector3(0.5, 0.35, 0.05), Vector3(0, 1.22, -0.74), GLASS, 0.22)  # windscreen
 	_cyl_z(b, 0.11, 0.08, Vector3(0, 1.0, -0.84), LAMP)  # headlamp
 	_cyl_z(b, 0.07, 0.06, Vector3(0, 0.6, 0.92), TAIL)  # taillight
+
+
+## ---------------------------------------------------------------- drivers + decor
+
+## Ambient driver figure for one vehicle kind (issue #125): low-poly
+## head + torso (+ arms where the pose shows) at that vehicle's controls.
+## Only traffic calls this — the player IS the driver of a taken vehicle.
+static func add_driver(b: MeshTools, kind: String) -> void:
+	match kind:
+		"auto":
+			_rick_driver(b)
+		"car":
+			_car_driver(b)
+		"van":
+			_van_driver(b)
+		"scooter":
+			_scooter_rider(b)
+
+
+static func _rick_driver(b: MeshTools) -> void:
+	## Seated at the handlebar: white kurta, dark cap, arms reaching the
+	## grips. Legs hide behind the cowl and bulkhead.
+	_panel(b, Vector3(0.44, 0.5, 0.26), Vector3(0, 1.05, -0.95), SHIRT_A)
+	_panel(b, Vector3(0.2, 0.2, 0.2), Vector3(0, 1.42, -0.95), SKIN_B)
+	_panel(b, Vector3(0.24, 0.08, 0.24), Vector3(0, 1.55, -0.95), CAP)
+	_panel(b, Vector3(0.09, 0.09, 0.42), Vector3(-0.2, 1.3, -1.15), SHIRT_A, 1.1)
+	_panel(b, Vector3(0.09, 0.09, 0.42), Vector3(0.2, 1.3, -1.15), SHIRT_A, 1.1)
+
+
+static func _car_driver(b: MeshTools) -> void:
+	## Driver in the open front-door window (left), passenger on the
+	## right — heads above the sill line, shoulders below the roof.
+	_panel(b, Vector3(0.19, 0.19, 0.19), Vector3(-0.5, 1.52, -0.12), SKIN_A)
+	_panel(b, Vector3(0.4, 0.26, 0.22), Vector3(-0.5, 1.3, -0.12), SHIRT_B)
+	_panel(b, Vector3(0.19, 0.19, 0.19), Vector3(0.5, 1.52, -0.12), SKIN_B)
+	_panel(b, Vector3(0.4, 0.26, 0.22), Vector3(0.5, 1.3, -0.12), SHIRT_C)
+
+
+static func _van_driver(b: MeshTools) -> void:
+	## Leaning out of the cab window — head half-proud of the glass,
+	## forearm on the sill (truck-driver style).
+	_panel(b, Vector3(0.19, 0.19, 0.19), Vector3(-1.09, 1.95, -1.62), SKIN_B)
+	_panel(b, Vector3(0.08, 0.08, 0.38), Vector3(-1.08, 1.79, -1.45), SHIRT_A)
+
+
+static func _scooter_rider(b: MeshTools) -> void:
+	## Astride the bench: torso, cap, thighs along the board, arms to the
+	## handlebar.
+	_panel(b, Vector3(0.34, 0.45, 0.22), Vector3(0, 1.08, 0.3), SHIRT_B)
+	_panel(b, Vector3(0.17, 0.17, 0.17), Vector3(0, 1.4, 0.3), SKIN_A)
+	_panel(b, Vector3(0.2, 0.07, 0.2), Vector3(0, 1.51, 0.3), CAP)
+	_panel(b, Vector3(0.13, 0.1, 0.42), Vector3(-0.15, 0.9, 0.02), TRIM)
+	_panel(b, Vector3(0.13, 0.1, 0.42), Vector3(0.15, 0.9, 0.02), TRIM)
+	_panel(b, Vector3(0.08, 0.08, 0.4), Vector3(-0.2, 1.15, -0.35), SHIRT_B, 0.9)
+	_panel(b, Vector3(0.08, 0.08, 0.4), Vector3(0.2, 1.15, -0.35), SHIRT_B, 0.9)
+
+
+## Rickshaw personality (issue #125): marigold garland across the
+## windshield, canopy fringe, painted pinstripe, rear name plate,
+## striped mudflaps and a nose ornament. Original decorations — no
+## real liveries or slogans.
+static func add_rickshaw_decor(b: MeshTools) -> void:
+	var fringe := [MARIGOLD, FRINGE_RED, FRINGE_GREEN]
+	var i := 0
+	for x in range(-3, 4):
+		_panel(b, Vector3(0.07, 0.16, 0.05), Vector3(x * 0.25, 1.93, -1.16), fringe[i % 3])
+		i += 1
+	i = 0
+	for z in range(-3, 7):
+		_panel(b, Vector3(0.05, 0.16, 0.07), Vector3(-0.94, 1.93, z * 0.25), fringe[i % 3])
+		_panel(b, Vector3(0.05, 0.16, 0.07), Vector3(0.94, 1.93, z * 0.25), fringe[i % 3])
+		i += 1
+	for x in range(-4, 5):
+		_panel(b, Vector3(0.06, 0.06, 0.06), Vector3(x * 0.15, 2.04, -1.1),
+				MARIGOLD if x % 2 == 0 else RICK_YELLOW)
+	_panel(b, Vector3(0.02, 0.06, 2.5), Vector3(-0.945, 1.02, 0.3), RICK_YELLOW)
+	_panel(b, Vector3(0.02, 0.06, 2.5), Vector3(0.945, 1.02, 0.3), RICK_YELLOW)
+	_panel(b, Vector3(0.5, 0.16, 0.04), Vector3(0, 1.3, 1.775), PLATE)
+	for x in [-1.0, 1.0]:
+		_panel(b, Vector3(0.3, 0.22, 0.04), Vector3(x, 0.35, 1.72), CAP)
+		_panel(b, Vector3(0.3, 0.05, 0.045), Vector3(x, 0.3, 1.72), RICK_YELLOW)
+	_panel(b, Vector3(0.08, 0.08, 0.08), Vector3(0, 1.0, -2.24), HUB)
+
+
+## Basic car interior (issue #125): dash, tilted steering wheel, two
+## front seats and a rear bench — visible through the open door windows.
+static func add_car_interior(b: MeshTools) -> void:
+	_panel(b, Vector3(1.5, 0.18, 0.3), Vector3(0, 1.12, -0.52), DASH)
+	b.add_mesh(_cyl_mesh(0.16, 0.03, 12),
+			Transform3D(Basis(Vector3(1, 0, 0), 1.15), Vector3(-0.45, 1.28, -0.38)),
+			Color(0.12, 0.12, 0.13))
+	for x in [-0.45, 0.45]:
+		_panel(b, Vector3(0.42, 0.12, 0.45), Vector3(x, 0.98, -0.1), SEAT_DARK)
+		_panel(b, Vector3(0.42, 0.5, 0.12), Vector3(x, 1.2, 0.12), SEAT_DARK)
+	_panel(b, Vector3(1.4, 0.12, 0.5), Vector3(0, 0.98, 0.85), SEAT_DARK)
+	_panel(b, Vector3(1.4, 0.48, 0.12), Vector3(0, 1.18, 1.05), SEAT_DARK)
+
+
+## Van cab interior (issue #125): single seat, dash, steering wheel.
+static func add_van_interior(b: MeshTools) -> void:
+	_panel(b, Vector3(2.0, 0.2, 0.35), Vector3(0, 1.32, -2.02), DASH)
+	b.add_mesh(_cyl_mesh(0.16, 0.03, 12),
+			Transform3D(Basis(Vector3(1, 0, 0), 1.15), Vector3(-0.5, 1.5, -1.88)),
+			Color(0.12, 0.12, 0.13))
+	_panel(b, Vector3(0.5, 0.14, 0.5), Vector3(-0.5, 1.28, -1.45), SEAT_DARK)
+	_panel(b, Vector3(0.5, 0.6, 0.12), Vector3(-0.5, 1.6, -1.2), SEAT_DARK)
 
 
 ## ---------------------------------------------------------------- wheels
