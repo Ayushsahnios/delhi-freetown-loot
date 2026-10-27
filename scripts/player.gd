@@ -6,7 +6,7 @@ extends CharacterBody3D
 const WALK_SPEED := 6.5
 const RUN_SPEED := 11.5
 const FALL_SAFE_SPEED := 14.0
-const MODEL_HEIGHT := 5.9
+const MODEL_HEIGHT := 1.78
 
 const Chars := preload("res://scripts/characters.gd")
 const ShadowBlob := preload("res://scripts/shadowblob.gd")
@@ -66,10 +66,10 @@ func _ensure_collision() -> void:
 	_collision_added = true
 	var col := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.9
-	capsule.height = 6.0
+	capsule.radius = 0.35
+	capsule.height = 1.75
 	col.shape = capsule
-	col.position.y = 3.0
+	col.position.y = 0.875
 	add_child(col)
 
 
