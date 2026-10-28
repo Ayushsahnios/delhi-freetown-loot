@@ -937,6 +937,50 @@ func _attach_face_held(holder: Node3D, id: Dictionary) -> void:
 		brow.size = Vector3(0.032 * h, 0.007 * h, 0.009 * h)
 		_held_mesh(gear, brow, _solid(shade.darkened(0.15)),
 				Transform3D(Basis(), Vector3(side_b * h, 0.926 * h, -0.045 * h)))
+	# Issue 159: sculpted shading decals — sockets ring the sclera
+	# band, nose-side shade, lip tone, cheek warmth, under-jaw shadow.
+	var skin: Color = id["skin"]
+	var cols := _sculpt_colors(skin)
+	for side_s in [-0.024, 0.024]:
+		var socket := BoxMesh.new()
+		socket.size = Vector3(0.045 * h, 0.026 * h, 0.006 * h)
+		_held_mesh(gear, socket, _solid(cols[0]),
+				Transform3D(Basis(),
+						Vector3(side_s * h, 0.903 * h, -0.046 * h)))
+		var cheek := BoxMesh.new()
+		cheek.size = Vector3(0.024 * h, 0.020 * h, 0.006 * h)
+		_held_mesh(gear, cheek, _solid(cols[3]),
+				Transform3D(Basis(),
+						Vector3(side_s * 1.6 * h, 0.893 * h, -0.043 * h)))
+	for side_n in [-0.0075, 0.0075]:
+		var nose := BoxMesh.new()
+		nose.size = Vector3(0.009 * h, 0.042 * h, 0.006 * h)
+		_held_mesh(gear, nose, _solid(cols[1]),
+				Transform3D(Basis(),
+						Vector3(side_n * h, 0.888 * h, -0.049 * h)))
+	var lip := BoxMesh.new()
+	lip.size = Vector3(0.032 * h, 0.012 * h, 0.006 * h)
+	_held_mesh(gear, lip, _solid(cols[2]),
+			Transform3D(Basis(), Vector3(0.0, 0.878 * h, -0.050 * h)))
+	var jaw := BoxMesh.new()
+	jaw.size = Vector3(0.084 * h, 0.026 * h, 0.006 * h)
+	_held_mesh(gear, jaw, _solid(cols[4]),
+			Transform3D(Basis(Vector3(1.0, 0.0, 0.0), -0.35),
+				Vector3(0.0, 0.866 * h, -0.040 * h)))
+
+
+## Sculpted-face shading palette (issue 159): the baked-AO decal
+## vocabulary — recessed sockets, nose-side shade, lip tone distinct
+## from skin, cheek warmth, under-jaw shadow — derived from each
+## walker's own skin tone so every palette shades coherently.
+func _sculpt_colors(skin: Color) -> Array[Color]:
+	return [
+		skin.darkened(0.24),  # sockets
+		skin.darkened(0.16),  # nose sides
+		Color(skin.r * 0.92, skin.g * 0.66, skin.b * 0.60),  # lips
+		skin.lerp(Color(0.82, 0.48, 0.38), 0.18),  # cheek warmth
+		skin.darkened(0.20),  # under-jaw shadow
+	]
 
 
 func _has_authored_hair(holder: Node3D) -> bool:
@@ -974,6 +1018,37 @@ func _attach_face(kit: Dictionary, id: Dictionary) -> void:
 		brow.size = Vector3(0.15 * u, 0.03 * u, 0.035 * u)
 		_bone_mesh(att, head_xf, brow, _solid(shade.darkened(0.15)),
 				Transform3D(Basis(), Vector3(side_b * u, 0.53 * u, 0.495 * u)))
+	# Issue 159: sculpted shading decals on the bone-attached path —
+	# sockets ring the sclera band, nose-side shade, lip tone, cheek
+	# warmth, under-jaw shadow.
+	var skin: Color = id["skin"]
+	var cols := _sculpt_colors(skin)
+	for side_s in [-0.105, 0.105]:
+		var socket := BoxMesh.new()
+		socket.size = Vector3(0.19 * u, 0.12 * u, 0.02 * u)
+		_bone_mesh(att, head_xf, socket, _solid(cols[0]),
+				Transform3D(Basis(),
+						Vector3(side_s * u, 0.41 * u, 0.47 * u)))
+		var cheek := BoxMesh.new()
+		cheek.size = Vector3(0.10 * u, 0.09 * u, 0.02 * u)
+		_bone_mesh(att, head_xf, cheek, _solid(cols[3]),
+				Transform3D(Basis(),
+						Vector3(side_s * 1.4 * u, 0.30 * u, 0.455 * u)))
+	for side_n in [-0.03, 0.03]:
+		var nose := BoxMesh.new()
+		nose.size = Vector3(0.035 * u, 0.16 * u, 0.02 * u)
+		_bone_mesh(att, head_xf, nose, _solid(cols[1]),
+				Transform3D(Basis(),
+						Vector3(side_n * u, 0.31 * u, 0.49 * u)))
+	var lip := BoxMesh.new()
+	lip.size = Vector3(0.13 * u, 0.045 * u, 0.02 * u)
+	_bone_mesh(att, head_xf, lip, _solid(cols[2]),
+			Transform3D(Basis(), Vector3(0.0, 0.17 * u, 0.49 * u)))
+	var jaw := BoxMesh.new()
+	jaw.size = Vector3(0.34 * u, 0.10 * u, 0.02 * u)
+	_bone_mesh(att, head_xf, jaw, _solid(cols[4]),
+			Transform3D(Basis(Vector3(1.0, 0.0, 0.0), -0.35),
+				Vector3(0.0, 0.05 * u, 0.43 * u)))
 
 
 func _attach_hair(kit: Dictionary, id: Dictionary) -> void:
