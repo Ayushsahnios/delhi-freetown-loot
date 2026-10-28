@@ -6,19 +6,38 @@ extends RefCounted
 
 const PBRTextures := preload("res://scripts/pbr_textures.gd")
 
+## Material finish steps (issue #166): matte keeps the full weathering
+## pass, satin halves the relief, gloss drops it entirely for clean
+## paint, glass and chrome — the matte-vs-gloss read that separates a
+## toy from a vehicle at street distance.
+const FINISH_MATTE := 0
+const FINISH_SATIN := 1
+const FINISH_GLOSS := 2
+
 static var _mat_cache := {}
 
 
-## One shared material per color for everything that asks — fewer material
-## swaps between draws. Every one carries the procedural weathering pass
-## (roughness mottle + grit normal, triplanar) so the merged city stops
-## reading as flat plastic (issue #130).
-static func shared_material(color: Color) -> StandardMaterial3D:
-	var key := color.to_html()
+## One shared material per color+finish for everything that asks — fewer
+## material swaps between draws. Matte finishes carry the procedural
+## weathering pass (roughness mottle + grit normal, triplanar) so the
+## merged city stops reading as flat plastic (issue #130).
+static func shared_material(color: Color, finish := FINISH_MATTE) -> StandardMaterial3D:
+	var key := "%s|%d" % [color.to_html(), finish]
 	if not _mat_cache.has(key):
 		var m := StandardMaterial3D.new()
 		m.albedo_color = color
-		PBRTextures.apply_weathering(m)
+		match finish:
+			FINISH_GLOSS:
+				m.roughness = 0.30
+				m.metallic = 0.10
+				m.clearcoat_enabled = true
+				m.clearcoat = 0.55
+				m.clearcoat_roughness = 0.35
+			FINISH_SATIN:
+				PBRTextures.apply_weathering(m, 0.5)
+				m.roughness = 0.62
+			_:
+				PBRTextures.apply_weathering(m)
 		_mat_cache[key] = m
 	return _mat_cache[key]
 
@@ -42,18 +61,18 @@ static func make_multimesh(mesh: PrimitiveMesh, xfs: Array) -> MultiMeshInstance
 var _buckets := {}
 
 
-func add_box(size: Vector3, center: Vector3, color: Color) -> void:
+func add_box(size: Vector3, center: Vector3, color: Color, finish := FINISH_MATTE) -> void:
 	var bm := BoxMesh.new()
 	bm.size = size
-	add_mesh(bm, Transform3D(Basis(), center), color)
+	add_mesh(bm, Transform3D(Basis(), center), color, finish)
 
 
 ## Appends one transformed primitive into this builder's color bucket.
-func add_mesh(mesh: PrimitiveMesh, xf: Transform3D, color: Color) -> void:
-	var key := color.to_html()
+func add_mesh(mesh: PrimitiveMesh, xf: Transform3D, color: Color, finish := FINISH_MATTE) -> void:
+	var key := "%s|%d" % [color.to_html(), finish]
 	var b: Dictionary = _buckets.get(key, {})
 	if b.is_empty():
-		b = {"color": color, "pos": PackedVector3Array(),
+		b = {"color": color, "finish": finish, "pos": PackedVector3Array(),
 			"nrm": PackedVector3Array(), "idx": PackedInt32Array()}
 		_buckets[key] = b
 	var arrays := mesh.surface_get_arrays(0)
@@ -92,7 +111,8 @@ func build_mesh() -> ArrayMesh:
 		arrays[Mesh.ARRAY_NORMAL] = b["nrm"]
 		arrays[Mesh.ARRAY_INDEX] = b["idx"]
 		am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		am.surface_set_material(am.get_surface_count() - 1, shared_material(b["color"]))
+		am.surface_set_material(am.get_surface_count() - 1,
+				shared_material(b["color"], b["finish"]))
 	return am
 
 

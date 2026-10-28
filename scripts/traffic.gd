@@ -8,6 +8,7 @@ extends Node
 
 const MeshTools := preload("res://scripts/meshtools.gd")
 const Vehicles := preload("res://scripts/vehicles.gd")
+const Exhaust := preload("res://scripts/exhaust.gd")
 
 const COUNT := 22
 const LANE := 2.8
@@ -29,6 +30,8 @@ var _scooter_mms: Array[MultiMesh] = []
 var _mm_used := {}
 var _mm_free := {}
 var _bumps: Array = []
+var _puffs: Node3D = null
+var _puff_t := 0.0
 
 
 func setup(world_size: float, pitch: float, road_width: float, road_count: int) -> void:
@@ -44,6 +47,10 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 		_scooter_mms.append(_new_mm(_scooter_mesh(paint)))
 	for _i in range(COUNT):
 		_vehicles.append(_spawn())
+	# Idle exhaust (issue #166): one shared puff pool for the fleet; the
+	# traffic node sits at the origin, so pool space is world space.
+	_puffs = Exhaust.new()
+	add_child(_puffs)
 
 
 func register_player(p: Node3D) -> void:
@@ -103,6 +110,27 @@ func _physics_process(delta: float) -> void:
 		elif v.t < -edge:
 			v.t = edge
 		_apply_transform(v)
+	_idle_exhaust(delta)
+
+
+func _idle_exhaust(delta: float) -> void:
+	## Idling engines smoke (issue #166): vehicles braked to a stop —
+	## usually for the player standing in their lane — puff at their
+	## tailpipes. Only near the player; the pool is small and the far
+	## side of the city is out of sight anyway.
+	_puff_t -= delta
+	if _puff_t > 0.0:
+		return
+	_puff_t = 0.55
+	for v in _vehicles:
+		if v.speed > 1.2:
+			continue
+		if _player != null and v.pos.distance_to(_player.global_position) > 70.0:
+			continue
+		var off: Vector3 = Vehicles.EXHAUST_POS.get(v.kind, Vector3.ZERO)
+		_puffs.spawn(v.pos + Basis(Vector3.UP, v.heading) * off,
+				Vector3(0.1, 0.5, 0.0),
+				0.12 if v.kind == "scooter" else 0.2, 1.5)
 
 
 func _apply_transform(v: Dictionary) -> void:
