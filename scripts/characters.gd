@@ -15,6 +15,11 @@ const FEMALE_D := "res://assets/characters/female_d.glb"
 ## seeded LivelyRig on its skeleton.
 const LIVELY := preload("res://scripts/lively.gd")
 
+## Procedural fabric grain (issue #153): garment slots get woven
+## albedo + roughness textures instead of flat single colors — the
+## texture-carried realism of the PS2-era reference.
+const Fabrics := preload("res://scripts/fabrics.gd")
+
 ## Skeleton bone spans stop short of scalp and soles — pad to full height.
 const BONE_PAD := 1.12
 
@@ -229,6 +234,9 @@ func tint(holder: Node3D, shirt: Color, pants: Color, skin: Color,
 			else:
 				var plain := shirt if role == "shirt" else pants
 				m.albedo_color = plain if role != "skin" else skin
+			# Issue #153: woven grain + matte roughness per garment kind,
+			# so the tint keeps its shade but stops reading as flat toon.
+			Fabrics.apply(m, role)
 			mesh.surface_set_material(s, m)
 			changed = true
 		if changed:
@@ -489,9 +497,9 @@ const ID_SKINS := [
 	Color(0.64, 0.44, 0.29), Color(0.55, 0.38, 0.26),
 ]
 const ID_TOPS := [
-	Color(0.95, 0.55, 0.12), Color(0.12, 0.55, 0.55), Color(0.85, 0.20, 0.45),
-	Color(0.92, 0.90, 0.86), Color(0.16, 0.30, 0.60), Color(0.45, 0.50, 0.25),
-	Color(0.88, 0.35, 0.25), Color(0.55, 0.35, 0.60), Color(0.99, 0.72, 0.30),
+	Color(0.72, 0.48, 0.18), Color(0.24, 0.45, 0.45), Color(0.60, 0.28, 0.36),
+	Color(0.92, 0.90, 0.86), Color(0.22, 0.30, 0.44), Color(0.45, 0.50, 0.25),
+	Color(0.64, 0.34, 0.26), Color(0.46, 0.36, 0.50), Color(0.78, 0.60, 0.30),
 	Color(0.20, 0.20, 0.24),
 ]
 const ID_BOTTOMS := [
@@ -528,8 +536,8 @@ const LUNGI_COLORS := [
 	Color(0.63, 0.46, 0.36), Color(0.80, 0.76, 0.66),
 ]
 const SAREE_COLORS := [
-	Color(0.95, 0.30, 0.45), Color(0.10, 0.60, 0.55), Color(0.95, 0.55, 0.15),
-	Color(0.75, 0.25, 0.55), Color(0.86, 0.76, 0.20), Color(0.20, 0.50, 0.75),
+	Color(0.68, 0.30, 0.38), Color(0.18, 0.45, 0.42), Color(0.72, 0.45, 0.18),
+	Color(0.55, 0.30, 0.45), Color(0.72, 0.63, 0.26), Color(0.30, 0.42, 0.55),
 ]
 const BLOUSE_DARKS := [
 	Color(0.26, 0.07, 0.12), Color(0.10, 0.13, 0.30), Color(0.10, 0.10, 0.11),
@@ -626,6 +634,10 @@ func dress(holder: Node3D, id: Dictionary) -> void:
 	tint(holder, id["shirt"], id["pants"], id["skin"], id["hair"])
 	_wardrobe(holder, id)
 	if _has_authored_hair(holder):
+		# Issue #153: authored-hair rigs (the female walkers) get faces
+		# too — holder-fixed in world units, since their bones ride tiny
+		# authoring units (issue #82) where bone-space parts land wrong.
+		_attach_face_held(holder, id)
 		return
 	var kit := _head_kit(holder)
 	if kit.is_empty():
@@ -702,6 +714,37 @@ func _wardrobe(holder: Node3D, id: Dictionary) -> void:
 		_held_mesh(gear, ring, _solid(BUNDLE_CLOTH),
 				Transform3D(Basis().scaled(Vector3(1.0, 0.5, 1.0)),
 						Vector3(0.0, 0.925 * h, 0.0)))
+
+
+## Female-walker faces (issue #153): the #149 vocabulary — sclera
+## band, dark pupils, hair-shade brows — but holder-fixed in world
+## units off the rendered height (the _wardrobe pattern), because the
+## authored-hair rigs keep tiny authoring bones (issue #82). Holder -Z
+## is the character's forward.
+func _attach_face_held(holder: Node3D, id: Dictionary) -> void:
+	if holder.get_child_count() == 0:
+		return
+	var model: Node3D = holder.get_child(0)
+	var h := _visual_height(model) * model.scale.y
+	if h <= 0.1:
+		return
+	var gear := Node3D.new()
+	holder.add_child(gear)
+	var shade: Color = id["hair"]
+	var band := BoxMesh.new()
+	band.size = Vector3(0.080 * h, 0.018 * h, 0.014 * h)
+	_held_mesh(gear, band, _solid(Color(0.95, 0.93, 0.88)),
+			Transform3D(Basis(), Vector3(0.0, 0.905 * h, -0.048 * h)))
+	for side in [-0.0175, 0.0175]:
+		var pupil := BoxMesh.new()
+		pupil.size = Vector3(0.016 * h, 0.017 * h, 0.012 * h)
+		_held_mesh(gear, pupil, _solid(Color(0.07, 0.05, 0.04)),
+				Transform3D(Basis(), Vector3(side * h, 0.905 * h, -0.054 * h)))
+	for side_b in [-0.0185, 0.0185]:
+		var brow := BoxMesh.new()
+		brow.size = Vector3(0.032 * h, 0.007 * h, 0.009 * h)
+		_held_mesh(gear, brow, _solid(shade.darkened(0.15)),
+				Transform3D(Basis(), Vector3(side_b * h, 0.926 * h, -0.045 * h)))
 
 
 func _has_authored_hair(holder: Node3D) -> bool:
