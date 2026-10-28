@@ -105,6 +105,11 @@ var _hud_hp_bg: ColorRect
 var _hud_hp_fill: ColorRect
 var _hud_hp_text: Label
 var _hud_stars: Label
+var _hud_stam_bg: ColorRect
+var _hud_stam_fill: ColorRect
+var _last_stars := 0
+var _stars_escaping := false
+var _blink_t := 0.0
 var _hud_radio: Label
 var _police: Node
 var _missions: Node
@@ -993,6 +998,20 @@ func _build_hud() -> void:
 	_hud_stars.add_theme_color_override("font_color", Color(1.0, 0.83, 0.25))
 	_hud_stars.visible = false
 	layer.add_child(_hud_stars)
+	# Sprint stamina (issue #154): slim cyan bar under the HP bar,
+	# hidden while full — it only surfaces when the legend is burning it.
+	_hud_stam_bg = ColorRect.new()
+	_hud_stam_bg.color = Color(0.0, 0.0, 0.0, 0.55)
+	_hud_stam_bg.position = Vector2(16, 116)
+	_hud_stam_bg.size = Vector2(220, 10)
+	_hud_stam_bg.visible = false
+	layer.add_child(_hud_stam_bg)
+	_hud_stam_fill = ColorRect.new()
+	_hud_stam_fill.color = Color(0.30, 0.85, 1.0)
+	_hud_stam_fill.position = Vector2(19, 118)
+	_hud_stam_fill.size = Vector2(214, 6)
+	_hud_stam_fill.visible = false
+	layer.add_child(_hud_stam_fill)
 	_hud_radio = Label.new()
 	_hud_radio.position = Vector2(824, 46)
 	_hud_radio.add_theme_font_size_override("font_size", 15)
@@ -1178,8 +1197,10 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_police.setup(WORLD, PITCH, ROAD, GRID + 1)
 	_police.register_player(player)
 	_police.stars_changed.connect(_on_stars_changed)
+	_police.escaping_changed.connect(_on_stars_escaping)
 	_police.arrested.connect(_on_arrested)
 	player.landed_hard.connect(_on_landed_hard)
+	player.stamina_changed.connect(_on_stamina_changed)
 	_health = HealthScript.new()
 	add_child(_health)
 	_health.changed.connect(_on_health_changed)
@@ -1192,6 +1213,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_missions = MissionScript.new()
 	add_child(_missions)
 	_missions.register_player(player)
+	_missions.mission_completed.connect(_on_mission_completed)
 	_food.register(player, _health, _missions)
 	_taxi.register(player, _missions)
 	_courier.register(player, _missions)
@@ -1371,6 +1393,13 @@ func _process(delta: float) -> void:
 		_minimap.track(focus.global_position, focus.rotation.y)
 		_minimap.set_mission_target(_missions.active_target())
 		_minimap.set_police(_police.jeep_positions())
+	# Wanted cooling (issue #154): the stars blink while every jeep has
+	# lost sight of the player — hold the gap and the heat drains away.
+	_blink_t = fmod(_blink_t + delta, 10.0)
+	if _stars_escaping and _hud_stars.visible:
+		_hud_stars.modulate.a = 0.35 if int(_blink_t * 4.0) % 2 == 0 else 1.0
+	elif _hud_stars.modulate.a != 1.0:
+		_hud_stars.modulate.a = 1.0
 	_taxi.tick(delta, current_auto, player)
 	_courier.tick(delta, player)
 
@@ -1588,8 +1617,11 @@ func _update_camera(delta: float) -> void:
 	var look_y := 1.45
 	if current_auto != null:
 		target = current_auto
-		back = 14.0
-		up = 7.0
+		# Speed pull-back (issue #154): the chase cam drifts back and up
+		# as the machine winds out, so top speed reads fast on screen.
+		var speed_ratio := clampf(current_auto.current_speed() / 34.0, 0.0, 1.0)
+		back = 12.0 + 5.0 * speed_ratio
+		up = 6.5 + 1.8 * speed_ratio
 		look_y = 2.5
 	var want: Vector3 = target.global_position + target.global_transform.basis.z * back + Vector3(0, up, 0)
 	_cam_anchor = _cam_anchor.lerp(want, minf(delta * 4.5, 1.0))
@@ -1701,9 +1733,43 @@ func _on_stars_changed(s: int) -> void:
 	_minimap.set_wanted(s)
 	if s <= 0:
 		_hud_stars.visible = false
+		_hud_stars.modulate.a = 1.0
+		if _last_stars > 0:
+			_show_toast("HEAT LOST  ·  clean again")
+		_last_stars = 0
 		return
 	_hud_stars.visible = true
 	_hud_stars.text = "WANTED  " + "*".repeat(s)
+	if s > _last_stars:
+		# Escalation pulse (issue #154): the HUD bucks when heat rises.
+		_hud_stars.pivot_offset = _hud_stars.size / 2.0
+		_hud_stars.scale = Vector2(1.6, 1.6)
+		var t := create_tween()
+		t.tween_property(_hud_stars, "scale", Vector2.ONE, 0.35) \
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_last_stars = s
+
+
+func _on_stars_escaping(active: bool) -> void:
+	_stars_escaping = active
+
+
+func _on_stamina_changed(fraction: float) -> void:
+	## Sprint stamina (issue #154): cyan while burning, red while winded.
+	if fraction >= 0.999:
+		_hud_stam_bg.visible = false
+		_hud_stam_fill.visible = false
+		return
+	_hud_stam_bg.visible = true
+	_hud_stam_fill.visible = true
+	_hud_stam_fill.size.x = 214.0 * fraction
+	_hud_stam_fill.color = Color(0.95, 0.35, 0.25) if fraction < 0.3 \
+			else Color(0.30, 0.85, 1.0)
+
+
+func _on_mission_completed(_title: String, _reward: int) -> void:
+	## Reward jingle (issue #154): the payout beat now has a sound.
+	_audio.jingle()
 
 
 func _on_health_damaged(_amount: float) -> void:

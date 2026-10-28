@@ -6,6 +6,7 @@ extends Node
 ## nothing can fall through the world and there is no physics cost.
 
 signal stars_changed(stars: int)
+signal escaping_changed(active: bool)
 signal arrested
 
 const PED_HEAT := 2.0
@@ -40,6 +41,7 @@ var _road_w := 0.0
 var _roads := 0
 var _stars := 0
 var _unseen := 0.0
+var _escaping := false
 var _spawn_cd := 0.0
 var _flash := 0.0
 var _arrest_t := 0.0
@@ -134,6 +136,10 @@ func _physics_process(delta: float) -> void:
 		if _stars > 0 and _unseen >= ESCAPE_TIME:
 			heat = maxf(heat - COOL_RATE * delta, 0.0)
 			_sync_stars()
+	var escaping_now := _stars > 0 and not seen
+	if escaping_now != _escaping:
+		_escaping = escaping_now
+		escaping_changed.emit(escaping_now)
 	for j in _jeeps.duplicate():
 		_pursue(j, p, delta)
 	_animate_lights()
