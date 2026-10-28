@@ -37,6 +37,12 @@ signal departed(idx: int, next_name: String)
 var _state := "dwell"
 var _timer := DWELL
 var _speed := 0.0
+## Destination z for the current run leg, fixed at departure (QA sweep
+## 1, issue #168): recomputing "farthest station" every frame flipped the
+## target at the exact midpoint between stations, so the shuttle
+## oscillated at z=51 forever and never reached the far platform —
+## the ride stalled mid-viaduct and queued boarders waited endlessly.
+var _target_z := -40.0
 ## This node is the static container (gates, canopies); _train is the
 ## moving shuttle so the ride never drags the stations along.
 var _train: Node3D = null
@@ -112,14 +118,13 @@ func _process(delta: float) -> void:
 		_timer -= delta
 		if _timer <= 0.0:
 			var from := _at_station()
+			_target_z = float(stations[other_idx(from)]["z"])
 			_state = "run"
 			departed.emit(from, station_name(other_idx(from)))
 		return
 	# Trapezoid speed profile: accelerate to cruise, then bleed speed so
 	# the train eases to a stop exactly at the target station.
-	var at0 := absf(_train.position.z - float(stations[0]["z"]))
-	var at1 := absf(_train.position.z - float(stations[1]["z"]))
-	var target := float(stations[1]["z"]) if at0 < at1 else float(stations[0]["z"])
+	var target := _target_z
 	var dist: float = absf(target - _train.position.z)
 	var v_max: float = minf(CRUISE, sqrt(2.0 * ACCEL * dist))
 	if _speed < v_max:
