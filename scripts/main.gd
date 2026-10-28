@@ -50,14 +50,19 @@ const SKY_DAY := Color(0.53, 0.81, 0.92)
 const SKY_DUSK := Color(0.88, 0.48, 0.22)
 const SKY_NIGHT := Color(0.04, 0.06, 0.19)
 const STORM_SKY := Color(0.22, 0.25, 0.30)
-## Dust-haze atmosphere + warm grade (issue 132): warm-noon sun
-## (~5800K per the art reference), warm-gray aerial haze, ground bias.
-const SUN_DAY := Color(1.0, 0.93, 0.80)
-const SUN_NIGHT := Color(0.55, 0.62, 0.80)
-const FOG_DAY := 0.007
-const FOG_NIGHT := 0.0012
-const FOG_COL_DAY := Color(0.87, 0.80, 0.66)
-const FOG_COL_NIGHT := Color(0.10, 0.12, 0.18)
+## Dust-haze atmosphere + warm grade (issue 132), pushed toward the
+## art-ref warm-noon look (issue 164): golden noon sun, amber dusk
+## band, cool-amber shadow fill, and a warm-neutral night haze so the
+## sodium lamp pools keep reading amber after dark.
+const SUN_DAY := Color(1.0, 0.90, 0.72)
+const SUN_DUSK := Color(1.0, 0.58, 0.30)
+const SUN_NIGHT := Color(0.50, 0.58, 0.78)
+const AMB_DAY := Color(0.74, 0.72, 0.66)
+const AMB_NIGHT := Color(0.33, 0.31, 0.30)
+const FOG_DAY := 0.0075
+const FOG_NIGHT := 0.0014
+const FOG_COL_DAY := Color(0.88, 0.77, 0.58)
+const FOG_COL_NIGHT := Color(0.12, 0.11, 0.15)
 const ROAD_TINT_DRY := Color(1.0, 1.0, 1.0)
 const ROAD_TINT_WET := Color(0.45, 0.47, 0.58)
 const PALETTE := [
@@ -221,18 +226,18 @@ func _build_environment() -> void:
 	sky.sky_material = _sky_mat
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.7, 0.75, 0.85)
-	env.ambient_light_energy = 0.6
+	env.ambient_light_color = AMB_DAY
+	env.ambient_light_energy = 0.58
 	# Filmic tonemap + soft bloom: sunlit facades and the emissive night
 	# windows get gentle halos instead of clipping to white. The web build
 	# runs the compatibility renderer, where glow composites in LDR (no HDR
 	# buffer), so intensity/bloom stay conservative and the threshold high
 	# or the whole frame washes out (issue #76).
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 0.95
+	env.tonemap_exposure = 0.98
 	env.glow_enabled = true
 	env.glow_intensity = 0.35
-	env.glow_bloom = 0.05
+	env.glow_bloom = 0.06
 	env.glow_hdr_threshold = 1.29
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	# Dust-haze atmosphere (issue 132): exponential aerial fog with a
@@ -252,13 +257,16 @@ func _build_environment() -> void:
 	# back to the plain grade gracefully.
 	env.adjustment_enabled = true
 	env.adjustment_brightness = 1.02
-	env.adjustment_contrast = 1.08
-	env.adjustment_saturation = 0.9
+	env.adjustment_contrast = 1.07
+	env.adjustment_saturation = 0.88
+	## Issue 164: 1-D grade recentered on the art-ref warm look —
+	## shadows lifted toward cool-amber (not blue), highlights pinned
+	## warm-white so noon reads golden rather than neutral.
 	var grade := Gradient.new()
 	grade.offsets = PackedFloat32Array([0.0, 0.28, 0.72, 1.0])
 	grade.colors = PackedColorArray([
-		Color(0.055, 0.048, 0.042), Color(0.32, 0.28, 0.24),
-		Color(0.78, 0.75, 0.68), Color(1.0, 0.985, 0.945),
+		Color(0.060, 0.052, 0.040), Color(0.33, 0.30, 0.25),
+		Color(0.80, 0.76, 0.69), Color(1.0, 0.98, 0.94),
 	])
 	var grade_tex := GradientTexture1D.new()
 	grade_tex.gradient = grade
@@ -1654,19 +1662,23 @@ func _update_day(delta: float) -> void:
 	day_t = fmod(day_t + delta / DAY_LEN, 1.0)
 	var sun_angle: float = sin(day_t * TAU - PI / 2.0)
 	var daylight: float = clampf((sun_angle + 0.25) * 1.6, 0.0, 1.0)
+	# Amber band around the day/night fold drives the dusk mood (issue 164):
+	# sun, haze and sky all lean into it below.
+	var dusk: float = clampf(1.0 - absf(daylight - 0.5) * 2.0, 0.0, 1.0)
 	sun.light_energy = (0.15 + daylight * 0.85) * (1.0 - _weather.cloud * 0.5)
 	sun.rotation_degrees = Vector3(-30.0 - daylight * 45.0, 40.0, 0.0)
-	# Night falls: ambient dims and cools toward moonlight, and the shadow
-	# map sleeps once the sun stops casting anything worth drawing.
+	# Night falls: ambient dims toward a warm-neutral fill so shadows sit
+	# cool-amber (never blue), and the shadow map sleeps once the sun stops
+	# casting anything worth drawing.
 	var env := world_env.environment
-	env.ambient_light_energy = lerpf(0.16, 0.6, daylight)
-	env.ambient_light_color = Color(0.42, 0.48, 0.66).lerp(Color(0.7, 0.75, 0.85), daylight)
+	env.ambient_light_energy = lerpf(0.18, 0.58, daylight)
+	env.ambient_light_color = AMB_NIGHT.lerp(AMB_DAY, daylight)
 	# Dust haze breathes with the day (issue 132): thick warm haze at
-	# noon, near-clear cool haze at night so the lamp pools keep
-	# reading, and the sun swings warm-noon to moon-cool.
-	env.fog_density = lerpf(FOG_NIGHT, FOG_DAY, daylight)
-	env.fog_light_color = FOG_COL_NIGHT.lerp(FOG_COL_DAY, daylight)
-	sun.light_color = SUN_NIGHT.lerp(SUN_DAY, daylight)
+	# noon, near-clear warm-neutral haze at night so the lamp pools keep
+	# reading amber, and the sun swings golden noon -> amber dusk -> moon.
+	env.fog_density = lerpf(FOG_NIGHT, FOG_DAY, daylight) + dusk * 0.0018
+	env.fog_light_color = FOG_COL_NIGHT.lerp(FOG_COL_DAY, daylight).lerp(SUN_DUSK, dusk * 0.30)
+	sun.light_color = SUN_NIGHT.lerp(SUN_DAY, daylight).lerp(SUN_DUSK, dusk * 0.6)
 	sun.shadow_enabled = _sun_shadows_wanted and daylight > 0.12
 	# Dusk falls, the city lights up: window panes start glowing as the sun
 	# drops and reach full warm brightness through the night.
@@ -1676,12 +1688,11 @@ func _update_day(delta: float) -> void:
 	# Street lamps join the windows at dusk: real OmniLights under every
 	# lamp head, so their warm pools render in every pipeline — the
 	# software-GL capture path included (issue #102).
-	var lamp_glow := lerpf(1.7, 0.0, clampf(daylight * 1.4, 0.0, 1.0))
+	var lamp_glow := lerpf(2.1, 0.0, clampf(daylight * 1.4, 0.0, 1.0))
 	for l in _street_lights:
 		l.light_energy = lamp_glow
 	var sky := SKY_NIGHT.lerp(SKY_DAY, daylight)
-	var dusk: float = clampf(1.0 - absf(daylight - 0.5) * 2.0, 0.0, 1.0)
-	sky = sky.lerp(SKY_DUSK, dusk * 0.5)
+	sky = sky.lerp(SKY_DUSK, dusk * 0.55)
 	sky = sky.lerp(STORM_SKY, _weather.cloud * 0.6)
 	if _sky_mat != null:
 		_sky_mat.sky_top_color = sky * 0.85
@@ -1844,8 +1855,8 @@ func _add_lamp(pos: Vector3) -> void:
 	_lamp_head_xfs.append(Transform3D(Basis(), pos + Vector3(0.0, 5.35, 0.0)))
 	var light := OmniLight3D.new()
 	light.position = pos + Vector3(0.0, 5.1, 0.0)
-	light.light_color = Color(1.0, 0.78, 0.5)
-	light.omni_range = 22.0
+	light.light_color = Color(1.0, 0.74, 0.42)
+	light.omni_range = 24.0
 	light.light_energy = 0.0
 	add_child(light)
 	_street_lights.append(light)
