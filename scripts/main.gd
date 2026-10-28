@@ -1116,6 +1116,12 @@ func _portrait_card(def: Dictionary) -> Control:
 	svc.custom_minimum_size = Vector2(128, 168)
 	var vp := SubViewport.new()
 	vp.size = Vector2i(128, 168)
+	# Issue 152: each portrait needs its OWN 3D world. A SubViewport
+	# otherwise shares the root world, so all three legend models stack
+	# into one scenario and the identical portrait cameras render the
+	# same overlapping figures on every card (three pink panels plus a
+	# floating helmet blob in the owner's screenshot).
+	vp.own_world_3d = true
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	svc.add_child(vp)
 	var env := Environment.new()
