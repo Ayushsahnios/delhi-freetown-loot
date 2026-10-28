@@ -36,6 +36,7 @@ const MetroScript := preload("res://scripts/metro.gd")
 const RailwayScript := preload("res://scripts/railway.gd")
 const TaxiScript := preload("res://scripts/taxi.gd")
 const CourierScript := preload("res://scripts/courier.gd")
+const FacadesScript := preload("res://scripts/facades.gd")
 const PhotoScript := preload("res://scripts/photo.gd")
 
 ## Rideable metro shuttle (issue #98 part 2): boarding state, queued
@@ -150,6 +151,11 @@ var _pillar_xfs: Array[Transform3D] = []
 var _metro_seg_xfs: Array[Transform3D] = []
 var _win_xfs: Array[Transform3D] = []
 var _win_lit_xfs: Array[Transform3D] = []
+var _frame_xfs: Array[Transform3D] = []
+var _balcony_xfs: Array[Transform3D] = []
+var _shutter_xfs: Array[Transform3D] = []
+var _interior_xfs: Array[Transform3D] = []
+var _shoptrim_xfs: Array[Transform3D] = []
 var _win_lit_mat: StandardMaterial3D = null
 var _street_lights: Array[OmniLight3D] = []
 var _lamp_pole_xfs: Array[Transform3D] = []
@@ -428,9 +434,37 @@ func _build_city() -> void:
 					var ox := _rng.randf_range(-1.0, 1.0) * (BLOCK - w) * 0.5
 					var oz := _rng.randf_range(-1.0, 1.0) * (BLOCK - d) * 0.5
 					var bpos := Vector3(c.x + ox, 0, c.z + oz)
-					_add_building(bpos, Vector3(w, h, d),
-							PALETTE[_rng.randi_range(0, PALETTE.size() - 1)])
-					_add_windows(bpos, Vector3(w, h, d))
+					var base: Color = PALETTE[
+							_rng.randi_range(0, PALETTE.size() - 1)]
+					# Shopfronts face the street the hut leans toward.
+					var outward := Vector3(signf(ox), 0.0, 0.0) \
+							if absf(ox) > absf(oz) \
+							else Vector3(0.0, 0.0, signf(oz))
+					# Facade detail pass (issue #162): frames, balconies,
+					# shutters, plaster variants — one deterministic roll per
+					# building, replacing the bare _add_windows glazing pass.
+					var fac := FacadesScript.dress_building(bpos,
+							Vector3(w, h, d), outward, base)
+					_add_building(bpos, Vector3(w, h, d), fac["plaster"])
+					var panes: Array[Transform3D] = fac["panes"]
+					_win_xfs.append_array(panes)
+					var litp: Array[Transform3D] = fac["lit"]
+					_win_lit_xfs.append_array(litp)
+					var frames: Array[Transform3D] = fac["frames"]
+					_frame_xfs.append_array(frames)
+					var balconies: Array[Transform3D] = fac["balconies"]
+					_balcony_xfs.append_array(balconies)
+					var shutters: Array[Transform3D] = fac["shutters"]
+					_shutter_xfs.append_array(shutters)
+					var interiors: Array[Transform3D] = fac["interiors"]
+					_interior_xfs.append_array(interiors)
+					var trims: Array[Transform3D] = fac["trim"]
+					_shoptrim_xfs.append_array(trims)
+					if fac["skirt"]:
+						# Street plinth: darker weathered band at the tower base.
+						_dist_box(Vector3(w + 0.36, 2.1, d + 0.36),
+								bpos + Vector3(0.0, 1.05, 0.0),
+								FacadesScript.GRIME_SKIRT)
 					# Delhi skyline dressing (issue #129 slice 2): rooftop
 					# water tanks, wall AC units and satellite dishes.
 					var decor := CityDressingScript.building_decor(c, bpos,
@@ -589,6 +623,21 @@ func _commit_props() -> void:
 	for pane in [glass_mm, lit_mm]:
 		if pane != null:
 			pane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# Facade depth units (issue #162): one MultiMesh per family — frames
+	# with sills and lintel ledges on every tower pane, concrete balconies
+	# on a subset of towers, and hut shopfront trim with either a closed
+	# corrugated shutter or an open dark recess.
+	_add_prop_mm(FacadesScript.window_frame_mesh(), _frame_xfs)
+	_add_prop_mm(FacadesScript.balcony_mesh(), _balcony_xfs)
+	_add_prop_mm(FacadesScript.shopfront_trim_mesh(), _shoptrim_xfs)
+	var shutter_mm := MeshTools.make_multimesh(
+			FacadesScript.shutter_mesh(), _shutter_xfs)
+	if shutter_mm != null:
+		add_child(shutter_mm)
+	var interior_mm := MeshTools.make_multimesh(
+			FacadesScript.interior_mesh(), _interior_xfs)
+	if interior_mm != null:
+		add_child(interior_mm)
 
 
 func _add_mm(mesh: PrimitiveMesh, xfs: Array[Transform3D]) -> MultiMeshInstance3D:
@@ -626,32 +675,6 @@ func _coll_box(size: Vector3, xf: Transform3D) -> CollisionShape3D:
 	col.transform = xf
 	return col
 
-
-func _add_windows(pos: Vector3, size: Vector3) -> void:
-	## Facade pass for district towers: a grid of dark panes on each
-	## street-facing wall; a fixed random subset glows after dark. Short
-	## huts (h < 9) stay plain plaster — they read as shops, not offices.
-	if size.y < 9.0:
-		return
-	for side in 4:
-		var theta := float(side) * PI / 2.0
-		var nrm := Vector3(sin(theta), 0.0, cos(theta))
-		var across := Vector3(nrm.z, 0.0, -nrm.x)
-		var wall_len: float = nrm.z * size.x + nrm.x * size.z
-		var cols := int((wall_len - 4.0) / 3.0)
-		var rows := int((size.y - 5.0) / 3.6)
-		if cols < 1 or rows < 1:
-			continue
-		var half_out: float = (absf(nrm.x) * size.x + absf(nrm.z) * size.z) * 0.5
-		for r in rows:
-			for c in cols:
-				var u: float = (float(c) + 0.5 - cols * 0.5) * 3.0
-				var at := pos + Vector3(0.0, 2.6 + float(r) * 3.6, 0.0) \
-						+ across * u + nrm * (half_out + 0.06)
-				var xf := Transform3D(Basis(Vector3.UP, theta), at)
-				_win_xfs.append(xf)
-				if _rng.randf() < 0.42:
-					_win_lit_xfs.append(xf.translated(nrm * 0.06))
 
 func _add_building(pos: Vector3, size: Vector3, color: Color) -> void:
 	var body := StaticBody3D.new()
