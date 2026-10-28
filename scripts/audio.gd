@@ -28,6 +28,7 @@ var _ambient_player: AudioStreamPlayer
 var _rain_player: AudioStreamPlayer
 var _thunder_player: AudioStreamPlayer
 var _thunk_player: AudioStreamPlayer
+var _jingle_player: AudioStreamPlayer
 var _distant_players: Array[AudioStreamPlayer] = []
 var _rng := RandomNumberGenerator.new()
 var _distant_cd := 3.0
@@ -63,9 +64,12 @@ func setup() -> void:
 	_thunk_player = AudioStreamPlayer.new()
 	_thunk_player.stream = _make_thunk()
 	add_child(_thunk_player)
+	_jingle_player = AudioStreamPlayer.new()
+	_jingle_player.stream = _make_jingle()
+	add_child(_jingle_player)
 	# Settings sliders scale the Ambient bus, never these players directly.
 	for p in [_horn_player, _ambient_player, _rain_player, _thunder_player,
-			_thunk_player] + _distant_players:
+			_thunk_player, _jingle_player] + _distant_players:
 		p.bus = "Ambient"
 
 
@@ -106,6 +110,16 @@ func thunk(strength := 1.0) -> void:
 	_thunk_player.pitch_scale = lerpf(0.75, 1.15, s)
 	_thunk_player.volume_db = lerpf(THUNK_MIN_DB, THUNK_MAX_DB, s)
 	_thunk_player.play()
+
+
+func jingle() -> void:
+	## Mission reward jingle (issue #154, free-roam feel): a bright
+	## rising four-note arpeggio the moment a job pays out — the audio
+	## half of the "job done" beat every free-roam loop leans on.
+	if _jingle_player == null:
+		return
+	if not _jingle_player.playing:
+		_jingle_player.play()
 
 
 func _process(delta: float) -> void:
@@ -292,6 +306,28 @@ func _make_thunk() -> AudioStreamWAV:
 			click = _rng.randf_range(-1.0, 1.0) * (1.0 - t / 0.012) * 0.8
 		var sample := int(clampf((sin(phase) * 0.85 + click) * env * 0.55,
 				-1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+
+func _make_jingle() -> AudioStreamWAV:
+	## Reward arpeggio (issue #154): rising C5-E5-G5-C6, ~half a
+	## second, bright and short — the "job done" sting under the
+	## MISSION COMPLETE toast.
+	var notes := [523.25, 659.25, 783.99, 1046.5]
+	var note_len := 0.11
+	var frames := int(MIX_RATE * (note_len * float(notes.size()) + 0.08))
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var phase := 0.0
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		var idx := clampi(int(t / note_len), 0, notes.size() - 1)
+		var note_t := t - float(idx) * note_len
+		phase += TAU * notes[idx] / MIX_RATE
+		var env := pow(maxf(1.0 - note_t / note_len, 0.0), 1.6)
+		var s := sin(phase) * 0.8 + sin(phase * 2.0) * 0.2
+		var sample := int(clampf(s * env * 0.5, -1.0, 1.0) * 32767.0)
 		bytes.encode_s16(i * 2, sample)
 	return _wav(bytes, false)
 

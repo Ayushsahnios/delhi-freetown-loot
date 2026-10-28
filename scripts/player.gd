@@ -12,7 +12,18 @@ const Chars := preload("res://scripts/characters.gd")
 const ShadowBlob := preload("res://scripts/shadowblob.gd")
 
 signal landed_hard(impact_speed: float)
+signal stamina_changed(fraction: float)
 
+## Sprint stamina (issue #154, free-roam feel): the run key burns a
+## stamina pool; at empty the legend is winded and held to a walk until
+## the bar recovers past the re-arm threshold — sprint, exhaust, recover,
+## sprint again, the classic on-foot free-roam rhythm.
+const STAMINA_DRAIN := 0.14
+const STAMINA_REGEN := 0.22
+const STAMINA_REGEN_IDLE := 0.35
+const STAMINA_REARM := 0.30
+
+var stamina := 1.0
 var run_boost := 1.0
 var controls_enabled := true
 ## Traction 0..1 — monsoon wetness lowers it, so momentum lags the
@@ -29,6 +40,7 @@ var _anim_rate := 1.0
 var _air_vy := 0.0
 var _was_on_floor := true
 var _collision_added := false
+var _winded := false
 
 
 func setup(def: Dictionary) -> void:
@@ -108,10 +120,12 @@ func _physics_process(delta: float) -> void:
 			Input.get_action_strength("move_back") - Input.get_action_strength("move_forward")
 		)
 	var moving := input.length() > 0.05
+	var sprinting := false
 	if moving:
 		var speed: float = WALK_SPEED
-		if Input.is_action_pressed("run"):
+		if Input.is_action_pressed("run") and not _winded:
 			speed = RUN_SPEED
+			sprinting = true
 		speed *= run_boost
 		var target := Vector3(input.x * speed, 0.0, input.z * speed)
 		if grip >= 0.999:
@@ -144,6 +158,21 @@ func _physics_process(delta: float) -> void:
 	_was_on_floor = is_on_floor()
 
 	_animate(moving)
+	_tick_stamina(delta, sprinting, moving)
+
+
+func _tick_stamina(delta: float, sprinting: bool, moving: bool) -> void:
+	var before := stamina
+	if sprinting:
+		stamina = maxf(stamina - STAMINA_DRAIN * delta, 0.0)
+		if is_zero_approx(stamina):
+			_winded = true
+	else:
+		stamina = minf(stamina + (STAMINA_REGEN_IDLE if not moving else STAMINA_REGEN) * delta, 1.0)
+		if _winded and stamina >= STAMINA_REARM:
+			_winded = false
+	if not is_equal_approx(before, stamina):
+		stamina_changed.emit(stamina)
 
 
 func _animate(moving: bool) -> void:

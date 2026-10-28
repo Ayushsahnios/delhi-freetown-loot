@@ -8,6 +8,16 @@ const KINDS := {
 	"van": {"max_speed": 21.0, "accel": 9.0, "turn": 1.3},
 	"scooter": {"max_speed": 38.0, "accel": 18.0, "turn": 2.7},
 }
+## Cornering lean per kind (issue #154, free-roam feel): two- and
+## three-wheelers tip INTO the turn, cars and vans roll to the outside.
+## Radians of body roll at full steering lock and full speed.
+const ROLL_LEAN := {
+	"scooter": 0.10,
+	"auto": 0.05,
+	"car": -0.055,
+	"van": -0.07,
+}
+const BRAKE_FACTOR := 2.4
 const MeshTools := preload("res://scripts/meshtools.gd")
 const Vehicles := preload("res://scripts/vehicles.gd")
 const ShadowBlob := preload("res://scripts/shadowblob.gd")
@@ -31,6 +41,8 @@ var _wheels: Array[MeshInstance3D] = []
 var _steer_pivots: Array[Node3D] = []
 var _steer_vis := 0.0
 var _speed := 0.0
+var _pitch_vis := 0.0
+var _roll_vis := 0.0
 var _rng := RandomNumberGenerator.new()
 
 
@@ -164,8 +176,14 @@ func drive(delta: float) -> void:
 	if Input.is_action_pressed("move_right"):
 		steer = -1.0
 
-	_speed += accel * float(_spec["accel"]) * delta
-	if is_zero_approx(accel):
+	# Pedal feel (issue #154): holding the opposite direction BRAKES at
+	# a sharper rate than acceleration builds; releasing just coasts.
+	var braking := accel != 0.0 and absf(_speed) > 0.5 and signf(accel) != signf(_speed)
+	if braking:
+		_speed += accel * float(_spec["accel"]) * BRAKE_FACTOR * delta
+	elif not is_zero_approx(accel):
+		_speed += accel * float(_spec["accel"]) * delta
+	else:
 		_speed *= pow(lerpf(0.65, 0.35, grip), delta)
 	_speed = clampf(_speed, -8.0, float(_spec["max_speed"]))
 
@@ -186,9 +204,22 @@ func drive(delta: float) -> void:
 	# suspension settles — body dips and noses down as the jolt decays.
 	_check_bumps()
 	_jolt = maxf(_jolt - 2.6 * delta, 0.0)
+	# Weight transfer (issue #154): brake dive, throttle squat and
+	# cornering roll ride on top of the bump jolt — the chassis now
+	# breathes with every pedal input instead of sitting level.
+	var ratio := clampf(absf(_speed) / float(_spec["max_speed"]), 0.0, 1.0)
+	var pitch_target := 0.0
+	if braking:
+		pitch_target = 0.05 * maxf(ratio, 0.4)
+	elif accel > 0.0:
+		pitch_target = -0.022 * ratio
+	var roll_target := steer * ratio * float(ROLL_LEAN.get(kind, 0.0))
+	_pitch_vis = lerpf(_pitch_vis, pitch_target, clampf(8.0 * delta, 0.0, 1.0))
+	_roll_vis = lerpf(_roll_vis, roll_target, clampf(6.0 * delta, 0.0, 1.0))
 	if _body_mesh != null:
 		_body_mesh.position.y = -0.10 * _jolt
-		_body_mesh.rotation.x = -0.12 * _jolt
+		_body_mesh.rotation.x = -0.12 * _jolt + _pitch_vis
+		_body_mesh.rotation.z = _roll_vis
 	_prev_pos = global_position
 
 	# Front wheels visibly steer with input; all wheels spin with speed.
