@@ -343,6 +343,7 @@ func attach_sardar(holder: Node3D, turban: Color, beard: Color = Color(0.13, 0.0
 func dress_legend(holder: Node3D, def: Dictionary) -> void:
 	tint(holder, def.get("shirt", Color.WHITE), def.get("pants", Color.BLACK),
 			def.get("skin", Color.WHITE), def.get("hair", Color(0.0, 0.0, 0.0, -1.0)))
+	build_legend(holder, def)
 	match String(def.get("id", "")):
 		"sardarji":
 			attach_sardar(holder, def.get("turban", Color(1.0, 0.56, 0.12)),
@@ -350,6 +351,7 @@ func dress_legend(holder: Node3D, def: Dictionary) -> void:
 			var tk := _torso_kit(holder)
 			if not tk.is_empty():
 				_vest(tk, def.get("jacket", Color(0.36, 0.17, 0.11)))
+				_tailor_kurta(tk, def)
 		"monty":
 			var kit := _head_kit(holder)
 			if not kit.is_empty():
@@ -358,8 +360,182 @@ func dress_legend(holder: Node3D, def: Dictionary) -> void:
 			var tk2 := _torso_kit(holder)
 			if not tk2.is_empty():
 					_chain_and_collar(tk2, def.get("skin", Color(0.79, 0.56, 0.39)))
+					_tailor_shirt(tk2, def)
 		"riya":
 			_rider_gear(holder, def)
+			_tailor_jacket(holder, def)
+
+
+## ------------------------------------------------------------------ body builds
+
+## Legend body builds (issue #161): distinct silhouettes inside the
+## shared height band, built from bone-pose SCALE factors on the torso
+## chain so they ride every idle/walk/run frame — scale channels are
+## not keyframed by the clip library, so the pose survives playback
+## (the issue-158 head-scale pattern). Pose scale is a relative factor
+## on the bone rest, so it is safe on both unit conventions: the male
+## rig's sane units and the female rig's tiny authoring bones (the
+## #82 hazard is bone-space offsets, not relative pose factors).
+## Keyed by lowercase bone name.
+const BODY_BUILDS := {
+	"sardarji": {
+		# Barrel chest: ribcage and shoulders flare wide, the weight of
+		# the frame carried forward of the hips.
+		"spine_01": Vector3(1.10, 1.0, 1.14),
+		"spine_02": Vector3(1.16, 1.0, 1.17),
+		"spine_03": Vector3(1.13, 1.0, 1.10),
+	},
+	"monty": {
+		# Lean: narrow through ribs and waist, shoulders held narrow —
+		# clothes hang off him.
+		"spine_01": Vector3(0.93, 1.0, 0.95),
+		"spine_02": Vector3(0.90, 1.0, 0.92),
+		"spine_03": Vector3(0.90, 1.0, 0.90),
+	},
+	"riya": {
+		# Athletic: shoulders and chest trained wide over a nipped
+		# waist and compact hips.
+		"abdomen": Vector3(0.93, 1.0, 0.95),
+		"torso": Vector3(1.05, 1.0, 1.05),
+		"hips": Vector3(0.97, 1.0, 0.98),
+	},
+}
+
+## Whole-model posture tilt per legend (radians, model pitch). Lives
+## on the MODEL node rather than bone rotations because the clip
+## library keyframes spine rotations every frame — a pose rotation
+## would be stomped by the first walk frame, while a tiny ground-pivot
+## tilt reads as stance and survives all playback. sardarji sits back
+## chest-first, monty lolls forward, riya carries a rider's forward
+## bias.
+const POSTURE := {
+	"sardarji": -0.05,
+	"monty": 0.055,
+	"riya": 0.03,
+}
+
+
+## Apply the legend's body build (pose scales) and posture tilt.
+func build_legend(holder: Node3D, def: Dictionary) -> void:
+	var id := String(def.get("id", ""))
+	var builds: Dictionary = BODY_BUILDS.get(id, {})
+	for skel_node in holder.find_children("*", "Skeleton3D", true, false):
+		var skel: Skeleton3D = skel_node
+		for i in skel.get_bone_count():
+			var key := skel.get_bone_name(i).to_lower()
+			if builds.has(key):
+				skel.set_bone_pose_scale(i, builds[key])
+		break
+	if POSTURE.has(id) and holder.get_child_count() > 0:
+		var model: Node3D = holder.get_child(0)
+		model.rotation.x = float(POSTURE[id])
+
+
+## ------------------------------------------------------------------ tailoring
+
+## Legend wardrobe detail pass (issue #161): stitching, collars and
+## buttons on each legend's outfit, so the trio reads tailored at
+## portrait scale on top of the body builds. Male-rig legends ride
+## the chest bone (torso-kit units u); Riya's authored-hair rig keeps
+## tiny authoring bones (#82), so her details are holder-fixed in
+## world units off the rendered height — the _rider_gear pattern.
+
+## Sardar Ji: standing collar + buttoned front placket on the vest,
+## stitched shoulder seams, and a kurta-cloth barrel belly anchoring
+## the broad build.
+func _tailor_kurta(tk: Dictionary, def: Dictionary) -> void:
+	var att: BoneAttachment3D = tk["att"]
+	var xf: Transform3D = tk["xf"]
+	var u: float = tk["u"]
+	var vest: Color = def.get("jacket", Color(0.36, 0.17, 0.11))
+	var kurta: Color = def.get("shirt", Color(0.93, 0.90, 0.83))
+	var collar := CylinderMesh.new()
+	collar.top_radius = 0.30 * u
+	collar.bottom_radius = 0.32 * u
+	collar.height = 0.16 * u
+	_bone_mesh(att, xf, collar, _solid(kurta.darkened(0.10)),
+			Transform3D(Basis(), Vector3(0.0, 1.02 * u, 0.0)))
+	var placket := BoxMesh.new()
+	placket.size = Vector3(0.07 * u, 0.95 * u, 0.03 * u)
+	_bone_mesh(att, xf, placket, _solid(vest.darkened(0.22)),
+			Transform3D(Basis(), Vector3(0.0, 0.32 * u, 0.70 * u)))
+	for b in [0.62, 0.42, 0.22]:
+		var button := CylinderMesh.new()
+		button.top_radius = 0.045 * u
+		button.bottom_radius = 0.045 * u
+		button.height = 0.02 * u
+		_bone_mesh(att, xf, button, _solid(kurta.darkened(0.35)),
+				Transform3D(Basis(Vector3.RIGHT, PI / 2.0),
+						Vector3(0.0, float(b) * u, 0.725 * u)))
+	for sx in [-0.72, 0.72]:
+		var seam := BoxMesh.new()
+		seam.size = Vector3(0.02 * u, 0.04 * u, 0.82 * u)
+		_bone_mesh(att, xf, seam, _solid(vest.darkened(0.30)),
+				Transform3D(Basis(), Vector3(float(sx) * u, 0.92 * u, 0.0)))
+	var belly := SphereMesh.new()
+	belly.radius = 0.34 * u
+	belly.height = 0.68 * u
+	_bone_mesh(att, xf, belly, _solid(kurta.darkened(0.06)),
+			Transform3D(Basis().scaled(Vector3(1.0, 0.82, 0.88)),
+					Vector3(0.0, -0.42 * u, 0.30 * u)))
+
+
+## Monty: open-shirt collar wings, dark buttons down the placket,
+## stitched shoulder seams — sharp over the lean frame.
+func _tailor_shirt(tk: Dictionary, def: Dictionary) -> void:
+	var att: BoneAttachment3D = tk["att"]
+	var xf: Transform3D = tk["xf"]
+	var u: float = tk["u"]
+	var shirt: Color = def.get("shirt", Color(0.35, 0.28, 0.45))
+	for cx in [-0.30, 0.30]:
+		var wing := BoxMesh.new()
+		wing.size = Vector3(0.17 * u, 0.05 * u, 0.24 * u)
+		_bone_mesh(att, xf, wing, _solid(shirt.darkened(0.18)),
+				Transform3D(Basis(Vector3.UP, 0.35 if cx > 0.0 else -0.35),
+						Vector3(float(cx) * u, 1.0 * u, 0.40 * u)))
+	for b in [0.55, 0.37, 0.19]:
+		var button := CylinderMesh.new()
+		button.top_radius = 0.035 * u
+		button.bottom_radius = 0.035 * u
+		button.height = 0.018 * u
+		_bone_mesh(att, xf, button, _solid(shirt.darkened(0.50)),
+				Transform3D(Basis(Vector3.RIGHT, PI / 2.0),
+						Vector3(0.0, float(b) * u, 0.565 * u)))
+	for sx in [-0.66, 0.66]:
+		var seam := BoxMesh.new()
+		seam.size = Vector3(0.02 * u, 0.04 * u, 0.74 * u)
+		_bone_mesh(att, xf, seam, _solid(shirt.darkened(0.30)),
+				Transform3D(Basis(), Vector3(float(sx) * u, 0.88 * u, 0.0)))
+
+
+## Riya: rider-jacket collar band, center zip line, stitched shoulder
+## seams — holder-fixed in world units (her rig's bones ride tiny
+## authoring units, #82).
+func _tailor_jacket(holder: Node3D, def: Dictionary) -> void:
+	if holder.get_child_count() == 0:
+		return
+	var model: Node3D = holder.get_child(0)
+	var h := _visual_height(model) * model.scale.y
+	if h <= 0.1:
+		return
+	var gear := Node3D.new()
+	holder.add_child(gear)
+	var jacket: Color = def.get("shirt", Color(0.55, 0.30, 0.36))
+	var collar := CylinderMesh.new()
+	collar.top_radius = 0.048 * h
+	collar.bottom_radius = 0.050 * h
+	collar.height = 0.032 * h
+	_held_mesh(gear, collar, _solid(jacket.darkened(0.18)),
+			Transform3D(Basis(), Vector3(0.0, 0.855 * h, -0.030 * h)))
+	var zip := BoxMesh.new()
+	zip.size = Vector3(0.008 * h, 0.22 * h, 0.006 * h)
+	_held_mesh(gear, zip, _solid(Color(0.78, 0.76, 0.72)),
+			Transform3D(Basis(), Vector3(0.0, 0.71 * h, -0.052 * h)))
+	for sx in [-0.055, 0.055]:
+		var seam := BoxMesh.new()
+		seam.size = Vector3(0.007 * h, 0.012 * h, 0.10 * h)
+		_held_mesh(gear, seam, _solid(jacket.darkened(0.30)),
+				Transform3D(Basis(), Vector3(float(sx) * h, 0.82 * h, 0.0)))
 
 
 ## Sleeveless wool vest: front + back chest panels with a shoulder
