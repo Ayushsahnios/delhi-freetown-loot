@@ -14,6 +14,7 @@ const CHARACTERS := [
 		"jacket": Color(0.36, 0.17, 0.11),
 		"sardar": true,
 		"anim_rate": 0.85,
+		"height": 1.61,
 	},
 	{
 		"id": "riya",
@@ -27,6 +28,7 @@ const CHARACTERS := [
 		"helmet": Color(0.93, 0.91, 0.87),
 		"sardar": false,
 		"anim_rate": 1.18,
+		"height": 1.67,
 	},
 	{
 		"id": "monty",
@@ -39,6 +41,7 @@ const CHARACTERS := [
 		"hair": Color(0.05, 0.04, 0.04),
 		"sardar": false,
 		"anim_rate": 1.0,
+		"height": 1.78,
 	},
 ]
 

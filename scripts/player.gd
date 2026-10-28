@@ -64,7 +64,9 @@ func _build_look(def: Dictionary) -> void:
 	run_boost = 1.18 if String(def.get("id")) == "riya" else 1.0
 	_anim_rate = float(def.get("anim_rate", 1.0))
 	var path: String = Chars.FEMALE_A if String(def.get("id")) == "riya" else Chars.MALE
-	var model := _chars.spawn(path, MODEL_HEIGHT)
+	# Issue 161: each legend stands at their own height inside the band
+	# — stocky Sardar Ji, compact Riya, tall lean Monty.
+	var model := _chars.spawn(path, float(def.get("height", MODEL_HEIGHT)))
 	ShadowBlob.attach(model, 0.55)
 	_chars.dress_legend(model, def)
 	_ap = _chars.get_player(model)

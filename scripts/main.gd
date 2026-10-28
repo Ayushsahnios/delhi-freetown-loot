@@ -1207,7 +1207,9 @@ func _portrait_card(def: Dictionary) -> Control:
 	lamp.light_energy = 1.2
 	vp.add_child(lamp)
 	var path: String = CharactersScript.FEMALE_A if String(def.get("id")) == "riya" else CharactersScript.MALE
-	var model := _chars.spawn(path, 1.72)
+	# Issue 161: portraits spawn at each legend's own height so the
+	# trio's distinct builds read on the cards immediately.
+	var model := _chars.spawn(path, float(def.get("height", 1.72)))
 	_chars.dress_legend(model, def)
 	vp.add_child(model)
 	_chars.play(_chars.anim_names(model), _chars.get_player(model), "idle",
