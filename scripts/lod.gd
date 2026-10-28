@@ -1,0 +1,52 @@
+extends Node
+## Static draw-distance (LOD) tiers — issue 167.
+##
+## Godot's per-instance visibility ranges cull geometry on the renderer
+## side for free: a hidden instance costs no draw call and no fill. The
+## city is built once at startup, so a single pass over each static
+## container is all that is needed — there is no per-frame LOD script
+## burning frames to save frames.
+##
+## Tier distances (metres) against the 506 m city diagonal:
+##   SMALL  90  — clutter, signage, street-level detail that is
+##                unreadable pixels long before 90 m
+##   MID   160  — dressing, furniture, trees: street shaping that
+##                still reads at a block or two away
+##   BIG   320  — merged per-district buildings: the mass you must be
+##                able to see across town, culled only past half the
+##                map, whole districts at a time
+## Everything dither-fades over a 12 % margin so nothing hard-pops.
+## Landmarks, roads, ground and the sky are deliberately left untiered.
+
+const SMALL := 90.0
+const MID := 160.0
+const BIG := 320.0
+const MARGIN := 0.12
+
+## perf_check --no-lod flips this before the main scene is built so the
+## baseline (untiered) frame cost can be measured on the same binary.
+static var disabled := false
+
+
+static func tier(root: Node, end_m: float) -> int:
+	## Give every GeometryInstance3D under `root` (that does not already
+	## have a range) a draw-distance cull. Returns the instance count.
+	if disabled or root == null:
+		return 0
+	var count := 0
+	for child in root.get_children():
+		count += _walk(child, end_m)
+	return count
+
+
+static func _walk(node: Node, end_m: float) -> int:
+	var count := 0
+	var gi := node as GeometryInstance3D
+	if gi != null and gi.visibility_range_end <= 0.0:
+		gi.visibility_range_end = end_m
+		gi.visibility_range_end_margin = end_m * MARGIN
+		gi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+		count += 1
+	for child in node.get_children():
+		count += _walk(child, end_m)
+	return count

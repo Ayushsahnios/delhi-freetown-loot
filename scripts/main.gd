@@ -17,6 +17,7 @@ const PoliceScript := preload("res://scripts/police.gd")
 const MissionScript := preload("res://scripts/missions.gd")
 const AudioScript := preload("res://scripts/audio.gd")
 const RadioScript := preload("res://scripts/radio.gd")
+const LodScript := preload("res://scripts/lod.gd")
 const MiniMapScript := preload("res://scripts/minimap.gd")
 const CharactersScript := preload("res://scripts/characters.gd")
 const FoodScript := preload("res://scripts/food.gd")
@@ -196,6 +197,10 @@ func _ready() -> void:
 	add_child(_radio)
 	_radio.setup()
 	camera = Camera3D.new()
+	# Draw distance (issue 167): the city fits in a 506 m square, so an
+	# 800 m far plane still takes in every rooftop corner-to-corner
+	# (diagonal 715 m) while trimming the default 4000 m clip volume.
+	camera.far = 800.0
 	add_child(camera)
 	_build_hud()
 	_build_select_ui()
@@ -355,6 +360,7 @@ func _build_city() -> void:
 	var furn := FurnitureScript.build(WORLD, PITCH, ROAD, GRID + 1)
 	if furn.node != null:
 		add_child(furn.node)
+		LodScript.tier(furn.node, LodScript.MID)
 	_speed_bumps = furn.bumps
 	# Physics pass (issue #77): bus-stop shelters are solid — one box per
 	# stop footprint (bench, posts and roof) so vehicles cannot drive
@@ -372,19 +378,23 @@ func _build_city() -> void:
 	# Delhi street dressing (issue #129): tangled overhead wiring on
 	# concrete poles, yellow-black painted kerbs, thela produce carts
 	# and a chai stall — the reference-driven Old Delhi street look.
-	add_child(DressingScript.build(WORLD, PITCH, ROAD))
+	# Static LOD tiers (issue 167): renderer-side draw-distance culls —
+	# street-level detail fades at 90 m, dressing/furniture at 160 m,
+	# district buildings at 320 m (scripts/lod.gd). Landmarks, roads and
+	# the sky deliberately stay untiered.
+	_add_static(DressingScript.build(WORLD, PITCH, ROAD), LodScript.MID)
 	# Delhi street-life dressing (issue #129 slice 2): two incidental
 	# kerbside cows and a roadside shrine near the landmarks.
-	add_child(CityDressingScript.build(WORLD, PITCH, ROAD))
+	_add_static(CityDressingScript.build(WORLD, PITCH, ROAD), LodScript.SMALL)
 	# Delhi green + food layer (issue #129 slice 3): peepal/banyan avenue
 	# trees, a halwai sweet-shop front, a dhaba corner and a temple gate.
-	add_child(DelhiDressing3Script.build(WORLD, PITCH, ROAD))
+	_add_static(DelhiDressing3Script.build(WORLD, PITCH, ROAD), LodScript.MID)
 	# Bilingual signage (issue #131): Devanagari + English boards at
 	# the bazaar, Purani Dilli, the thana and landmark approaches.
-	add_child(SignageScript.build(WORLD, PITCH, ROAD))
+	_add_static(SignageScript.build(WORLD, PITCH, ROAD), LodScript.SMALL)
 	# World object richness (issue #124): stall dressing, neon + hanging
 	# shop signs, scooters, bicycles, crates, spice sacks, chai points.
-	add_child(ClutterScript.build(WORLD, PITCH, ROAD))
+	_add_static(ClutterScript.build(WORLD, PITCH, ROAD), LodScript.SMALL)
 
 	# blocks — static visuals accumulate into per-district merged meshes
 	for ix in range(GRID):
@@ -456,7 +466,15 @@ func _build_city() -> void:
 		var node: MeshInstance3D = _districts[key].build_node()
 		if node != null:
 			add_child(node)
+			LodScript.tier(node, LodScript.BIG)
 	_commit_props()
+
+
+func _add_static(node: Node3D, tier: float) -> void:
+	## add_child + LOD tier in one call — every static dressing container
+	## goes through here so none can silently ship without a cull distance.
+	add_child(node)
+	LodScript.tier(node, tier)
 
 
 func _block_center(ix: int, iz: int) -> Vector3:
