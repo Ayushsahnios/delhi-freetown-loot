@@ -62,6 +62,13 @@ func spawn(path: String, height: float) -> Node3D:
 	if rendered > 0.001 and absf(rendered - target) > 0.01:
 		model.scale = Vector3.ONE * (target / rendered)
 	model.rotation.y = PI
+	# Issue 158: normalize oversized heads toward the art-ref proportion
+	# band (PS2-era ~6.5-7 heads tall). The universal male rig reads a
+	# head ~12% too large against its shoulders next to art-ref-1.jpg;
+	# pose-scale on the head bone is rig-legal (rests untouched, weight
+	# paint untouched) and head-attached accessories inherit the shrink
+	# automatically because BoneAttachment3D copies the bone pose.
+	_normalize_head(model)
 	# Issue 122: liveliness layer on every rigged spawn — seeded head
 	# wander, weight shift, phone idles, turn bank. Self-disabling
 	# no-op on rigs without a head bone.
@@ -73,6 +80,29 @@ func spawn(path: String, height: float) -> Node3D:
 	var holder := Node3D.new()
 	holder.add_child(model)
 	return holder
+
+
+## Per-rig head-pose scale factors (issue 158). Keyed by scene-file
+## basename; rigs absent from the map keep authored proportions. The
+## female walkers measure 7.6-8.5 heads by bone span already, so only
+## the universal male rig needs the correction.
+const HEAD_SCALE := {
+	"male_rigged": 0.88,
+}
+
+
+func _normalize_head(model: Node3D) -> void:
+	var key := String(model.scene_file_path).get_file().get_basename()
+	if not HEAD_SCALE.has(key):
+		return
+	for skel_node in model.find_children("*", "Skeleton3D", true, false):
+		var skel: Skeleton3D = skel_node
+		for i in skel.get_bone_count():
+			if skel.get_bone_name(i).to_lower() == "head":
+				skel.set_bone_pose_scale(i,
+					Vector3.ONE * float(HEAD_SCALE[key]))
+				break
+		break
 
 
 ## Height to size this model against, in model units. Bone-rest span is
@@ -621,6 +651,25 @@ static func _wardrobe_roll(id: Dictionary, rng: RandomNumberGenerator,
 				W_SAREE:
 					id["pants"] = SAREE_COLORS[rng.randi_range(0, SAREE_COLORS.size() - 1)]
 					id["shirt"] = BLOUSE_DARKS[rng.randi_range(0, BLOUSE_DARKS.size() - 1)]
+	# Issue 158: footwear roll, weighted by outfit so the street reads
+	# right — western walkers in sneakers/formal shoes, kurta/lungi and
+	# saree wearers in chappals/sandals. 0 chappal, 1 sandal, 2 sneaker,
+	# 3 formal shoe.
+	var shoes := 0
+	var sr := rng.randf()
+	match outfit:
+		W_WESTERN:
+			if female:
+				shoes = 1 if sr < 0.30 else (2 if sr < 0.55 else 3)
+			else:
+				shoes = 2 if sr < 0.55 else 3
+		W_KURTA:
+			shoes = 0 if sr < 0.50 else (1 if sr < 0.80 else 3)
+		W_LUNGI:
+			shoes = 0 if sr < 0.60 else 1
+		W_SAREE:
+			shoes = 1 if sr < 0.70 else 0
+	id["shoes"] = shoes
 
 
 ## Apply a full identity: palette tint (authored hair recolors to the
@@ -633,6 +682,7 @@ static func _wardrobe_roll(id: Dictionary, rng: RandomNumberGenerator,
 func dress(holder: Node3D, id: Dictionary) -> void:
 	tint(holder, id["shirt"], id["pants"], id["skin"], id["hair"])
 	_wardrobe(holder, id)
+	_footwear(holder, id)
 	if _has_authored_hair(holder):
 		# Issue #153: authored-hair rigs (the female walkers) get faces
 		# too — holder-fixed in world units, since their bones ride tiny
@@ -714,6 +764,148 @@ func _wardrobe(holder: Node3D, id: Dictionary) -> void:
 		_held_mesh(gear, ring, _solid(BUNDLE_CLOTH),
 				Transform3D(Basis().scaled(Vector3(1.0, 0.5, 1.0)),
 						Vector3(0.0, 0.925 * h, 0.0)))
+
+
+## Footwear (issue 158): every walker gets defined shoes so feet stop
+## reading as bare clumps at gameplay distance. Four styles — chappal,
+## sandal, sneaker, formal shoe — from the identity roll. Rigs with
+## foot bones (the universal male) get bone-attached shoes that ride
+## the walk cycle; tiny-authoring-unit rigs (the female walkers,
+## issue #82) get holder-fixed soles at ground level, the same pattern
+## as the wardrobe skirts. All procedural primitives, zero assets.
+const SHOE_SOLES := {
+	0: Color(0.16, 0.14, 0.12),
+	1: Color(0.38, 0.24, 0.14),
+	2: Color(0.78, 0.76, 0.72),
+	3: Color(0.10, 0.08, 0.08),
+}
+const SHOE_UPPERS := {
+	0: Color(0.16, 0.14, 0.12),
+	1: Color(0.34, 0.21, 0.12),
+	2: Color(0.66, 0.63, 0.58),
+	3: Color(0.07, 0.06, 0.06),
+}
+
+
+func _footwear(holder: Node3D, id: Dictionary) -> void:
+	if holder.get_child_count() == 0:
+		return
+	var model: Node3D = holder.get_child(0)
+	var style := int(id.get("shoes", 0))
+	var skel: Skeleton3D = null
+	for skel_node in holder.find_children("*", "Skeleton3D", true, false):
+		skel = skel_node
+		break
+	var feet := {}
+	if skel != null:
+		for i in skel.get_bone_count():
+			var n := skel.get_bone_name(i).to_lower()
+			if n == "foot_l" or n == "foot.1" or n == "foot_l_end":
+				feet["l"] = i
+			elif n == "foot_r" or n == "foot.0" or n == "foot_r_end":
+				feet["r"] = i
+	if feet.has("l") and feet.has("r"):
+		# Bone-attached path (universal male rig): shoes ride the walk.
+		var span := _bone_span(model)
+		if span <= 0.01:
+			return
+		var fu := span * 0.150  # one foot unit ~= one head unit
+		var sole: Color = SHOE_SOLES.get(style, SHOE_SOLES[0])
+		var upper: Color = SHOE_UPPERS.get(style, SHOE_UPPERS[0])
+		for side_key in ["l", "r"]:
+			var idx: int = feet[side_key]
+			var rest := skel.get_bone_global_rest(idx).origin
+			var att := BoneAttachment3D.new()
+			att.bone_idx = idx
+			skel.add_child(att)
+			var toe_out := 0.12 if side_key == "l" else -0.12
+			var sole_thick: float = {0: 0.05, 1: 0.09, 2: 0.11, 3: 0.08}.get(style, 0.06)
+			# Sole: ground level in bone-local space (rest.y is the ankle
+			# height), centered over the foot's heel-to-toe span, toes out.
+			var sm := BoxMesh.new()
+			sm.size = Vector3(0.42 * fu, sole_thick * fu, 1.02 * fu)
+			_bone_mesh(att, Transform3D.IDENTITY, sm, _solid(sole),
+					Transform3D(Basis(Vector3.UP, toe_out),
+						Vector3(0.0, -rest.y + sole_thick * fu * 0.5,
+								0.23 * fu)))
+			match style:
+				0:
+					# Chappal: a single toe strap across the instep.
+					var strap := BoxMesh.new()
+					strap.size = Vector3(0.07 * fu, 0.05 * fu, 0.62 * fu)
+					_bone_mesh(att, Transform3D.IDENTITY, strap, _solid(sole),
+							Transform3D(Basis(Vector3.UP, toe_out),
+									Vector3(0.0, -rest.y + sole_thick * fu + 0.02 * fu,
+											0.28 * fu)))
+				1:
+					# Sandal: instep band + heel strap.
+					var band := BoxMesh.new()
+					band.size = Vector3(0.40 * fu, 0.06 * fu, 0.18 * fu)
+					_bone_mesh(att, Transform3D.IDENTITY, band, _solid(upper),
+							Transform3D(Basis(Vector3.UP, toe_out),
+									Vector3(0.0, -rest.y + (sole_thick + 0.04) * fu,
+											0.38 * fu)))
+					var heel := BoxMesh.new()
+					heel.size = Vector3(0.36 * fu, 0.34 * fu, 0.07 * fu)
+					_bone_mesh(att, Transform3D.IDENTITY, heel, _solid(upper),
+							Transform3D(Basis(Vector3.UP, toe_out),
+									Vector3(0.0, -rest.y + (sole_thick + 0.14) * fu,
+											-0.30 * fu)))
+				2:
+					# Sneaker: padded upper + darker toe cap.
+					var body := BoxMesh.new()
+					body.size = Vector3(0.40 * fu, 0.40 * fu, 0.86 * fu)
+					_bone_mesh(att, Transform3D.IDENTITY, body, _solid(upper),
+							Transform3D(Basis(Vector3.UP, toe_out),
+									Vector3(0.0, -rest.y + (sole_thick + 0.20) * fu,
+											0.20 * fu)))
+					var cap := BoxMesh.new()
+					cap.size = Vector3(0.38 * fu, 0.20 * fu, 0.28 * fu)
+					_bone_mesh(att, Transform3D.IDENTITY, cap,
+								solid_dark(sole, 0.35),
+							Transform3D(Basis(Vector3.UP, toe_out),
+									Vector3(0.0, -rest.y + (sole_thick + 0.10) * fu,
+											0.55 * fu)))
+				3:
+					# Formal: closed upper + rear heel block.
+					var body := BoxMesh.new()
+					body.size = Vector3(0.38 * fu, 0.34 * fu, 0.84 * fu)
+					_bone_mesh(att, Transform3D.IDENTITY, body, _solid(upper),
+							Transform3D(Basis(Vector3.UP, toe_out),
+									Vector3(0.0, -rest.y + (sole_thick + 0.17) * fu,
+											0.22 * fu)))
+					var block := BoxMesh.new()
+					block.size = Vector3(0.38 * fu, 0.09 * fu, 0.26 * fu)
+					_bone_mesh(att, Transform3D.IDENTITY, block, _solid(upper),
+							Transform3D(Basis(Vector3.UP, toe_out),
+									Vector3(0.0, -rest.y + 0.045 * fu,
+											-0.28 * fu)))
+	else:
+		# Holder-fixed fallback (female rigs): a defined sole under each
+		# foot line, in world units off the rendered height — skirts and
+		# sarees cover most of the foot, so the sole carries the read.
+		var h := _visual_height(model) * model.scale.y
+		if h <= 0.1:
+			return
+		var sole_c: Color = SHOE_SOLES.get(style, SHOE_SOLES[0])
+		for side_x in [-0.048, 0.048]:
+			var sm := BoxMesh.new()
+			sm.size = Vector3(0.058 * h, 0.022 * h, 0.115 * h)
+			_held_mesh(holder, sm, _solid(sole_c), Transform3D(Basis(
+					Vector3.UP, 0.10 if side_x < 0.0 else -0.10),
+					Vector3(side_x * h, 0.012 * h, -0.035 * h)))
+			if style == 2 or style == 3:
+				var up := BoxMesh.new()
+				up.size = Vector3(0.052 * h, 0.055 * h, 0.095 * h)
+				_held_mesh(holder, up, _solid(
+						SHOE_UPPERS.get(style, SHOE_UPPERS[0])),
+					Transform3D(Basis(Vector3.UP,
+								0.10 if side_x < 0.0 else -0.10),
+						Vector3(side_x * h, 0.048 * h, -0.038 * h)))
+
+
+func solid_dark(c: Color, amt: float) -> StandardMaterial3D:
+	return _solid(c.darkened(amt))
 
 
 ## Female-walker faces (issue #153): the #149 vocabulary — sclera

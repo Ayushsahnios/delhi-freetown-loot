@@ -56,24 +56,33 @@ static func _albedo(kind: String) -> ImageTexture:
 			var n := 0.0
 			match kind:
 				"cotton":
-					n = _pnoise(u, v, 8, 11) * 0.55 + _pnoise(u, v, 22, 12) * 0.30
+					n = _pnoise(u, v, 8, 11) * 0.45 + _pnoise(u, v, 22, 12) * 0.28
+					n += _pnoise(u, v, 44, 23) * 0.12  # close-range weave octave
 					n += _hash(x, y, 13) * 0.15
 				"denim":
 					# Twill diagonal ridges over a knit mottle.
 					var tw := 0.5 + 0.5 * sin((u * S + v * S * 2.0) * TAU / 9.0)
-					n = tw * 0.45 + _pnoise(u, v, 20, 14) * 0.35
-					n += _hash(x, y, 15) * 0.20
+					n = tw * 0.40 + _pnoise(u, v, 20, 14) * 0.30
+					n += _pnoise(u, v, 44, 24) * 0.12  # close-range twill pick
+					n += _hash(x, y, 15) * 0.18
 				"skin":
-					n = _pnoise(u, v, 5, 16) * 0.6 + _hash(x, y, 17) * 0.4
+					n = _pnoise(u, v, 5, 16) * 0.55 + _pnoise(u, v, 16, 26) * 0.15
+					n += _hash(x, y, 17) * 0.30
 				"hair":
 					# Vertical strand streaks: per-column variation over
 					# a slow mass mottle, reading as combed hair masses.
 					var col := _hash(x, 0, 18)
-					n = col * 0.55 + _pnoise(u, v, 9, 19) * 0.30
-					n += _hash(x, y, 20) * 0.15
+					n = col * 0.50 + _pnoise(u, v, 9, 19) * 0.26
+					n += _pnoise(u, v, 36, 25) * 0.10  # close-range strand flock
+					n += _hash(x, y, 20) * 0.14
 				_:
 					n = 1.0
-			var amp: float = {"cotton": 0.16, "denim": 0.20, "skin": 0.08, "hair": 0.22}.get(kind, 0.0)
+			# Issue 158: amplitude raised so the weave reads in portrait
+			# closeups; the finest octaves and tighter UV repeats mip away
+			# to a near-flat average at gameplay distance, keeping the
+			# street read calm. Skin stays the subtlest (its depth cue is
+			# sculpted shading, not grain).
+			var amp: float = {"cotton": 0.22, "denim": 0.27, "skin": 0.10, "hair": 0.27}.get(kind, 0.0)
 			var g := clampf(1.0 - amp * n, 0.0, 1.0)
 			data[y * S + x] = clampi(int(g * 255.0), 0, 255)
 	var img := Image.create_from_data(S, S, false, Image.FORMAT_L8, data)
@@ -121,4 +130,7 @@ static func apply(m: StandardMaterial3D, role: String) -> void:
 	m.roughness_texture = _rough_cache[kind]
 	# The authored garment UVs span roughly one tile per body part;
 	# scaling up repeats the weave so grain reads at gameplay scale.
-	m.uv1_scale = Vector3(6.0, 6.0, 6.0)
+	# Issue 158: garments repeat tighter so the raised grain reads
+	# woven in closeups; skin repeats looser to stay a soft mottle.
+	var repeats: float = {"shirt": 9.0, "pants": 9.0, "hair": 8.0, "skin": 5.0}.get(role, 6.0)
+	m.uv1_scale = Vector3(repeats, repeats, repeats)
