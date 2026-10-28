@@ -1395,6 +1395,12 @@ func _process(delta: float) -> void:
 		return
 	_impact_cd = maxf(_impact_cd - delta, 0.0)
 	_chaos_cd = maxf(_chaos_cd - delta, 0.0)
+	# Silent checkpoint save on a slow clock (issue 169): a browser
+	# refresh can never cost more than ~90 seconds of progress.
+	_autosave_t += delta
+	if _autosave_t >= AUTOSAVE_INTERVAL:
+		_autosave_t = 0.0
+		_autosave_silent()
 	var cc := _block_center(4, 7)
 	var ccd := Vector2(player.global_position.x - cc.x, player.global_position.z - cc.z).length()
 	if not _chandni_seen and ccd < 34.0:
@@ -1831,6 +1837,9 @@ func _on_stamina_changed(fraction: float) -> void:
 func _on_mission_completed(_title: String, _reward: int) -> void:
 	## Reward jingle (issue #154): the payout beat now has a sound.
 	_audio.jingle()
+	# Money and mission progress just changed — checkpoint immediately
+	# (issue 169) so a finished job is never lost to a refresh.
+	_autosave_silent()
 
 
 func _on_health_damaged(_amount: float) -> void:
@@ -2042,11 +2051,24 @@ func _police_station() -> Vector3:
 
 # ---------------------------------------------------------------- save/load
 
+var _autosave_t := 0.0
+const AUTOSAVE_INTERVAL := 90.0
+
 func _save_game() -> void:
 	var data := _collect_save()
 	if data.is_empty():
 		return
 	_show_toast("GAME SAVED" if SaveGame.write(data) else "SAVE FAILED")
+
+
+func _autosave_silent() -> void:
+	## Checkpoint save with no toast — the autosave clock, pause open and
+	## quit-to-title all ride this so progress survives a browser
+	## refresh (issue 169).
+	var data := _collect_save()
+	if data.is_empty():
+		return
+	SaveGame.write(data)
 
 
 func _collect_save() -> Dictionary:

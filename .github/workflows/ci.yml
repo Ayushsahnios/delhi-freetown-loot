@@ -36,6 +36,12 @@ jobs:
             exit 1
           fi
 
+      - name: Save/load hardening gate (issue 169)
+        run: |
+          set -o pipefail
+          timeout 120 godot --headless --path . res://scenes/save_check.tscn 2>&1 | tee /tmp/save.log
+          grep -q "verdict=PASS" /tmp/save.log
+
       - name: Perf budget gate (headless frame-time, issue 167)
         run: |
           set -o pipefail

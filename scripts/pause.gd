@@ -5,7 +5,9 @@ extends CanvasLayer
 ## volume logic is never touched; settings persist to user://settings.json.
 
 const SETTINGS_PATH := "user://settings.json"
-const DEFAULTS := {"master": 100.0, "ambient": 100.0, "radio": 100.0, "shadows": true}
+const SETTINGS_TMP := "user://settings.json.tmp"
+const DEFAULTS := {"master": 100.0, "ambient": 100.0, "radio": 100.0,
+	"shadows": true, "muted": false}
 
 var _game: Node
 var _settings := {}
@@ -48,6 +50,10 @@ func _open() -> void:
 	visible = true
 	get_tree().paused = true
 	_resume_btn.grab_focus()
+	# Pausing is a natural checkpoint: save silently so a browser
+	# refresh right here never loses the run (issue 169).
+	if _game != null and _game.has_method("_autosave_silent"):
+		_game._autosave_silent()
 
 
 func _resume() -> void:
@@ -58,6 +64,9 @@ func _resume() -> void:
 func _quit_to_title() -> void:
 	## Back to character select via a clean scene reload — every gameplay
 	## child is rebuilt from scratch, so no teardown bookkeeping is needed.
+	## Save first: quitting should never drop progress (issue 169).
+	if _game != null and _game.has_method("_autosave_silent"):
+		_game._autosave_silent()
 	visible = false
 	get_tree().paused = false
 	get_tree().reload_current_scene()
@@ -121,7 +130,17 @@ func _build() -> void:
 	_resume_btn = _menu_button(box, "RESUME")
 	_resume_btn.pressed.connect(_resume)
 	var save_btn := _menu_button(box, "SAVE GAME")
-	save_btn.pressed.connect(Callable(_game, "_save_game"))
+	var saved_reset := Timer.new()
+	saved_reset.wait_time = 1.4
+	saved_reset.one_shot = true
+	box.add_child(saved_reset)
+	save_btn.pressed.connect(func() -> void:
+		_game._save_game()
+		# Flash the button so the menu itself confirms the save even if
+		# the toast was missed (issue 169).
+		save_btn.text = "SAVED ✓"
+		saved_reset.start())
+	saved_reset.timeout.connect(func() -> void: save_btn.text = "SAVE GAME")
 	var settings_btn := _menu_button(box, "SETTINGS")
 	settings_btn.pressed.connect(_toggle_settings)
 	var quit_btn := _menu_button(box, "QUIT TO TITLE")
@@ -134,6 +153,14 @@ func _build() -> void:
 	_make_slider("MASTER", "master")
 	_make_slider("RADIO", "radio")
 	_make_slider("CITY SOUNDS", "ambient")
+	var mute_row := HBoxContainer.new()
+	mute_row.add_theme_constant_override("separation", 10)
+	_settings_box.add_child(mute_row)
+	var mute := CheckBox.new()
+	mute.text = "MUTE ALL"
+	mute.button_pressed = bool(_settings.get("muted", false))
+	mute.toggled.connect(func(on: bool) -> void: _apply_setting("muted", on))
+	mute_row.add_child(mute)
 	var shadow_row := HBoxContainer.new()
 	shadow_row.add_theme_constant_override("separation", 10)
 	_settings_box.add_child(shadow_row)
@@ -168,17 +195,35 @@ static func load_settings() -> Dictionary:
 
 
 static func write_settings(s: Dictionary) -> void:
-	var f := FileAccess.open(SETTINGS_PATH, FileAccess.WRITE)
-	if f == null:
+	# Atomic like the save game: temp file first, then rename, so a
+	# crash mid-write can't wipe the volume/mute settings (issue 169).
+	var payload := JSON.stringify(s, "\t")
+	var f := FileAccess.open(SETTINGS_TMP, FileAccess.WRITE)
+	if f != null:
+		f.store_string(payload)
+		f.close()
+		var dir := DirAccess.open("user://")
+		if dir != null and dir.rename(SETTINGS_TMP.get_file(), SETTINGS_PATH.get_file()) == OK:
+			return
+	var g := FileAccess.open(SETTINGS_PATH, FileAccess.WRITE)
+	if g == null:
 		return
-	f.store_string(JSON.stringify(s, "\t"))
-	f.close()
+	g.store_string(payload)
+	g.close()
 
 
 static func apply_audio(s: Dictionary) -> void:
-	_set_bus_volume("Master", float(s.get("master", 100.0)))
 	_set_bus_volume("Ambient", float(s.get("ambient", 100.0)))
 	_set_bus_volume("Radio", float(s.get("radio", 100.0)))
+	# MUTE ALL wins over the master slider while on, and toggling it
+	# back off restores exactly the slider volume (issue 169).
+	if bool(s.get("muted", false)):
+		var idx := AudioServer.get_bus_index("Master")
+		if idx >= 0:
+			AudioServer.set_bus_mute(idx, true)
+			AudioServer.set_bus_volume_db(idx, 0.0)
+	else:
+		_set_bus_volume("Master", float(s.get("master", 100.0)))
 
 
 static func _set_bus_volume(bus_name: String, percent: float) -> void:
