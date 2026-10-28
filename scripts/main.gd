@@ -11,6 +11,7 @@ const DAY_LEN := 240.0
 const PlayerScript := preload("res://scripts/player.gd")
 const AutoScript := preload("res://scripts/auto.gd")
 const TrafficScript := preload("res://scripts/traffic.gd")
+const VehiclesScript := preload("res://scripts/vehicles.gd")
 const PedestrianScript := preload("res://scripts/pedestrians.gd")
 const HealthScript := preload("res://scripts/health.gd")
 const PoliceScript := preload("res://scripts/police.gd")
@@ -1688,6 +1689,9 @@ func _update_day(delta: float) -> void:
 	if _win_lit_mat != null:
 		_win_lit_mat.emission_energy_multiplier = lerpf(1.9, 0.0,
 				clampf(daylight * 1.4, 0.0, 1.0))
+	# Vehicle headlamps and taillights ride the same dusk curve (issue
+	# #166): parked, driven and ambient traffic all light up at once.
+	VehiclesScript.set_lamp_glow(1.0 - clampf(daylight * 1.4, 0.0, 1.0))
 	# Street lamps join the windows at dusk: real OmniLights under every
 	# lamp head, so their warm pools render in every pipeline — the
 	# software-GL capture path included (issue #102).

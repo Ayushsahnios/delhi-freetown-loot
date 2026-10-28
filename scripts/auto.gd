@@ -21,6 +21,7 @@ const BRAKE_FACTOR := 2.4
 const MeshTools := preload("res://scripts/meshtools.gd")
 const Vehicles := preload("res://scripts/vehicles.gd")
 const ShadowBlob := preload("res://scripts/shadowblob.gd")
+const Exhaust := preload("res://scripts/exhaust.gd")
 
 var driver_inside := false
 ## Traction 0..1 — monsoon wetness lowers it: wider turns, longer
@@ -44,6 +45,8 @@ var _speed := 0.0
 var _pitch_vis := 0.0
 var _roll_vis := 0.0
 var _rng := RandomNumberGenerator.new()
+var _exhaust: Node3D = null
+var _puff_t := 0.6
 
 
 ## Body kind ("auto"/"car"/"van"/"scooter") — public so systems like
@@ -67,6 +70,11 @@ func setup(pos: Vector3, heading: float, kind := "auto") -> void:
 		_:
 			_build_auto()
 	ShadowBlob.attach(self, 1.6, 0.07)
+	# Idle exhaust (issue #166): the puff pool lives in world space so
+	# smoke stays put while the vehicle drives away from it.
+	_exhaust = Exhaust.new()
+	_exhaust.top_level = true
+	add_child(_exhaust)
 
 
 func _build_auto() -> void:
@@ -228,6 +236,19 @@ func drive(delta: float) -> void:
 		p.rotation.y = _steer_vis
 	for w in _wheels:
 		w.rotation.x += _speed * delta * 2.0
+
+	# Idle exhaust (issue #166): a soft puff every beat while parked with
+	# the engine on; any speed at all clears the pipe.
+	if absf(_speed) < 0.6:
+		_puff_t += delta
+		if _puff_t >= 0.8:
+			_puff_t = 0.0
+			var off: Vector3 = Vehicles.EXHAUST_POS.get(kind, Vector3.ZERO)
+			_exhaust.spawn(global_transform * off,
+					Vector3(0.1, 0.5, 0.0) + global_transform.basis.z * 0.35,
+					0.12 if kind == "scooter" else 0.22)
+	else:
+		_puff_t = 0.6  # first puff after a stop comes quickly
 
 
 func _add_wheel(spec: Dictionary) -> void:
