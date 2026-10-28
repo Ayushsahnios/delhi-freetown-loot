@@ -277,13 +277,15 @@ func attach_sardar(holder: Node3D, turban: Color, beard: Color = Color(0.13, 0.0
 	# a mustache bar on the lip. Reads clearly at gameplay scale.
 	var bmat := _solid(beard)
 	var chin := BoxMesh.new()
-	chin.size = Vector3(0.55 * u, 0.5 * u, 0.14 * u)
+	# Issue 152: beard slab sized to read at title-portrait scale —
+	# the first cut was too small to see against the face at 128x168.
+	chin.size = Vector3(0.62 * u, 0.62 * u, 0.18 * u)
 	_bone_mesh(att, head_xf, chin, bmat,
-			Transform3D(Basis(Vector3(1.0, 0.0, 0.0), -0.28), Vector3(0.0, 0.14 * u, 0.46 * u)))
+			Transform3D(Basis(Vector3(1.0, 0.0, 0.0), -0.28), Vector3(0.0, 0.10 * u, 0.50 * u)))
 	var stache := BoxMesh.new()
-	stache.size = Vector3(0.44 * u, 0.07 * u, 0.11 * u)
+	stache.size = Vector3(0.48 * u, 0.09 * u, 0.13 * u)
 	_bone_mesh(att, head_xf, stache, bmat,
-			Transform3D(Basis(), Vector3(0.0, 0.33 * u, 0.52 * u)))
+			Transform3D(Basis(), Vector3(0.0, 0.33 * u, 0.54 * u)))
 
 
 ## ------------------------------------------------------------------ legends
@@ -412,12 +414,14 @@ func _rider_gear(holder: Node3D, def: Dictionary) -> void:
 		return
 	var gear := Node3D.new()
 	holder.add_child(gear)
-	# Helmet: a rider dome resting between the shoulder blades.
+	# Helmet: a rider dome resting between the shoulder blades — kept
+	# close to the back (issue 152: any further out and it reads as a
+	# floating blob rather than slung gear).
 	var shell := SphereMesh.new()
 	shell.radius = 0.085 * h
 	shell.height = 0.17 * h
 	_held_mesh(gear, shell, _solid(def.get("helmet", Color(0.93, 0.91, 0.87))),
-			Transform3D(Basis(), Vector3(0.0, 0.70 * h, 0.145 * h)))
+			Transform3D(Basis(), Vector3(0.0, 0.70 * h, 0.112 * h)))
 	# Strap from the helmet down over the shoulder — jacket-colored.
 	var strap := BoxMesh.new()
 	strap.size = Vector3(0.035 * h, 0.2 * h, 0.03 * h)
@@ -863,15 +867,21 @@ func _solid(color: Color) -> StandardMaterial3D:
 	return m
 
 
-## Add `mesh` under `att`, placed at `desired` (a transform in skeleton
-## space) converted into the head bone's rest frame, so it lands exactly
-## in the rest pose and follows the bone rigidly through animation.
-func _bone_mesh(att: BoneAttachment3D, head_xf: Transform3D, mesh: PrimitiveMesh,
+## Add `mesh` under `att`, placed at `desired` — a transform in the
+## BONE's local frame (offsets from the bone origin), so the piece
+## lands at bone + offset in the rest pose and rides the bone rigidly
+## through animation. Issue 152: `desired` values across every kit are
+## authored as bone-local offsets (0.36u above the head bone, etc.),
+## but this used to pre-multiply by the bone rest's inverse — mapping
+## the small offsets to skeleton-space y≈0, dropping every turban,
+## beard, shade and chain at the model's FEET where the title-screen
+## camera (and the street camera) never showed them.
+func _bone_mesh(att: BoneAttachment3D, _head_xf: Transform3D, mesh: PrimitiveMesh,
 		mat: StandardMaterial3D, desired: Transform3D) -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
 	mi.material_override = mat
-	mi.transform = head_xf.affine_inverse() * desired
+	mi.transform = desired
 	att.add_child(mi)
 
 

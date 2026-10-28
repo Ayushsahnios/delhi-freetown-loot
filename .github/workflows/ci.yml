@@ -77,6 +77,15 @@ jobs:
             --rendering-driver opengl3 res://scenes/screenshot.tscn \
             -- --out shots/center.png --frames 150 --tp 253,253
 
+      - name: Render title screen (portrait distinctness gate, issue 152)
+        run: |
+          # --title also saves each legend's portrait card and exits
+          # nonzero when any pair of cards is pixel-near-identical —
+          # the all-pink-portraits regression can never land silently.
+          xvfb-run -a -s "-screen 0 1280x720x24" godot --path . \
+            --rendering-driver opengl3 res://scenes/screenshot.tscn \
+            -- --out shots/title.png --frames 90 --title
+
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         with:
