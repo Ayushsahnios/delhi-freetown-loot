@@ -191,6 +191,7 @@ func _ready() -> void:
 	_audio = AudioScript.new()
 	add_child(_audio)
 	_audio.setup()
+	_audio.register_world(_food, _traffic)
 	_radio = RadioScript.new()
 	add_child(_radio)
 	_radio.setup()
@@ -1245,6 +1246,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_cam_anchor = player.position
 	if save.is_empty():
 		_cam_anchor = player.position + Vector3(0.0, 10.0, 17.0)
+	_audio.set_player(player)
 	_audio.start_ambient()
 	_minimap.visible = true
 
@@ -1660,6 +1662,7 @@ func _update_camera(delta: float) -> void:
 
 func _update_day(delta: float) -> void:
 	day_t = fmod(day_t + delta / DAY_LEN, 1.0)
+	_audio.set_day(day_t)
 	var sun_angle: float = sin(day_t * TAU - PI / 2.0)
 	var daylight: float = clampf((sun_angle + 0.25) * 1.6, 0.0, 1.0)
 	# Amber band around the day/night fold drives the dusk mood (issue 164):

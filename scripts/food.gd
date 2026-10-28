@@ -51,6 +51,15 @@ func setup(landmarks: Array[Dictionary]) -> void:
 	_build_ui()
 
 
+func stall_positions() -> Array[Vector3]:
+	## World positions of every chai/samosa cart — the ambience bed
+	## anchors crowd murmur and stall clatter on these (issue #165).
+	var out: Array[Vector3] = []
+	for stall in _stalls:
+		out.append(stall["pos"])
+	return out
+
+
 func register(p: CharacterBody3D, health: HealthScript, missions: MissionScript) -> void:
 	_player = p
 	_health = health

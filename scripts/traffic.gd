@@ -170,6 +170,26 @@ func _bump_limit(v: Dictionary) -> float:
 	return limit
 
 
+func near_positions(pos: Vector3, radius: float, max_n: int = 4) -> Array[Vector3]:
+	## Positions of live traffic within radius of pos, nearest first —
+	## the reactive street-horn bed samples this (issue #165).
+	var out: Array[Vector3] = []
+	var best: Array[float] = []
+	for v in _vehicles:
+		var d := pos.distance_to(v.pos)
+		if d > radius:
+			continue
+		var idx := out.size()
+		while idx > 0 and best[idx - 1] > d:
+			idx -= 1
+		out.insert(idx, v.pos)
+		best.insert(idx, d)
+		if out.size() > max_n:
+			out.pop_back()
+			best.pop_back()
+	return out
+
+
 func nearest_enterable(pos: Vector3, max_dist: float) -> Dictionary:
 	## Closest ambient traffic vehicle within max_dist, as a takeover spec
 	## (id, kind, pos, heading). Empty dict when nothing is in range.

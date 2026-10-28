@@ -22,6 +22,19 @@ const DISTANT_MIN_DB := -18.0  # phantom traffic honking inside the bed
 const DISTANT_MAX_DB := -11.0
 const DIALOGUE_DUCK_DB := 9.0   # beds dip while a dialogue box is up
 const DUCK_RAMP_S := 0.15
+const MURMUR_SECONDS := 7.0
+const MURMUR_DB := -13.0        # crowd bed, full at the bazaar core
+const MURMUR_FULL_M := 8.0      # full murmur inside this radius
+const MURMUR_ZERO_M := 30.0     # faded to silence beyond
+const CLATTER_MIN_DB := -22.0
+const CLATTER_MAX_DB := -10.0   # chai glass + spoon right at the stall
+const STALL_NEAR_M := 9.0
+const CALL_MIN_DB := -22.0
+const CALL_MAX_DB := -16.0      # vendor sing-song call, daytime only
+const SPATIAL_HORN_MIN_DB := -20.0
+const SPATIAL_HORN_MAX_DB := -8.0  # reactive honk from a real nearby auto
+const TRAFFIC_SWELL_MAX_DB := 2.5  # bed swells as traffic breathes past
+const EVENING_DROP_DB := 4.5    # the whole street quiets after dusk
 
 var _horn_player: AudioStreamPlayer
 var _ambient_player: AudioStreamPlayer
@@ -34,6 +47,23 @@ var _rng := RandomNumberGenerator.new()
 var _distant_cd := 3.0
 var _ambient_on := false
 var _duck := 0.0  # 0 = normal mix, 1 = fully ducked for dialogue
+var _murmur_player: AudioStreamPlayer
+var _clatter_player: AudioStreamPlayer
+var _call_player: AudioStreamPlayer
+var _spatial_horns: Array[AudioStreamPlayer3D] = []
+var _player: Node3D = null
+var _food: Node = null
+var _traffic: Node = null
+var _stall_positions: Array[Vector3] = []
+var _bazaar_center := Vector3.ZERO
+var _ctx_cd := 0.0
+var _clatter_cd := 3.0
+var _call_cd := 14.0
+var _reactive_cd := 5.0
+var _day_gain_db := 0.0
+var _night_f := 0.0
+var _traffic_swell_db := 0.0
+var _murmur_target_db := -60.0
 
 
 func setup() -> void:
@@ -67,9 +97,32 @@ func setup() -> void:
 	_jingle_player = AudioStreamPlayer.new()
 	_jingle_player.stream = _make_jingle()
 	add_child(_jingle_player)
+	_murmur_player = AudioStreamPlayer.new()
+	_murmur_player.stream = _make_murmur()
+	_murmur_player.volume_db = -60.0
+	add_child(_murmur_player)
+	_clatter_player = AudioStreamPlayer.new()
+	_clatter_player.stream = _make_clatter()
+	add_child(_clatter_player)
+	_call_player = AudioStreamPlayer.new()
+	_call_player.stream = _make_call()
+	add_child(_call_player)
+	# Reactive street horns (issue #165): one-shot 3D players positioned
+	# at the actual honking auto, so panning and distance come free.
+	var spatial_root := Node3D.new()
+	add_child(spatial_root)
+	for i in 2:
+		var sp := AudioStreamPlayer3D.new()
+		sp.stream = horn
+		sp.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+		sp.unit_size = 9.0
+		sp.max_distance = 80.0
+		spatial_root.add_child(sp)
+		_spatial_horns.append(sp)
 	# Settings sliders scale the Ambient bus, never these players directly.
 	for p in [_horn_player, _ambient_player, _rain_player, _thunder_player,
-			_thunk_player, _jingle_player] + _distant_players:
+			_thunk_player, _jingle_player, _murmur_player, _clatter_player,
+			_call_player] + _distant_players:
 		p.bus = "Ambient"
 
 
@@ -84,6 +137,8 @@ func start_ambient() -> void:
 		_ambient_player.play()
 	if _rain_player != null and not _rain_player.playing:
 		_rain_player.play()
+	if _murmur_player != null and not _murmur_player.playing:
+		_murmur_player.play()
 
 
 func set_rain(level: float) -> void:
@@ -126,11 +181,19 @@ func _process(delta: float) -> void:
 	if not _ambient_on:
 		return
 	_duck = move_toward(_duck, 1.0 if _wants_duck() else 0.0, delta / DUCK_RAMP_S)
-	_ambient_player.volume_db = AMBIENT_DB - _duck * DIALOGUE_DUCK_DB
+	_ctx_cd -= delta
+	if _ctx_cd <= 0.0:
+		_ctx_cd = 0.2
+		_update_context()
+	_ambient_player.volume_db = AMBIENT_DB - _duck * DIALOGUE_DUCK_DB \
+			+ _day_gain_db + _traffic_swell_db
+	if _murmur_player != null:
+		_murmur_player.volume_db = _murmur_target_db - _duck * DIALOGUE_DUCK_DB
 	_distant_cd -= delta
 	if _distant_cd > 0.0:
 		return
-	_distant_cd = _rng.randf_range(DISTANT_MIN_GAP, DISTANT_MAX_GAP)
+	_distant_cd = _rng.randf_range(DISTANT_MIN_GAP, DISTANT_MAX_GAP) \
+			* (1.0 + _night_f * 1.2)
 	for p in _distant_players:
 		if p.playing:
 			continue
@@ -149,6 +212,121 @@ func _wants_duck() -> bool:
 	return false
 
 
+func register_world(food: Node, traffic: Node) -> void:
+	## Main hands over the live food stalls + traffic once, so the bed can
+	## react to real positions without walking the scene tree (issue #165).
+	_food = food
+	_traffic = traffic
+	_refresh_stalls()
+
+
+func set_player(p: Node3D) -> void:
+	_player = p
+
+
+func set_day(t: float) -> void:
+	## Day/night mix (issue #165): the street quiets through the evening —
+	## beds drop, distant honks space out, the bazaar hushes to a murmur.
+	var hours := fmod(t * 24.0 + 6.0, 24.0)
+	_night_f = _night_factor(hours)
+	_day_gain_db = -EVENING_DROP_DB * _night_f
+
+
+func _night_factor(hours: float) -> float:
+	## 0 = full day, 1 = deep night; smooth dusk and dawn shoulders.
+	if hours >= 21.5 or hours < 4.0:
+		return 1.0
+	if hours >= 17.0:
+		return (hours - 17.0) / 4.5
+	if hours < 8.0:
+		return 1.0 - (hours - 4.0) / 4.0
+	return 0.0
+
+
+func _update_context() -> void:
+	## Every 0.2 s: distance drives the crowd murmur, chai-stall clatter,
+	## vendor calls and reactive traffic honks (issue #165).
+	if _player == null or not is_instance_valid(_player):
+		return
+	if _bazaar_center == Vector3.ZERO:
+		_refresh_stalls()
+	var pos: Vector3 = _player.global_position
+	_traffic_swell_db = 0.0
+	if _traffic != null and _traffic.has_method("near_positions"):
+		var near: Array = _traffic.near_positions(pos, 24.0, 3)
+		if not near.is_empty():
+			var d_near := pos.distance_to(near[0])
+			_traffic_swell_db = lerpf(TRAFFIC_SWELL_MAX_DB, 0.0,
+					clampf((d_near - 4.0) / 18.0, 0.0, 1.0))
+			_reactive_cd -= 0.2
+			if _reactive_cd <= 0.0 and d_near < 18.0:
+				_reactive_cd = _rng.randf_range(3.0, 7.0)
+				_horn_at(near[_rng.randi_range(0, near.size() - 1)])
+	var d_bazaar := pos.distance_to(_bazaar_center)
+	var attn := 1.0 - clampf((d_bazaar - MURMUR_FULL_M)
+			/ (MURMUR_ZERO_M - MURMUR_FULL_M), 0.0, 1.0)
+	if attn <= 0.02:
+		_murmur_target_db = -60.0
+	else:
+		var night_hush := lerpf(1.0, 0.22, _night_f)
+		_murmur_target_db = MURMUR_DB \
+				+ linear_to_db(maxf(attn * night_hush, 0.001))
+	var d_stall := _nearest_distance(pos, _stall_positions)
+	if d_stall < STALL_NEAR_M:
+		_clatter_cd -= 0.2
+		if _clatter_cd <= 0.0:
+			_clatter_cd = _rng.randf_range(2.2, 6.5) * (1.0 + _night_f * 1.5)
+			var c_gain := clampf(1.0 - (d_stall - 2.0) / (STALL_NEAR_M - 2.0), 0.0, 1.0)
+			_clatter_player.volume_db = lerpf(CLATTER_MIN_DB, CLATTER_MAX_DB, c_gain) \
+					- _night_f * 3.0 - _duck * DIALOGUE_DUCK_DB
+			_clatter_player.pitch_scale = _rng.randf_range(0.92, 1.1)
+			_clatter_player.play()
+		_call_cd -= 0.2
+		if _call_cd <= 0.0 and _night_f < 0.5 and d_stall < 12.0:
+			_call_cd = _rng.randf_range(18.0, 40.0)
+			_call_player.volume_db = lerpf(CALL_MIN_DB, CALL_MAX_DB,
+					clampf(1.0 - d_stall / 12.0, 0.0, 1.0)) \
+					- _duck * DIALOGUE_DUCK_DB
+			_call_player.play()
+	else:
+		_clatter_cd = maxf(_clatter_cd, 1.0)
+		_call_cd = maxf(_call_cd, 4.0)
+
+
+func _refresh_stalls() -> void:
+	if _food == null or not _food.has_method("stall_positions"):
+		return
+	_stall_positions = _food.stall_positions()
+	if _stall_positions.is_empty():
+		return
+	var center := Vector3.ZERO
+	for s in _stall_positions:
+		center += s
+	_bazaar_center = center / float(_stall_positions.size())
+
+
+func _nearest_distance(pos: Vector3, points: Array[Vector3]) -> float:
+	var best := 999999.0
+	for pnt in points:
+		best = minf(best, pos.distance_to(pnt))
+	return best
+
+
+func _horn_at(pos: Vector3) -> void:
+	## A real auto honks from its actual street position: spatialised,
+	## distance-attenuated, never louder than the player's own horn.
+	for p in _spatial_horns:
+		if p.playing:
+			continue
+		p.global_position = pos + Vector3(0.0, 0.9, 0.0)
+		var d := _player.global_position.distance_to(pos)
+		p.volume_db = lerpf(SPATIAL_HORN_MAX_DB, SPATIAL_HORN_MIN_DB,
+				clampf(d / 20.0, 0.0, 1.0)) - _duck * DIALOGUE_DUCK_DB
+		p.pitch_scale = _rng.randf_range(0.85, 1.05)
+		p.play()
+		return
+
+
 func loudness_profile() -> Array:
 	## Worst-case per-channel levels for the scripted loudness check:
 	## {name, peak_db, rms_db} measured on the synthesized buffers with
@@ -163,6 +341,10 @@ func loudness_profile() -> Array:
 		_measure("ambient", _ambient_player.stream, AMBIENT_DB),
 		_measure("rain", _rain_player.stream, RAIN_TOP_DB),
 		_measure("distant_horn", _distant_players[0].stream, DISTANT_MAX_DB),
+		_measure("murmur", _murmur_player.stream, MURMUR_DB),
+		_measure("clatter", _clatter_player.stream, CLATTER_MAX_DB),
+		_measure("vendor_call", _call_player.stream, CALL_MAX_DB),
+		_measure("spatial_horn", _spatial_horns[0].stream, SPATIAL_HORN_MAX_DB),
 	]
 
 
@@ -328,6 +510,91 @@ func _make_jingle() -> AudioStreamWAV:
 		var env := pow(maxf(1.0 - note_t / note_len, 0.0), 1.6)
 		var s := sin(phase) * 0.8 + sin(phase * 2.0) * 0.2
 		var sample := int(clampf(s * env * 0.5, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+
+func _make_murmur() -> AudioStreamWAV:
+	## Loopable bazaar crowd: speech-band noise with a conversational
+	## flutter — three overlapping slow swells that read as chatter,
+	## wordless and warm under the traffic bed. Crossfaded seamless loop.
+	var loop_len := int(MIX_RATE * MURMUR_SECONDS)
+	var xfade := int(MIX_RATE * XFADE_SECONDS)
+	var raw := PackedFloat32Array()
+	raw.resize(loop_len + xfade)
+	var lp := 0.0
+	var lp2 := 0.0
+	for i in raw.size():
+		var n := _rng.randf_range(-1.0, 1.0)
+		lp += (n - lp) * 0.18    # ~1.3 kHz — top of the speech band
+		lp2 += (lp - lp2) * 0.06  # ~420 Hz — vowel warmth
+		var voicey := lp2 + (lp - lp2) * 0.5
+		var t := float(i) / MIX_RATE
+		var flutter := 0.55 \
+				+ 0.22 * sin(TAU * t * 0.9 + 0.7) \
+				+ 0.14 * sin(TAU * t * 1.7 + 2.9) \
+				+ 0.09 * sin(TAU * t * 2.8 + 5.1)
+		raw[i] = voicey * flutter
+	var peak := 0.001
+	for v in raw:
+		peak = maxf(peak, absf(v))
+	var gain := 0.26 / peak
+	var bytes := PackedByteArray()
+	bytes.resize(loop_len * 2)
+	for i in loop_len:
+		var v: float = raw[i]
+		if i < xfade:
+			var w := float(i) / xfade
+			v = raw[i] * w + raw[i + loop_len] * (1.0 - w)
+		bytes.encode_s16(i * 2, int(clampf(v * gain, -1.0, 1.0) * 32767.0))
+	return _wav(bytes, true)
+
+
+func _make_clatter() -> AudioStreamWAV:
+	## One-shot chai-stall clatter: a glass set down on the cart — two
+	## quick high pings with a tick of metal, gone in 140 ms.
+	var frames := int(MIX_RATE * 0.14)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var phase := 0.0
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		var s := 0.0
+		if t < 0.05:
+			phase += TAU * 2350.0 / MIX_RATE
+			s = sin(phase) * pow(maxf(1.0 - t / 0.05, 0.0), 3.0)
+		else:
+			phase += TAU * 3100.0 / MIX_RATE
+			s = sin(phase) * 0.6 * pow(maxf(1.0 - (t - 0.055) / 0.07, 0.0), 3.0)
+		if t < 0.004:
+			s += _rng.randf_range(-1.0, 1.0) * (1.0 - t / 0.004) * 0.5
+		var sample := int(clampf(s * 0.55, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+
+func _make_call() -> AudioStreamWAV:
+	## One-shot street vendor call: a wordless sing-song line — pitch
+	## rises, dips, then rises out, with light vibrato and a throaty
+	## second harmonic so it reads as a voice, not a beep.
+	var frames := int(MIX_RATE * 0.6)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var phase := 0.0
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		var f := 300.0
+		if t < 0.22:
+			f = lerpf(300.0, 430.0, t / 0.22)
+		elif t < 0.38:
+			f = lerpf(430.0, 340.0, (t - 0.22) / 0.16)
+		else:
+			f = lerpf(340.0, 400.0, (t - 0.38) / 0.22)
+		f *= 1.0 + sin(TAU * 5.5 * t) * 0.012
+		phase += TAU * f / MIX_RATE
+		var env: float = minf(t / 0.03, 1.0) * pow(maxf(1.0 - t / 0.6, 0.0), 1.4)
+		var wave := sin(phase) * 0.75 + sin(phase * 2.0) * 0.25
+		var sample := int(clampf(wave * env * 0.4, -1.0, 1.0) * 32767.0)
 		bytes.encode_s16(i * 2, sample)
 	return _wav(bytes, false)
 
