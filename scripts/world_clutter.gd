@@ -16,6 +16,12 @@ extends RefCounted
 ##   - Material variation on repeated props: scooters, bicycles, crates
 ##     and sacks draw as 2-3 color variants each (separate meshes, no
 ##     per-instance tinting needed).
+## Issue 163 density pass: the gameplay-critical blocks (bazaar lane,
+## CP ring, Purani Dilli strip) saturate toward the art reference —
+## fuller two-wheeler rows along the kerbs, extra crate/sack/chai
+## clusters, three new prop kinds (blue water-drum clusters, woven
+## charpai cots, sagging overhead cable bundles) — all on the same
+## collider-per-instance rule, all fixed offsets.
 ## Nothing at street level is walk-through (slice-1 rule): every
 ## repeated prop carries its own collider box. Placement keeps clear of
 ## the bunting poles (±6.0 m), thela carts, chai stall, cows, shrine,
@@ -80,6 +86,17 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 			_dress_stall(b, Vector3(stall_x[side], 0, zeds[i]),
 					1.0 if side == 0 else -1.0, side * 3 + i)
 	_signage_variety(b, cc, pd)
+	# Issue 163: sagging overhead cable bundles crossing the bazaar
+	# lane and running the Purani Dilli shop faces — the reference's
+	# tangled-wire ceiling. Thin shadow-free boxes in the merged mesh,
+	# well above head height, so no colliders needed.
+	for span: Dictionary in [
+		{"a": Vector3(street - 11.9, 6.15, cz - 9.5), "to": Vector3(street - 6.9, 6.15, cz - 9.5)},
+		{"a": Vector3(street - 11.9, 6.35, cz - 2.0), "to": Vector3(street - 6.9, 6.30, cz - 2.0)},
+		{"a": Vector3(street - 11.9, 6.05, cz + 8.5), "to": Vector3(street - 6.9, 6.15, cz + 8.5)},
+		{"a": Vector3(pd.x - 5.0, 6.05, pd.y - 16.05), "to": Vector3(pd.x + 5.0, 5.95, pd.y - 16.05)},
+	]:
+		_cable_sag(b, span["a"], span["to"])
 	var mi := MeshInstance3D.new()
 	mi.mesh = b.build_mesh()
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -96,6 +113,15 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 		_gap_xf(cp, 0, 0.0), _gap_xf(cp, 2, -0.8),
 		# Purani Dilli shop strip, facing the wall.
 		_scoot_xf(pd.x + 5.5, pd.y - 15.3, PI + 0.12),
+		# Issue 163 density pass: fill the long gaps along the bazaar
+		# lane edges (west z +6.8/+12.2, east z +2.4/+11.0) and add a
+		# parked pair on the Purani Dilli strip + its west kerb.
+		_scoot_xf(street - 5.7, cz + 6.8, PI / 2.0 + 0.05),
+		_scoot_xf(street - 5.7, cz + 12.2, PI / 2.0 - 0.07),
+		_scoot_xf(street + 5.5, cz + 2.4, -PI / 2.0 + 0.06),
+		_scoot_xf(street + 5.6, cz + 11.0, -PI / 2.0 - 0.05),
+		_scoot_xf(pd.x + 5.5, pd.y - 12.0, PI - 0.10),
+		_scoot_xf(pd.x - 5.4, pd.y - 15.6, 0.08),
 	]
 	var bikes: Array[Transform3D] = [
 		# Bazaar: against the west shop wall near the gate, and the
@@ -106,6 +132,12 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 		# CP colonnade gap (202.5 deg) and Purani Dilli west corner.
 		_gap_xf(cp, 4, 0.0), Transform3D(Basis(Vector3.UP, 0.06),
 				Vector3(pd.x - 11.4, Roads.CURB_H, pd.y - 15.1)),
+		# Issue 163: west wall of the bazaar lane mid-stretch, and a
+		# second wall-leaning bike on the Purani Dilli strip.
+		Transform3D(Basis(Vector3.UP, PI / 2.0 - 0.04),
+				Vector3(street - 6.2, 0.10, cz + 8.4)),
+		Transform3D(Basis(Vector3.UP, PI - 0.08),
+				Vector3(pd.x + 5.7, Roads.CURB_H, pd.y - 13.4)),
 	]
 	var crates: Array[Transform3D] = [
 		# Stall ends on the bazaar lane.
@@ -114,40 +146,71 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 		# CP colonnade gap (292.5 deg) + Purani Dilli near the dhaba.
 		_gap_xf(cp, 6, 0.0), Transform3D(Basis(Vector3.UP, 0.3),
 				Vector3(pd.x + 13.0, Roads.CURB_H, pd.y - 15.4)),
+		# Issue 163: another stall-end stack, CP gap 247.5 deg, and a
+		# PD strip kerb stack between the dhaba and the corner crates.
+		Transform3D(Basis(Vector3.UP, -0.25), Vector3(street + 9.9, 0.10, cz + 4.2)),
+		_gap_xf(cp, 5, 0.4),
+		Transform3D(Basis(Vector3.UP, 0.18),
+				Vector3(pd.x + 8.2, Roads.CURB_H, pd.y - 15.7)),
 	]
 	var sacks: Array[Transform3D] = [
 		# Spice sacks at the stall counters' lane-side corners.
 		Transform3D(Basis(Vector3.UP, 0.0), Vector3(street - 7.2, 0.10, cz - 10.6)),
 		Transform3D(Basis(Vector3.UP, 0.4), Vector3(street + 7.0, 0.10, cz - 7.5)),
 		Transform3D(Basis(Vector3.UP, -0.3), Vector3(street - 6.7, 0.10, cz + 11.5)),
+		# Issue 163: a fourth stall corner on the bazaar lane and a
+		# PD strip stack beside the new crate row.
+		Transform3D(Basis(Vector3.UP, 0.22), Vector3(street + 7.1, 0.10, cz - 12.6)),
+		Transform3D(Basis(Vector3.UP, -0.18),
+				Vector3(pd.x + 6.6, Roads.CURB_H, pd.y - 14.1)),
 	]
 	var trays: Array[Transform3D] = [
 		# Chai point beside the bazaar chai stall + CP gap tray.
 		Transform3D(Basis(Vector3.UP, -0.6), Vector3(street + 2.0, 0.10, cz + 5.5)),
 		_gap_xf(cp, 0, 1.2),
+		# Issue 163: chai points on the Purani Dilli strip and the CP
+		# colonnade's far side (337.5 deg gap).
+		Transform3D(Basis(Vector3.UP, 0.5),
+				Vector3(pd.x + 3.4, Roads.CURB_H, pd.y - 14.9)),
+		_gap_xf(cp, 7, -0.4),
 	]
 
 	_prop(root, _scooter_mesh(SCOOTER_REDC), [scoots[0], scoots[4], scoots[5]],
 			Vector3(0.7, 1.1, 1.5))
-	_prop(root, _scooter_mesh(SCOOTER_BLACK), [scoots[1]],
+	_prop(root, _scooter_mesh(SCOOTER_BLACK), [scoots[1], scoots[2], scoots[7]],
 			Vector3(0.7, 1.1, 1.5))
-	_prop(root, _scooter_mesh(SCOOTER_BLUE), [scoots[3]],
+	_prop(root, _scooter_mesh(SCOOTER_BLUE), [scoots[3], scoots[8]],
 			Vector3(0.7, 1.1, 1.5))
-	_prop(root, _bicycle_mesh(BIKE_RED), [bikes[0], bikes[2]],
+	_prop(root, _scooter_mesh(SCOOTER_CREAM),
+			[scoots[6], scoots[9], scoots[10], scoots[11]],
+			Vector3(0.7, 1.1, 1.5))
+	_prop(root, _bicycle_mesh(BIKE_RED), [bikes[0], bikes[2], bikes[5]],
 			Vector3(1.7, 1.2, 0.6))
-	_prop(root, _bicycle_mesh(BIKE_BLUE), [bikes[1], bikes[3]],
+	_prop(root, _bicycle_mesh(BIKE_BLUE), [bikes[1], bikes[3], bikes[4]],
 			Vector3(1.7, 1.2, 0.6))
-	_prop(root, _crate_mesh(WOOD), [crates[0], crates[3]],
+	_prop(root, _crate_mesh(WOOD), [crates[0], crates[3], crates[5]],
 			Vector3(0.8, 1.0, 0.8))
-	_prop(root, _crate_mesh(WOOD_DARK), [crates[1]],
+	_prop(root, _crate_mesh(WOOD_DARK), [crates[1], crates[6]],
 			Vector3(0.8, 1.0, 0.8))
-	_prop(root, _crate_mesh(WOOD_PALE), [crates[2]],
+	_prop(root, _crate_mesh(WOOD_PALE), [crates[2], crates[4]],
 			Vector3(0.8, 1.0, 0.8))
-	_prop(root, _sack_mesh(JUTE), [sacks[0], sacks[2]],
+	_prop(root, _sack_mesh(JUTE), [sacks[0], sacks[2], sacks[3]],
 			Vector3(1.3, 0.9, 1.0))
-	_prop(root, _sack_mesh(JUTE_DARK), [sacks[1]],
+	_prop(root, _sack_mesh(JUTE_DARK), [sacks[1], sacks[4]],
 			Vector3(1.3, 0.9, 1.0))
 	_prop(root, _tray_mesh(), trays, Vector3(0.7, 1.0, 0.7))
+	# Issue 163 new prop kinds: water-drum clusters and woven charpai
+	# cots — people-scale street furniture, same multimesh + collider
+	# pattern as everything else.
+	_prop(root, _drum_mesh(), [
+		Transform3D(Basis(Vector3.UP, 0.3), Vector3(street - 4.9, 0.10, cz - 15.2)),
+		Transform3D(Basis(Vector3.UP, -0.5),
+				Vector3(pd.x - 8.2, Roads.CURB_H, pd.y - 15.8)),
+	], Vector3(1.5, 0.95, 1.1))
+	_prop(root, _charpai_mesh(), [
+		Transform3D(Basis(Vector3.UP, 0.12), Vector3(street - 10.9, 0.10, cz + 8.0)),
+		_gap_xf(cp, 1, 0.0),
+	], Vector3(1.9, 0.55, 0.95))
 	return root
 
 
@@ -389,6 +452,7 @@ static func _sack_mesh(jute: Color) -> ArrayMesh:
 
 static func _tray_mesh() -> ArrayMesh:
 	## Chai point: wooden stool, steel tray, six glasses, thermos.
+	## Chai point: wooden stool, steel tray, six glasses, thermos.
 	var b := MeshTools.new()
 	for lx in [-0.16, 0.16]:
 		for lz in [-0.16, 0.16]:
@@ -410,6 +474,77 @@ static func _tray_mesh() -> ArrayMesh:
 			g += 1
 	b.add_box(Vector3(0.13, 0.30, 0.13), Vector3(0.24, 0.62, 0.18), BRASS)
 	return b.build_mesh()
+
+
+static func _drum_mesh() -> ArrayMesh:
+	## Issue 163: water-drum cluster — three blue plastic barrels of
+	## staggered heights, one lidded dark, a steel cup on top. Reads as
+	## the classic rooftop/street water storage at a glance.
+	var b := MeshTools.new()
+	const DRUM_BLUE := Color(0.15, 0.30, 0.60)
+	const DRUM_LID := Color(0.09, 0.19, 0.40)
+	var spots := [
+		[Vector3(-0.42, 0, 0.06), 0.85, true],
+		[Vector3(0.30, 0, -0.22), 0.85, false],
+		[Vector3(0.08, 0, 0.44), 0.66, false],
+	]
+	var drum := CylinderMesh.new()
+	drum.top_radius = 0.30
+	drum.bottom_radius = 0.27
+	drum.radial_segments = 10
+	for s: Array in spots:
+		drum.height = s[1]
+		b.add_mesh(drum, Transform3D(Basis(Vector3.UP, s[0].x * 0.5),
+				s[0] + Vector3(0, s[1] * 0.5, 0)),
+				DRUM_LID if s[2] else DRUM_BLUE)
+		# Ribbed band mid-barrel for the plastic-mould read.
+		b.add_box(Vector3(0.63, 0.05, 0.63),
+				s[0] + Vector3(0, s[1] * 0.55, 0), DRUM_LID)
+	var cup := CylinderMesh.new()
+	cup.top_radius = 0.05
+	cup.bottom_radius = 0.04
+	cup.height = 0.10
+	b.add_mesh(cup, Transform3D(Basis(), Vector3(0.30, 0.92, -0.22)), STEEL)
+	return b.build_mesh()
+
+
+static func _charpai_mesh() -> ArrayMesh:
+	## Issue 163: woven charpai cot — four turned legs, wood frame,
+		## rattan weave top with darker straps, jute bedroll at the head.
+	var b := MeshTools.new()
+	for lx in [-0.82, 0.82]:
+		for lz in [-0.36, 0.36]:
+			b.add_box(Vector3(0.07, 0.42, 0.07), Vector3(lx, 0.21, lz),
+					WOOD_DARK)
+	b.add_box(Vector3(1.78, 0.09, 0.08), Vector3(0, 0.44, -0.36), WOOD)
+	b.add_box(Vector3(1.78, 0.09, 0.08), Vector3(0, 0.44, 0.36), WOOD)
+	b.add_box(Vector3(0.08, 0.09, 0.80), Vector3(-0.82, 0.44, 0), WOOD)
+	b.add_box(Vector3(0.08, 0.09, 0.80), Vector3(0.82, 0.44, 0), WOOD)
+	b.add_box(Vector3(1.74, 0.05, 0.84), Vector3(0, 0.50, 0), RATTAN)
+	for sz in [-0.28, 0.02, 0.30]:
+		b.add_box(Vector3(1.76, 0.055, 0.09), Vector3(0, 0.51, sz), JUTE_DARK)
+	var roll := CylinderMesh.new()
+	roll.top_radius = 0.13
+	roll.bottom_radius = 0.13
+	roll.height = 1.10
+	b.add_mesh(roll, Transform3D(Basis(Vector3.UP, PI / 2.0),
+				Vector3(-0.25, 0.62, 0)), JUTE)
+	return b.build_mesh()
+
+
+static func _cable_sag(b: MeshTools, a: Vector3, to: Vector3) -> void:
+	## Issue 163: one sagging overhead cable — five thin boxes stepped
+	## into a V between the anchors (matches the issue-129 wire look,
+	## kept shadow-free in the merged mesh).
+	const WIRE := Color(0.07, 0.07, 0.08)
+	var seg := (to - a) / 5.0
+	var dips := [0.0, -0.16, -0.30, -0.16, 0.0]
+	var box := BoxMesh.new()
+	box.size = Vector3(seg.length() * 1.18, 0.045, 0.045)
+	for i in 5:
+		var mid: Vector3 = a + seg * (i + 0.5)
+		mid.y += dips[i]
+		b.add_box(box.size, mid, WIRE)
 
 
 # ------------------------------------------------------------ placement
