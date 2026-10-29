@@ -15,6 +15,7 @@ extends Node
 const AUDIO_SCRIPT := preload("res://scripts/audio.gd")
 const RADIO_SCRIPT := preload("res://scripts/radio.gd")
 const CHASE_SCRIPT := preload("res://scripts/chase_music.gd")
+const SCORE_SCRIPT := preload("res://scripts/score.gd")
 
 const HEADROOM_DB := -3.0
 const BED_SPREAD_DB := 8.0
@@ -33,9 +34,12 @@ func _ready() -> void:
 	var chase := CHASE_SCRIPT.new()
 	add_child(chase)
 	chase.setup()
+	var score := SCORE_SCRIPT.new()
+	add_child(score)
+	score.setup()
 
 	var channels: Array = audio.loudness_profile() + radio.loudness_profile() \
-			+ chase.loudness_profile()
+			+ chase.loudness_profile() + score.loudness_profile()
 	if channels.is_empty():
 		_fail("loudness profiles came back empty — synthesis not built")
 		return
