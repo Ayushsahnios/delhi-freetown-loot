@@ -42,6 +42,12 @@ jobs:
           timeout 120 godot --headless --path . res://scenes/save_check.tscn 2>&1 | tee /tmp/save.log
           grep -q "verdict=PASS" /tmp/save.log
 
+      - name: Police escalation gate (issue 188)
+        run: |
+          set -o pipefail
+          timeout 120 godot --headless --path . res://scenes/police_check.tscn 2>&1 | tee /tmp/police.log
+          grep -q "verdict=PASS" /tmp/police.log
+
       - name: Perf budget gate (headless frame-time, issue 167)
         run: |
           set -o pipefail
