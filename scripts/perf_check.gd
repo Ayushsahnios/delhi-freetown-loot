@@ -9,7 +9,12 @@ extends Node
 ##
 ## Usage:
 ##   godot --headless --path . res://scenes/perf_check.tscn \
-##       -- --frames 240 --warmup 90 --budget 22 --no-lod
+##       -- --frames 240 --warmup 90 --budget 22 --no-lod --tp -57,75
+##
+## --tp X,Z optionally parks the player at a world position before the
+## warmup (same knob as screenshot.tscn), so density changes to the
+## crowd-zone strips (issue #181) can be measured AT a strip, not only
+## at the default spawn.
 ##
 ## What this measures: SIMULATION cost — the headless renderer is a
 ## dummy, there is no GPU in CI. Renderer-side effects (draw calls,
@@ -26,6 +31,7 @@ func _ready() -> void:
 	var warmup := 90
 	var budget := DEFAULT_BUDGET_MS
 	var draws := false
+	var tp := Vector2(INF, INF)
 	var args := OS.get_cmdline_user_args()
 	for i in range(args.size()):
 		var a: String = args[i]
@@ -37,6 +43,10 @@ func _ready() -> void:
 			budget = float(args[i + 1])
 		elif a == "--no-lod":
 			LodScript.disabled = true
+		elif a == "--tp" and i + 1 < args.size():
+			var bits: PackedStringArray = args[i + 1].split(",")
+			if bits.size() == 2:
+				tp = Vector2(float(bits[0]), float(bits[1]))
 		elif a == "--draws":
 			draws = true
 
@@ -48,6 +58,9 @@ func _ready() -> void:
 		main._start_game(Game.CHARACTERS[0])
 	if main.has_method("_dismiss_controls_card"):
 		main._dismiss_controls_card()
+	if tp.x != INF and main.get("player") != null:
+		var p: Node3D = main.get("player")
+		p.position = Vector3(tp.x, p.position.y, tp.y)
 
 	for i in range(warmup):
 		await get_tree().process_frame
