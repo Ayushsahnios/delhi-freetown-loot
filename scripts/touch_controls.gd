@@ -74,6 +74,7 @@ func _build() -> void:
 	bottom.add_theme_constant_override("separation", 12)
 	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rows.add_child(bottom)
+	bottom.add_child(_make_button("MAP", ["map"], 72.0))
 	bottom.add_child(_make_button("SWAP", ["switch_character"], 72.0))
 	# ACT doubles as the dialogue/choice confirm: it presses the shared
 	# interact action plus ui_accept, which the dialogue UI listens to.

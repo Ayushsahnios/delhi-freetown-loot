@@ -40,6 +40,11 @@ func _process(_delta: float) -> void:
 	# Photo mode owns ESC while it is active (issue #100).
 	if get_tree().get_first_node_in_group("photo_mode") != null:
 		return
+	# The city map owns ESC while it is open (issue #189); it closes
+	# itself on the same press.
+	var city_map := get_tree().get_first_node_in_group("map_screen")
+	if city_map != null and city_map.visible:
+		return
 	if visible:
 		_resume()
 	else:

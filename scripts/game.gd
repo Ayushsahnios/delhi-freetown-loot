@@ -70,6 +70,9 @@ func _setup_inputs() -> void:
 	_add_keys("debug_fall", [KEY_C])
 	_add_keys("save", [KEY_F9])
 	_add_keys("pause", [KEY_ESCAPE])
+	# City map (issue #189): full-screen map, custom waypoint, routing
+	# chevron — M on the keyboard, LB on the gamepad.
+	_add_keys("map", [KEY_M])
 	# Photo mode (issue #100): P toggles the free camera, F cycles the
 	# filters, ENTER shoots, G opens the gallery.
 	_add_keys("photo", [KEY_P])
@@ -93,6 +96,7 @@ func _setup_inputs() -> void:
 	_add_joy_buttons("bribe", [JOY_BUTTON_LEFT_SHOULDER])
 	_add_joy_buttons("save", [JOY_BUTTON_START])
 	_add_joy_buttons("pause", [JOY_BUTTON_BACK])
+	_add_joy_buttons("map", [JOY_BUTTON_LEFT_SHOULDER])
 	for action in ["move_forward", "move_back", "move_left", "move_right"]:
 		InputMap.action_set_deadzone(action, 0.2)
 

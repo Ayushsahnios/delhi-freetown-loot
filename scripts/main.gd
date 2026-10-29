@@ -20,6 +20,8 @@ const AudioScript := preload("res://scripts/audio.gd")
 const RadioScript := preload("res://scripts/radio.gd")
 const LodScript := preload("res://scripts/lod.gd")
 const MiniMapScript := preload("res://scripts/minimap.gd")
+const MapScreenScript := preload("res://scripts/map_screen.gd")
+const RouteArrowScript := preload("res://scripts/route_arrow.gd")
 const CharactersScript := preload("res://scripts/characters.gd")
 const FoodScript := preload("res://scripts/food.gd")
 const WeatherScript := preload("res://scripts/weather.gd")
@@ -105,6 +107,9 @@ var _impact_cd := 0.0
 var _audio: Node
 var _radio: Node
 var _minimap: Control
+var _map_screen: Control
+var _route_arrow: Control
+var _waypoint := Vector3.INF
 var _food: Node
 var _taxi: Node
 var _courier: Node
@@ -1133,6 +1138,17 @@ func _build_hud() -> void:
 	_minimap = MiniMapScript.new()
 	_minimap.setup(WORLD, PITCH, ROAD, GRID + 1, _landmarks)
 	layer.add_child(_minimap)
+	# Routing chevron and the full-screen city map (issue #189). The map
+	# joins the HUD layer above the minimap; it freezes the world while
+	# open, like the pause menu.
+	_route_arrow = RouteArrowScript.new()
+	_route_arrow.setup()
+	layer.add_child(_route_arrow)
+	_map_screen = MapScreenScript.new()
+	_map_screen.setup(WORLD, PITCH, ROAD, GRID + 1, _landmarks)
+	_map_screen.waypoint_chosen.connect(_on_waypoint_chosen)
+	_map_screen.waypoint_cleared.connect(_on_waypoint_cleared)
+	layer.add_child(_map_screen)
 
 
 func _build_select_ui() -> void:
@@ -1194,7 +1210,7 @@ func _build_select_ui() -> void:
 		box.add_child(btn)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift run · E vehicle/metro · F mission · H horn · N radio · Q/R street food · Tab switch character · F9 save · X debug hurt · C debug drop · Esc pause\nGamepad · stick move · A interact · B horn · X radio · Y switch · RB sprint · D-pad food · Select pause · Start save · touch pad UI on touchscreens"
+	hint.text = "WASD move · Shift run · E vehicle/metro · F mission · H horn · N radio · Q/R street food · Tab switch character · M map · F9 save · X debug hurt · C debug drop · Esc pause\nGamepad · stick move · A interact · B horn · X radio · Y switch · RB sprint · LB map · D-pad food · Select pause · Start save · touch pad UI on touchscreens"
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
@@ -1374,7 +1390,7 @@ func _show_controls_card() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 	var body := Label.new()
-	body.text = "WASD move · Shift sprint · E enter or exit vehicles · metro gates board the shuttle\nH horn · N radio · Q chai · R samosa · Tab switch legend · Esc pause\nYour first job waits at the gold START HERE beacon up the road"
+	body.text = "WASD move · Shift sprint · E enter or exit vehicles · metro gates board the shuttle\nH horn · N radio · Q chai · R samosa · Tab switch legend · M map · Esc pause\nYour first job waits at the gold START HERE beacon up the road"
 	body.add_theme_font_size_override("font_size", 14)
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(body)
@@ -1459,6 +1475,14 @@ func _process(delta: float) -> void:
 			player.global_position += Vector3(0.0, 22.0, 0.0)
 		if Input.is_action_just_pressed("save"):
 			_save_game()
+		if Input.is_action_just_pressed("map") and not _map_screen.visible \
+					and get_tree().get_first_node_in_group("photo_mode") == null:
+			var map_focus: Node3D = _metro if _metro_riding \
+					else (current_auto if current_auto != null else player)
+			_map_screen.open(map_focus.global_position, map_focus.rotation.y,
+					_missions.active_target(), _waypoint)
+			# A pause on the map is as good a checkpoint as any other.
+			_autosave_silent()
 		if current_auto == null and not _metro_riding and _impact_cd <= 0.0:
 			var hazard: float = _traffic.worst_hazard_speed(player.global_position)
 			if hazard > 2.5:
@@ -1478,14 +1502,27 @@ func _process(delta: float) -> void:
 	elif _metro_riding:
 		player.global_position = _metro.carriage_floor_pos()
 	_update_camera(delta)
+	var focus: Node3D = current_auto if current_auto != null else player
+	if _metro_riding:
+		focus = _metro
 	if _minimap.visible:
-		var focus: Node3D = current_auto if current_auto != null else player
-		if _metro_riding:
-			focus = _metro
 		_minimap.track(focus.global_position, focus.rotation.y)
 		_minimap.set_mission_target(_missions.active_target())
 		_minimap.set_police(_police.jeep_positions())
 		_minimap.set_roadblocks(_police.roadblock_positions())
+	# Routing chevron (issue #189): the active mission objective leads;
+	# a custom map waypoint takes over when no mission runs.
+	var route_tgt: Vector3 = _missions.active_target()
+	var route_mission := route_tgt.is_finite()
+	if not route_mission:
+		route_tgt = _waypoint
+	_route_arrow.aim(focus.global_position, focus.rotation.y, route_tgt,
+			route_mission)
+	if _waypoint.is_finite() \
+			and focus.global_position.distance_to(_waypoint) < 8.0:
+		_waypoint = Vector3.INF
+		_minimap.set_waypoint(Vector3.INF)
+		_show_toast("WAYPOINT REACHED")
 	# Wanted cooling (issue #154): the stars blink while every jeep has
 	# lost sight of the player — hold the gap and the heat drains away.
 	_blink_t = fmod(_blink_t + delta, 10.0)
@@ -2311,6 +2348,18 @@ func _exit_tree() -> void:
 	var data := _collect_save()
 	if not data.is_empty():
 		SaveGame.write(data)
+
+
+func _on_waypoint_chosen(p: Vector3) -> void:
+	_waypoint = p
+	_minimap.set_waypoint(p)
+	_show_toast("Waypoint set — follow the gold chevron")
+
+
+func _on_waypoint_cleared() -> void:
+	_waypoint = Vector3.INF
+	_minimap.set_waypoint(Vector3.INF)
+	_show_toast("Waypoint cleared")
 
 
 func _show_toast(text: String) -> void:
