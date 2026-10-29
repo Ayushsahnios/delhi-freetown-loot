@@ -92,6 +92,7 @@ var _step_alt := 0
 var _rain_level := 0.0
 var _indoors := false
 var _muffle: AudioEffectLowPassFilter = null
+var _wetness := 0.0   # road wetness — squelch follows this, not the rain
 
 
 func setup() -> void:
@@ -202,8 +203,7 @@ func start_ambient() -> void:
 
 
 func set_rain(level: float) -> void:
-	## Rain bed volume follows the weather intensity (silent when dry);
-	## the level also switches footsteps to the wet squelch voice.
+	## Rain bed volume follows the weather intensity (silent when dry).
 	var l := clampf(level, 0.0, 1.0)
 	_rain_level = l
 	if _rain_player != null:
@@ -214,6 +214,13 @@ func set_indoors(inside: bool) -> void:
 	## Interior muffle (issue #227): the doorway check in interiors.gd
 	## flips this — the whole street bed goes behind the shopfront.
 	_indoors = inside
+
+
+func set_wetness(w: float) -> void:
+	## Road wetness from the weather system (issue #205): the squelch
+	## voice follows the pavement, not the shower — streets stay soggy
+	## for a while after the rain has passed.
+	_wetness = clampf(w, 0.0, 1.0)
 
 
 func thunder() -> void:
@@ -466,7 +473,7 @@ func _tick_footsteps(delta: float) -> void:
 	var surface := "dirt"
 	if _traffic != null and _traffic.has_method("on_road") \
 				and _traffic.on_road(_player.global_position, 1.2):
-		surface = "pave" if _rain_level <= 0.03 else "wet"
+		surface = "wet" if _wetness > 0.2 else "pave"
 	var p := _step_players[_step_alt % _step_players.size()]
 	_step_alt += 1
 	p.stream = _step_voices[surface]

@@ -73,6 +73,15 @@ func _roll_plan(day_t: float) -> void:
 	_prev_day_t = day_t
 
 
+func debug_force_window(start: float, end: float) -> void:
+	## Deterministic rain window for the headless squall gate (issue
+	## #205) — same plan fields _roll_plan writes, minus the dice.
+	_plan_day += 1
+	_plan_rain = true
+	_plan_start = start
+	_plan_end = end
+
+
 func _update_label() -> void:
 	if intensity > 0.15:
 		label = "Monsoon"

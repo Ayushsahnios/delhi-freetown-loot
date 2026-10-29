@@ -43,6 +43,7 @@ var _toast: Label
 var _toast_tween: Tween
 var night_f := 0.0
 var rush_f := 0.0
+var rain_demand := 0.0  # 0..1 monsoon chai rush — drives cart surge pricing
 var _bulb_mat: StandardMaterial3D = null
 
 
@@ -100,6 +101,24 @@ func set_night_rush(night: float, rush: float) -> void:
 	rush_f = rush
 
 
+func set_rain_demand(level: float) -> void:
+	## Monsoon squalls (issue #205): chai/samosa demand spikes in the
+	## rain — carts charge a surge premium while it pours.
+	rain_demand = clampf(level, 0.0, 1.0)
+
+
+func _price(item: Dictionary) -> int:
+	## Live price with the monsoon demand premium (issue #205): cart
+	## chai/samosa surge with the rain — full +50% at a downpour, phased
+	## in from drizzle, rounded up to the nearest five rupees. Counter
+	## menus (mithai/paratha) stay fixed.
+	if item["name"] != "CHAI" and item["name"] != "SAMOSA":
+		return int(item["price"])
+	var surge := clampf((rain_demand - 0.25) / 0.75, 0.0, 1.0)
+	var bumped := float(item["price"]) * (1.0 + 0.5 * surge)
+	return int(ceilf(bumped / 5.0) * 5.0)
+
+
 func _process(delta: float) -> void:
 	_t += delta
 	# Kettle boil rides the rush (issue #185): morning steam cycles faster
@@ -127,7 +146,7 @@ func _process(delta: float) -> void:
 	if its.size() < 2:
 		its = [CHAI, SAMOSA]
 	_prompt.text = "%s Rs %d [Q]  ·  %s Rs %d [R]  ·  stall food is hot%s" % [
-			its[0]["name"], its[0]["price"], its[1]["name"], its[1]["price"], _mood()]
+			its[0]["name"], _price(its[0]), its[1]["name"], _price(its[1]), _mood()]
 	_prompt.visible = true
 	if Input.is_action_just_pressed("buy_chai"):
 		_buy(its[0])
@@ -136,7 +155,9 @@ func _process(delta: float) -> void:
 
 
 func _mood() -> String:
-	## Prompt tail for the daily rhythm (issue #185).
+	## Prompt tail for the daily rhythm (issue #185) and squalls (#205).
+	if rain_demand > 0.25:
+		return "  ·  rain rush"
 	if rush_f > 0.5:
 		return "  ·  morning rush"
 	if night_f > 0.5:
@@ -159,14 +180,15 @@ func _buy(item: Dictionary) -> void:
 	if float(_health.hp) >= float(_health.MAX_HP):
 		_show_toast("Full already — save your paisa")
 		return
-	if not _missions.spend(int(item["price"])):
-		_show_toast("Not enough paisa — Rs %d needed" % int(item["price"]))
+	var price := _price(item)
+	if not _missions.spend(price):
+		_show_toast("Not enough paisa — Rs %d needed" % price)
 		return
 	# Cash pip the moment paisa leaves the wallet (issue #187).
 	if _audio != null and _audio.has_method("purchase_blip"):
 		_audio.purchase_blip()
 	_health.heal(float(item["heal"]))
-	_show_toast("%s  ·  +%d HP  ·  Rs %d" % [item["name"], int(item["heal"]), int(item["price"])])
+	_show_toast("%s  ·  +%d HP  ·  Rs %d" % [item["name"], int(item["heal"]), price])
 	_prompt.visible = false
 
 

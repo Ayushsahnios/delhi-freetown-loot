@@ -1467,6 +1467,9 @@ func _process(delta: float) -> void:
 		current_auto.grip = 1.0 - _weather.wetness * 0.5
 	_apply_wetness()
 	_audio.set_rain(_weather.intensity)
+	_audio.set_wetness(_weather.wetness)
+	if _food != null:
+		_food.set_rain_demand(_weather.intensity)
 	if not _playing:
 		for m in _portrait_models:
 			m.rotate_y(delta * 0.7)
