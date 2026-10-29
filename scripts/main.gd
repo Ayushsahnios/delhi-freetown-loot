@@ -131,6 +131,7 @@ var _card_alive := 0.0
 var _flash_tween: Tween
 var _toast: Label
 var _toast_tween: Tween
+var _hud_radio_tween: Tween
 var _char_states := {}
 var _switch_lock := 0.0
 var _switch_pending_release := false
@@ -1434,6 +1435,7 @@ func _process(delta: float) -> void:
 		if current_auto != null and Input.is_action_just_pressed("radio"):
 			_hud_radio.text = _radio.cycle_station()
 			_show_toast(_hud_radio.text)
+			_flash_hud_radio()
 		if Input.is_action_just_pressed("debug_hurt"):
 			_health.damage(25.0)
 		if current_auto == null and not _metro_riding and Input.is_action_just_pressed("debug_fall"):
@@ -1603,11 +1605,21 @@ func _radio_on() -> void:
 	_radio.set_active(true)
 	_hud_radio.text = _radio.label()
 	_hud_radio.visible = true
+	_hud_radio.modulate.a = 1.0
 
 
 func _radio_off() -> void:
 	_radio.set_active(false)
 	_hud_radio.visible = false
+
+
+func _flash_hud_radio() -> void:
+	## Station-switch flash: the strip pulses in with the new preset name.
+	if _hud_radio_tween != null and _hud_radio_tween.is_valid():
+		_hud_radio_tween.kill()
+	_hud_radio.modulate.a = 0.25
+	_hud_radio_tween = create_tween()
+	_hud_radio_tween.tween_property(_hud_radio, "modulate:a", 1.0, 0.45)
 
 
 # ---------------------------------------------------------------- switch
