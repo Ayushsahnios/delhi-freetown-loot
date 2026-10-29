@@ -14,6 +14,9 @@ const SAMOSA := {"name": "SAMOSA", "price": 35, "heal": 45}
 ## sell through the same wallet/HP path as the carts.
 const MITHAI := {"name": "MITHAI", "price": 30, "heal": 35}
 const PARATHA := {"name": "PARATHA", "price": 45, "heal": 55}
+## Monsoon cart premium (issue #210 tuning): full +35% at a downpour —
+## rain pressure on the wallet without punishing day one.
+const SURGE_MULT := 0.35
 
 ## Flat offset from each landmark center — sidewalk spots that stay clear
 ## of mission givers, spawns and drivable roads.
@@ -109,13 +112,13 @@ func set_rain_demand(level: float) -> void:
 
 func _price(item: Dictionary) -> int:
 	## Live price with the monsoon demand premium (issue #205): cart
-	## chai/samosa surge with the rain — full +50% at a downpour, phased
+	## chai/samosa surge with the rain — full +35% at a downpour, phased
 	## in from drizzle, rounded up to the nearest five rupees. Counter
 	## menus (mithai/paratha) stay fixed.
 	if item["name"] != "CHAI" and item["name"] != "SAMOSA":
 		return int(item["price"])
 	var surge := clampf((rain_demand - 0.25) / 0.75, 0.0, 1.0)
-	var bumped := float(item["price"]) * (1.0 + 0.5 * surge)
+	var bumped := float(item["price"]) * (1.0 + SURGE_MULT * surge)
 	return int(ceilf(bumped / 5.0) * 5.0)
 
 

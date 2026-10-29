@@ -8,8 +8,13 @@ const GRID := 11
 const WORLD := GRID * PITCH
 const DAY_LEN := 240.0
 ## Auto-stand rent per in-game day (issue #219): comes off at the
-## midnight rollover; a shortfall warns, never kills.
-const AUTO_STAND_RENT := 60
+## midnight rollover; a shortfall warns, never kills. Tuned in the
+## economy pass (issue #210) to ~25% of median hustle income.
+const AUTO_STAND_RENT := 120
+## Debut wallet (issue #210): petty cash so day one can buy chai while
+## the fare meter warms up. Applied to a fresh game and to each
+## legend's first outing (per-legend wallets persist after that).
+const START_CASH := 80
 
 const PlayerScript := preload("res://scripts/player.gd")
 const AutoScript := preload("res://scripts/auto.gd")
@@ -1393,6 +1398,9 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	if not save.is_empty():
 		_apply_save(save)
 	else:
+		# Fresh game (issue #210): the debut wallet — petty cash for a
+		# chai or two while the fare meter warms up.
+		_missions.set_cash(START_CASH)
 		_show_controls_card()
 
 
@@ -1744,7 +1752,7 @@ func _switch_character() -> void:
 		player.global_position.y = maxf(player.global_position.y, 1.0)
 		player.velocity = Vector3.ZERO
 		_health.restore(100.0)
-		_missions.set_cash(0)
+		_missions.set_cash(START_CASH)
 	else:
 		player.global_position = st["pos"]
 		player.rotation.y = float(st["heading"])

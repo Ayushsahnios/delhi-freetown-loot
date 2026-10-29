@@ -8,8 +8,11 @@ extends Node3D
 
 const MeshTools := preload("res://scripts/meshtools.gd")
 
-const BASE_FARE := 30
-const RATE_PER_M := 0.9
+## Economy pass (issue #210): base + per-metre tuned so a clean median
+## ride (≈200 m) banks ~Rs 130 + tip, holding the ~20-min
+## first-upgrade target on the tuned curve.
+const BASE_FARE := 20
+const RATE_PER_M := 0.55
 const BOARD_R := 5.5
 const DROP_R := 17.0
 const STOP_SPEED := 2.2

@@ -8,8 +8,11 @@ extends Node3D
 
 const MeshTools := preload("res://scripts/meshtools.gd")
 
-const BASE_PAY := 25
-const PER_M := 0.45
+## Economy pass (issue #210): tuned against the taxi curve so a
+## courier streak stays the competitive no-auto option (~Rs 100/min)
+## without out-earning the meter once an auto is rolling.
+const BASE_PAY := 20
+const PER_M := 0.35
 const PICK_R := 3.4
 const DROP_R := 16.0
 const MIN_TRIP := 60.0
