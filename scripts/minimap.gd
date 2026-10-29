@@ -32,6 +32,7 @@ var _heading := 0.0
 var _target := Vector3.INF
 var _waypoint := Vector3.INF
 var _police_pts: Array[Vector3] = []
+var _roadblock_pts: Array[Vector3] = []
 var _wanted := 0
 var _t := 0.0
 
@@ -71,6 +72,12 @@ func set_police(pts: Array[Vector3]) -> void:
 	_police_pts = pts
 
 
+func set_roadblocks(pts: Array[Vector3]) -> void:
+	## 3-star roadblock posts (issue #188) draw as amber bars — the one
+	## hazard the flashing dots are herding you toward.
+	_roadblock_pts = pts
+
+
 func set_wanted(stars: int) -> void:
 	_wanted = stars
 
@@ -107,6 +114,8 @@ func _draw() -> void:
 				else Color(0.25, 0.45, 1.0)
 		for pt in _police_pts:
 			_blip(pt, flash, 3.0, true)
+		for pt in _roadblock_pts:
+			_barrier(pt)
 	var north := _center + Vector2(0.0, -1.0).rotated(_heading) \
 			* (SIZE / 2.0 - 18.0)
 	draw_string(ThemeDB.fallback_font, north + Vector2(-4.0, 4.0), "N",
@@ -141,6 +150,20 @@ func _pin(world_pos: Vector3) -> void:
 	draw_colored_polygon(d, col)
 	draw_polyline(PackedVector2Array([d[0], d[1], d[2], d[3], d[0]]),
 			Color(0.0, 0.0, 0.0, 0.55), 1.5, true)
+
+
+func _barrier(world_pos: Vector3) -> void:
+	## Roadblock post on the minimap: a fat amber tick pinned to the map
+	## edge if it is out of view — you always know where the wall is.
+	var m: Vector2 = Vector2(world_pos.x - _pos.x, world_pos.z - _pos.z) \
+			.rotated(_heading) * _scale
+	var lim := SIZE / 2.0 - 12.0
+	if m.length() > lim:
+		m = m.normalized() * lim
+	var pt := _center + m
+	draw_line(pt + Vector2(-4.0, 0.0), pt + Vector2(4.0, 0.0),
+			Color(1.0, 0.72, 0.15), 4.0, true)
+	draw_arc(pt, 6.5, 0.0, TAU, 12, Color(0.0, 0.0, 0.0, 0.55), 1.5, true)
 
 
 func _seg(a_world: Vector2, b_world: Vector2) -> void:

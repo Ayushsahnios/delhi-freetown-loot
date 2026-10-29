@@ -118,6 +118,8 @@ var _hud_hp_bg: ColorRect
 var _hud_hp_fill: ColorRect
 var _hud_hp_text: Label
 var _hud_stars: Label
+var _hud_paan: Label
+var _paan_shops: Array[Vector3] = []
 var _hud_stam_bg: ColorRect
 var _hud_stam_fill: ColorRect
 var _last_stars := 0
@@ -183,6 +185,7 @@ func _ready() -> void:
 	_build_city()
 	_build_landmarks()
 	_build_street_lights()
+	_build_paan_shops()
 	_food = FoodScript.new()
 	add_child(_food)
 	_food.setup(_landmarks)
@@ -1062,6 +1065,18 @@ func _build_hud() -> void:
 	_hud_stars.add_theme_color_override("font_color", Color(1.0, 0.83, 0.25))
 	_hud_stars.visible = false
 	layer.add_child(_hud_stars)
+	# Paan-shop bribe prompt (issue #188): one line above the stall food
+	# prompt — only ever visible while carrying heat near a counter.
+	_hud_paan = Label.new()
+	_hud_paan.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_hud_paan.offset_bottom = -160.0
+	_hud_paan.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hud_paan.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	_hud_paan.add_theme_font_size_override("font_size", 18)
+	_hud_paan.add_theme_color_override("font_color", Color(0.65, 1.0, 0.75))
+	_hud_paan.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_paan.visible = false
+	layer.add_child(_hud_paan)
 	# Sprint stamina (issue #154): slim cyan bar under the HP bar,
 	# hidden while full — it only surfaces when the legend is burning it.
 	_hud_stam_bg = ColorRect.new()
@@ -1282,6 +1297,8 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_police.stars_changed.connect(_on_stars_changed)
 	_police.escaping_changed.connect(_on_stars_escaping)
 	_police.arrested.connect(_on_arrested)
+	_police.spiked.connect(_on_spiked)
+	_police.roadblock_crash.connect(_on_roadblock_crash)
 	player.landed_hard.connect(_on_landed_hard)
 	player.stamina_changed.connect(_on_stamina_changed)
 	_health = HealthScript.new()
@@ -1492,6 +1509,7 @@ func _process(delta: float) -> void:
 		_minimap.track(focus.global_position, focus.rotation.y)
 		_minimap.set_mission_target(_missions.active_target())
 		_minimap.set_police(_police.jeep_positions())
+		_minimap.set_roadblocks(_police.roadblock_positions())
 	# Routing chevron (issue #189): the active mission objective leads;
 	# a custom map waypoint takes over when no mission runs.
 	var route_tgt: Vector3 = _missions.active_target()
@@ -1514,6 +1532,7 @@ func _process(delta: float) -> void:
 		_hud_stars.modulate.a = 1.0
 	_taxi.tick(delta, current_auto, player)
 	_courier.tick(delta, player)
+	_tick_paan_bribe(delta)
 
 
 func _on_bump_hit(strength: float) -> void:
@@ -1876,11 +1895,76 @@ func _on_stars_changed(s: int) -> void:
 		var t := create_tween()
 		t.tween_property(_hud_stars, "scale", Vector2.ONE, 0.35) \
 				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		if s >= 3:
+				_show_toast("3-STAR HEAT  ·  roadblocks going up — watch the road ahead")
 	_last_stars = s
+
+
+func _on_spiked() -> void:
+	## Rolled over a roadblock spike strip (issue #188): tyres shred —
+	## the ride keeps limping, but at half pace and no pickup.
+	if current_auto != null:
+		current_auto.tyre_burst(7.0)
+		current_auto.hit_bump(1.0)
+	_on_bump_hit(1.0)
+	_show_toast("SPIKE STRIP  ·  tyres shredded — grip gone")
+
+
+func _on_roadblock_crash() -> void:
+	## Ploughed through a parked jeep post at speed (issue #188): the post
+	## scatters, the bodywork pays for it.
+	if not _dead:
+		_health.damage(9.0)
+	if current_auto != null:
+		current_auto.hit_bump(1.0)
+	_on_bump_hit(1.0)
+	_show_toast("SMASHED THE ROADBLOCK  ·  bodywork screaming")
 
 
 func _on_stars_escaping(active: bool) -> void:
 	_stars_escaping = active
+
+
+func _tick_paan_bribe(_delta: float) -> void:
+	## Paan-shop bribe (issue #188): carrying heat near a counter, paisa in
+	## pocket — press [B] and the heat disappears. After a fix the network
+	## stays hot for the cooldown, so one chase can't be bribed away twice.
+	if _hud_paan == null or _police == null or not _playing or _dead:
+		return
+	if _police.stars() < 1:
+		_hud_paan.visible = false
+		return
+	var p: Vector3 = player.global_position
+	var near := false
+	for shop in _paan_shops:
+		if Vector2(p.x - shop.x, p.z - shop.z).length() < 7.0:
+			near = true
+			break
+	if not near or not player.controls_enabled:
+		_hud_paan.visible = false
+		return
+	for d in get_tree().get_nodes_in_group("dialogue"):
+		if d.is_running():
+			_hud_paan.visible = false
+			return
+	var cd: float = _police.bribe_cooldown_remaining()
+	if cd > 0.0:
+		_hud_paan.modulate = Color(1.0, 1.0, 1.0)
+		_hud_paan.text = "PAAN SHOP  ·  network hot — %ds" % int(ceil(cd))
+		_hud_paan.visible = true
+		return
+	var cost: int = _police.bribe_cost()
+	_hud_paan.modulate = Color(1.0, 1.0, 1.0) if _missions.cash >= cost \
+			else Color(1.0, 0.55, 0.5)
+	_hud_paan.text = "PAAN SHOP  ·  BRIBE Rs %d  ·  [B]" % cost
+	_hud_paan.visible = true
+	if Input.is_action_just_pressed("bribe"):
+		if _missions.spend(cost):
+			_police.bribe()
+			_show_toast("PAAN SHOP  ·  Rs %d crossed palms — heat gone" % cost)
+			_hud_paan.visible = false
+		else:
+			_show_toast("Not enough paisa — Rs %d needed" % cost)
 
 
 func _on_stamina_changed(fraction: float) -> void:
@@ -1954,6 +2038,57 @@ func _build_street_lights() -> void:
 	]
 	for p in lane:
 		_add_lamp(p)
+
+
+func _build_paan_shops() -> void:
+	## Paan counters (issue #188): the bribe network — four roadside stalls
+	## at the busiest corners. Procedural wood-and-glass carts with a deep
+	## green PAAN board; the bribe prompt only wakes while heat is on.
+	var spots: Array[Vector3] = [
+		_block_center(4, 7) + Vector3(12.0, 0.0, -10.0),
+		_block_center(5, 5) + Vector3(-16.0, 0.0, 12.0),
+		_block_center(2, 8) + Vector3(-14.0, 0.0, -10.0),
+		_block_center(5, 0) + Vector3(12.0, 0.0, 10.0),
+	]
+	for spot in spots:
+		_paan_shops.append(spot)
+		_add_paan_shop(spot)
+
+
+func _add_paan_shop(pos: Vector3) -> void:
+	## One counter: wood base, glass display, betel crates and the green
+		## signboard every Delhi wall knows. Purely decorative + a bribe spot.
+	var root := Node3D.new()
+	root.position = pos
+	add_child(root)
+	root.add_child(_static_box(Vector3(1.9, 0.95, 0.85), Color(0.42, 0.28, 0.16), Vector3(0, 0.48, 0)))
+	var glass := _static_box(Vector3(1.7, 0.3, 0.66), Color(0.75, 0.92, 0.95, 0.55), Vector3(0, 1.1, 0))
+	glass.get_active_material(0).transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	root.add_child(glass)
+	root.add_child(_static_box(Vector3(0.55, 0.3, 0.4), Color(0.18, 0.5, 0.2), Vector3(1.35, 0.15, 0.3)))
+	root.add_child(_static_box(Vector3(0.55, 0.3, 0.4), Color(0.16, 0.45, 0.18), Vector3(-1.35, 0.15, -0.25)))
+	root.add_child(_static_box(Vector3(0.12, 2.6, 0.12), Color(0.35, 0.22, 0.12), Vector3(1.0, 1.3, -0.5)))
+	root.add_child(_static_box(Vector3(0.12, 2.6, 0.12), Color(0.35, 0.22, 0.12), Vector3(-1.0, 1.3, -0.5)))
+	root.add_child(_static_box(Vector3(2.2, 0.62, 0.1), Color(0.05, 0.38, 0.14), Vector3(0, 2.6, -0.5)))
+	var sign := Label3D.new()
+	sign.text = "PAAN"
+	sign.font_size = 40
+	sign.modulate = Color(0.95, 1.0, 0.9)
+	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sign.position = Vector3(0, 2.6, -0.42)
+	root.add_child(sign)
+
+
+func _static_box(size: Vector3, color: Color, pos: Vector3) -> MeshInstance3D:
+	var m := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	bm.material = mat
+	m.mesh = bm
+	m.position = pos
+	return m
 	var pole := BoxMesh.new()
 	pole.size = Vector3(0.18, 5.4, 0.18)
 	pole.material = MeshTools.shared_material(Color(0.22, 0.26, 0.24))
