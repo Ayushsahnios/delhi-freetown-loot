@@ -19,9 +19,12 @@ const CABIN_DB := -8.0  # head-unit level: present, never dominating (issue #94)
 const FADE_S := 0.55    # station-switch cross-fade
 const POWER_S := 0.35   # ignition on/off fade
 const FADE_FLOOR_DB := -38.0
+const ID_DB := -7.0     # station-ID one-shot on every preset switch (issue #209)
 
 var _players: Array[AudioStreamPlayer] = []
 var _loops: Array[AudioStreamWAV] = []
+var _id_wavs: Array[AudioStreamWAV] = []       # per-station ID one-shots
+var _id_player: AudioStreamPlayer
 var _station := 0
 var _active_idx := 0
 var _active := false
@@ -43,6 +46,12 @@ func setup() -> void:
 		p.bus = "Radio"
 		add_child(p)
 		_players.append(p)
+	# Synced station IDs (issue #209): each preset gets its own call-sign
+	# one-shot, played over the cross-fade the moment you land on it.
+	_id_wavs = [_make_id_dhol(), _make_id_bansuri(), _make_id_dhj()]
+	_id_player = AudioStreamPlayer.new()
+	_id_player.bus = "Radio"
+	add_child(_id_player)
 
 
 func set_active(on: bool) -> void:
@@ -67,8 +76,13 @@ func set_active(on: bool) -> void:
 
 func cycle_station() -> String:
 	## Next preset with a smooth cross-fade; returns the HUD label.
+	## The new station announces itself with its ID one-shot (issue #209).
 	_station = (_station + 1) % STATION_LABELS.size()
 	_switch_stream(_loops[_station])
+	if _id_player != null and not _id_wavs.is_empty():
+		_id_player.stream = _id_wavs[_station]
+		_id_player.volume_db = ID_DB
+		_id_player.play()
 	return STATION_LABELS[_station]
 
 
@@ -78,7 +92,8 @@ func label() -> String:
 
 func loudness_profile() -> Array:
 	## Loudest station's level for the scripted loudness check,
-	## measured on the synthesized loop with CABIN_DB applied.
+	## measured on the synthesized loop with CABIN_DB applied, plus the
+	## station-ID one-shots at ID_DB (issue #209).
 	if _players.is_empty():
 		return []
 	var loudest := {"name": "radio", "peak_db": -99.0, "rms_db": -99.0}
@@ -96,7 +111,27 @@ func loudness_profile() -> Array:
 				20.0 * log(maxf(peak, 1e-6)) / log(10.0) + CABIN_DB)
 		loudest["rms_db"] = maxf(float(loudest["rms_db"]),
 				20.0 * log(maxf(rms, 1e-6)) / log(10.0) + CABIN_DB)
-	return [loudest]
+	var out := [loudest]
+	for id_name in ["radio_id_dhol", "radio_id_bansuri", "radio_id_dhj"]:
+		out.append(_measure_id(id_name, _id_wavs[out.size() - 1], ID_DB))
+	return out
+
+
+func _measure_id(name: String, wav: AudioStreamWAV, channel_db: float) -> Dictionary:
+	var data := wav.data
+	var frames := data.size() / 2
+	var peak := 0.0
+	var sum_sq := 0.0
+	for i in frames:
+		var v := float(data.decode_s16(i * 2)) / 32768.0
+		peak = maxf(peak, absf(v))
+		sum_sq += v * v
+	var rms := sqrt(sum_sq / maxf(frames, 1.0))
+	return {
+		"name": name,
+		"peak_db": 20.0 * log(maxf(peak, 1e-6)) / log(10.0) + channel_db,
+		"rms_db": 20.0 * log(maxf(rms, 1e-6)) / log(10.0) + channel_db,
+	}
 
 
 # ---------------------------------------------------------------- playback
@@ -223,6 +258,51 @@ func _make_dhj_news() -> AudioStreamWAV:
 	_station_id(buf, 0, loop_len)
 	_station_beeps(buf, (4 * 8 + 4) * eighth, loop_len)
 	return _finish(buf)
+
+
+func _make_id_dhol() -> AudioStreamWAV:
+	## DHOL POWER ID (~1.1 s): a dhol hit pair into a rising tumbi twang —
+	## the preset says its name the moment you land on it.
+	var frames := int(MIX_RATE * 1.1)
+	var buf := PackedFloat32Array()
+	buf.resize(frames)
+	_kick(buf, int(0.05 * MIX_RATE), frames, 0.8)
+	_snare(buf, int(0.2 * MIX_RATE), frames, 0.6)
+	_pluck(buf, int(0.3 * MIX_RATE), frames, 293.66, 0.3, 0.5)
+	_pluck(buf, int(0.48 * MIX_RATE), frames, 440.0, 0.5, 0.5)
+	_hat(buf, int(0.3 * MIX_RATE), frames, 0.1)
+	return _finish_oneshot(buf)
+
+
+func _make_id_bansuri() -> AudioStreamWAV:
+	## BANSURI & SITAR ID (~1.4 s): a soft tanpura touch under a rising
+	## two-note flute figure.
+	var frames := int(MIX_RATE * 1.4)
+	var buf := PackedFloat32Array()
+	buf.resize(frames)
+	_drone(buf, int(0.02 * MIX_RATE), frames, 220.0, 1.2, 0.4)
+	_flute(buf, int(0.1 * MIX_RATE), frames, 440.0, 0.5, 0.4)
+	_flute(buf, int(0.55 * MIX_RATE), frames, 587.33, 0.7, 0.4)
+	return _finish_oneshot(buf)
+
+
+func _make_id_dhj() -> AudioStreamWAV:
+	## DHJ NEWS ID (~1.2 s): urgent beeps straight into anchor chatter.
+	var frames := int(MIX_RATE * 1.2)
+	var buf := PackedFloat32Array()
+	buf.resize(frames)
+	_beep(buf, int(0.04 * MIX_RATE), frames, 1180.0, 0.09, 0.3)
+	_beep(buf, int(0.18 * MIX_RATE), frames, 1180.0, 0.09, 0.3)
+	_beep(buf, int(0.32 * MIX_RATE), frames, 1560.0, 0.16, 0.3)
+	_chatter_phrase(buf, int(0.6 * MIX_RATE), frames, 130.0, 3, 0.3)
+	return _finish_oneshot(buf)
+
+
+func _finish_oneshot(buf: PackedFloat32Array) -> AudioStreamWAV:
+	## Same mixdown as the loops, no loop points — IDs play once.
+	var wav := _finish(buf)
+	wav.loop_mode = AudioStreamWAV.LOOP_DISABLED
+	return wav
 
 
 # ---------------------------------------------------------------- synthesis

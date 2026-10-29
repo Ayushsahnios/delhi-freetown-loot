@@ -28,6 +28,7 @@ const MissionScript := preload("res://scripts/missions.gd")
 const AudioScript := preload("res://scripts/audio.gd")
 const RadioScript := preload("res://scripts/radio.gd")
 const ChaseScript := preload("res://scripts/chase_music.gd")
+const ScoreScript := preload("res://scripts/score.gd")
 const LodScript := preload("res://scripts/lod.gd")
 const MiniMapScript := preload("res://scripts/minimap.gd")
 const MapScreenScript := preload("res://scripts/map_screen.gd")
@@ -123,6 +124,7 @@ var _impact_cd := 0.0
 var _audio: Node
 var _radio: Node
 var _chase: Node
+var _score: Node
 var _chase_radio_paused := false
 var _minimap: Control
 var _map_screen: Control
@@ -260,6 +262,9 @@ func _ready() -> void:
 	_chase = ChaseScript.new()
 	add_child(_chase)
 	_chase.setup()
+	_score = ScoreScript.new()
+	add_child(_score)
+	_score.setup()
 	camera = Camera3D.new()
 	# Draw distance (issue 167): the city fits in a 506 m square, so an
 	# 800 m far plane still takes in every rooftop corner-to-corner
@@ -268,6 +273,9 @@ func _ready() -> void:
 	add_child(camera)
 	_build_hud()
 	_build_select_ui()
+	# Title theme (issue #209): the score suite plays under character
+	# select until a legend is picked.
+	_score.play_title()
 	_touch = TouchControlsScript.new()
 	add_child(_touch)
 	_pause = PauseScript.new()
@@ -1348,6 +1356,7 @@ func _portrait_card(def: Dictionary) -> Control:
 func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	Game.selected_character = def
 	_select_layer.visible = false
+	_score.stop_title()
 	for v in _portrait_views:
 		v.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	_hud_name.text = String(def["name"])
@@ -1394,6 +1403,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	add_child(_missions)
 	_missions.register_player(player)
 	_missions.mission_completed.connect(_on_mission_completed)
+	_missions.mission_failed.connect(_on_mission_failed)
 	_food.register(player, _health, _missions, _audio)
 	_interiors.register(player, _audio)
 	_taxi.register(player, _missions)
@@ -2099,8 +2109,16 @@ func _on_stamina_changed(fraction: float) -> void:
 
 
 func _on_mission_completed(_title: String, _reward: int) -> void:
-	## Reward jingle (issue #154): the payout beat now has a sound.
-	_audio.jingle()
+	## Mission complete sting (issue #209): the score suite's bright
+	## sitar variation of the reward arpeggio (issue #154's plain
+	## _audio.jingle() is retired from this beat).
+	_score.mission_result(true)
+
+
+func _on_mission_failed(_title: String) -> void:
+	## Mission fail sting (issue #209): the falling minor figure —
+	## the toast says the job's gone, the score agrees.
+	_score.mission_result(false)
 	# Money and mission progress just changed — checkpoint immediately
 	# (issue 169) so a finished job is never lost to a refresh.
 	_autosave_silent()
