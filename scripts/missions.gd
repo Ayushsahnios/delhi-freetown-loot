@@ -22,6 +22,9 @@ const LEGEND_NAMES := {"sardarji": "Sardar Ji", "riya": "Riya", "monty": "Monty"
 
 var cash := 0
 var enabled := true
+## Day ledger (issue #219): today's earnings by source (missions/fares/
+## finds) — closed out at the midnight rent tick, carried in the save.
+var ledger := {}
 ## Mission id -> times completed; persisted in the save file.
 var completed := {}
 
@@ -123,12 +126,14 @@ func spend(amount: int) -> bool:
 	return true
 
 
-func earn(amount: int) -> void:
+func earn(amount: int, source := "finds") -> void:
 	## Side hustles (issue #99): metered fares and courier payouts land
-	## in the same wallet, so they persist with the save.
+	## in the same wallet, so they persist with the save. Source tags the
+	## day ledger (issue #219); default keeps old callers on "finds".
 	if amount <= 0:
 		return
 	cash += amount
+	_ledger_add(source, amount)
 	_cash_hud.text = "Rs %d" % cash
 
 
@@ -137,6 +142,35 @@ func set_cash(amount: int) -> void:
 	## touching mission completion records.
 	cash = maxi(amount, 0)
 	_cash_hud.text = "Rs %d" % cash
+
+
+func day_close(rent: int) -> Dictionary:
+	## Midnight (issue #219): the auto-stand rent comes off, today's
+	## books close and reset. Returns the day's ledger for the card.
+	## A shortfall warns — it never takes health or kills.
+	var books := {"sources": ledger.duplicate(), "rent": maxi(rent, 0),
+			"shortfall": maxi(rent - cash, 0), "cash_before": cash}
+	cash = maxi(cash - maxi(rent, 0), 0)
+	_cash_hud.text = "Rs %d" % cash
+	ledger = {}
+	return books
+
+
+func ledger_snapshot() -> Dictionary:
+	## Save piggyback (issue #219): today's running ledger, plain ints.
+	return ledger.duplicate()
+
+
+func restore_ledger(saved: Dictionary) -> void:
+	ledger = {}
+	for key in saved:
+		var amt := maxi(int(saved[key]), 0)
+		if amt > 0:
+			ledger[String(key)] = amt
+
+
+func _ledger_add(source: String, amount: int) -> void:
+	ledger[source] = int(ledger.get(source, 0)) + maxi(amount, 0)
 
 
 func restore(saved_cash: int, saved_completed: Dictionary) -> void:
@@ -618,6 +652,7 @@ func _complete_mission() -> void:
 				tier_note = "  ·  %s +Rs %d" % [String(tier["name"]), int(tier["bonus"])]
 				break
 	cash += reward
+	_ledger_add("missions", reward)
 	_cash_hud.text = "Rs %d" % cash
 	var id := String(def["id"])
 	completed[id] = int(completed.get(id, 0)) + 1
