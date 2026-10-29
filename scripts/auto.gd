@@ -44,6 +44,7 @@ var _steer_vis := 0.0
 var _speed := 0.0
 var _pitch_vis := 0.0
 var _roll_vis := 0.0
+var _tyre_t := 0.0
 var _rng := RandomNumberGenerator.new()
 var _exhaust: Node3D = null
 var _puff_t := 0.6
@@ -171,6 +172,16 @@ func current_speed() -> float:
 	return absf(_speed)
 
 
+func tyre_burst(duration := 7.0) -> void:
+	## Spike-strip puncture (issue #188): top speed and pickup collapse
+	## until the spare set goes on. Refreshes the timer if re-spiked.
+	_tyre_t = maxf(_tyre_t, duration)
+
+
+func tyre_burst_active() -> bool:
+	return _tyre_t > 0.0
+
+
 func drive(delta: float) -> void:
 	## Called by Main while this vehicle is the active one.
 	var accel := 0.0
@@ -186,14 +197,22 @@ func drive(delta: float) -> void:
 
 	# Pedal feel (issue #154): holding the opposite direction BRAKES at
 	# a sharper rate than acceleration builds; releasing just coasts.
+	# Shredded tyres (spike strip) cap speed and pickup until they are
+	# swapped — the chase keeps moving, just horribly.
+	var max_speed := float(_spec["max_speed"])
+	var accel_rate := float(_spec["accel"])
+	if _tyre_t > 0.0:
+		_tyre_t = maxf(_tyre_t - delta, 0.0)
+		max_speed *= 0.45
+		accel_rate *= 0.6
 	var braking := accel != 0.0 and absf(_speed) > 0.5 and signf(accel) != signf(_speed)
 	if braking:
-		_speed += accel * float(_spec["accel"]) * BRAKE_FACTOR * delta
+		_speed += accel * accel_rate * BRAKE_FACTOR * delta
 	elif not is_zero_approx(accel):
-		_speed += accel * float(_spec["accel"]) * delta
+		_speed += accel * accel_rate * delta
 	else:
 		_speed *= pow(lerpf(0.65, 0.35, grip), delta)
-	_speed = clampf(_speed, -8.0, float(_spec["max_speed"]))
+	_speed = clampf(_speed, -8.0, max_speed)
 
 	if absf(_speed) > 0.5:
 		rotate_y(steer * float(_spec["turn"]) * lerpf(0.6, 1.0, grip) * delta * _speed / float(_spec["max_speed"]))
