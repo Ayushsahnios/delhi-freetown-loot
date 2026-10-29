@@ -35,6 +35,12 @@ const SPATIAL_HORN_MIN_DB := -20.0
 const SPATIAL_HORN_MAX_DB := -8.0  # reactive honk from a real nearby auto
 const TRAFFIC_SWELL_MAX_DB := 2.5  # bed swells as traffic breathes past
 const EVENING_DROP_DB := 4.5    # the whole street quiets after dusk
+# Monsoon soundscape (issue #227): the street bed dips under a downpour,
+# and everything on the Ambient bus low-passes behind a shopfront.
+const RAIN_AMBIENT_DUCK_DB := 5.0   # rain takes over, bed yields
+const INDOOR_CUTOFF_HZ := 950.0     # muffled behind the shopfront
+const OUTDOOR_CUTOFF_HZ := 20000.0  # wide open on the street
+const MUFFLE_RAMP_HZ_S := 12000.0   # cutoff slew — ~1.6 s door-to-muffled
 # Interaction foley (issue #187): feet, doors and paisa — quiet layers
 # that sit UNDER the street bed, never on top of it.
 const FOOTSTEP_WALK_DB := -25.0  # own feet: present, never the loudest thing
@@ -84,6 +90,8 @@ var _step_voices := {}          # surface -> AudioStreamWAV (issue #187)
 var _step_dist := 0.0
 var _step_alt := 0
 var _rain_level := 0.0
+var _indoors := false
+var _muffle: AudioEffectLowPassFilter = null
 
 
 func setup() -> void:
@@ -158,12 +166,17 @@ func setup() -> void:
 		sp.max_distance = 80.0
 		spatial_root.add_child(sp)
 		_spatial_horns.append(sp)
+	# Street honks belong on the street bus so the settings slider and
+	# the interior muffle (issue #227) hear them too.
+	for sp in _spatial_horns:
+		sp.bus = "Ambient"
 	# Settings sliders scale the Ambient bus, never these players directly.
 	for p in [_horn_player, _ambient_player, _rain_player, _thunder_player,
 			_thunk_player, _jingle_player, _murmur_player, _clatter_player,
 			_call_player, _chime_player, _blip_player] + _distant_players \
 			+ _step_players:
 		p.bus = "Ambient"
+	_prepare_muffle()
 
 
 func horn(kind := "auto") -> void:
@@ -195,6 +208,12 @@ func set_rain(level: float) -> void:
 	_rain_level = l
 	if _rain_player != null:
 		_rain_player.volume_db = -60.0 if l <= 0.03 else lerpf(-34.0, RAIN_TOP_DB, l)
+
+
+func set_indoors(inside: bool) -> void:
+	## Interior muffle (issue #227): the doorway check in interiors.gd
+	## flips this — the whole street bed goes behind the shopfront.
+	_indoors = inside
 
 
 func thunder() -> void:
@@ -253,7 +272,12 @@ func _process(delta: float) -> void:
 		_update_context()
 	_tick_footsteps(delta)
 	_ambient_player.volume_db = AMBIENT_DB - _duck * DIALOGUE_DUCK_DB \
-			+ _day_gain_db + _traffic_swell_db
+			+ _day_gain_db + _traffic_swell_db \
+			- _rain_level * RAIN_AMBIENT_DUCK_DB
+	if _muffle != null:
+		var target_hz := INDOOR_CUTOFF_HZ if _indoors else OUTDOOR_CUTOFF_HZ
+		_muffle.cutoff_hz = move_toward(_muffle.cutoff_hz, target_hz,
+				delta * MUFFLE_RAMP_HZ_S)
 	if _murmur_player != null:
 		_murmur_player.volume_db = _murmur_target_db - _duck * DIALOGUE_DUCK_DB
 	_distant_cd -= delta
@@ -275,6 +299,26 @@ func _process(delta: float) -> void:
 		p.play()
 		break
 
+
+func _prepare_muffle() -> void:
+	## Interior muffle (issue #227): one low-pass filter on the Ambient
+	## bus, cutoff parked wide open outdoors. The bus (not the players)
+	## carries the effect so beds, rain, horns and foley all muffle
+	## together the moment the player steps through a shop door.
+	var idx := AudioServer.get_bus_index("Ambient")
+	if idx < 0:
+		AudioServer.add_bus()
+		idx = AudioServer.bus_count - 1
+		AudioServer.set_bus_name(idx, "Ambient")
+		AudioServer.set_bus_send(idx, "Master")
+	for e in AudioServer.get_bus_effect_count(idx):
+		if AudioServer.get_bus_effect(idx, e) is AudioEffectLowPassFilter:
+			_muffle = AudioServer.get_bus_effect(idx, e)
+			return
+	_muffle = AudioEffectLowPassFilter.new()
+	_muffle.cutoff_hz = OUTDOOR_CUTOFF_HZ
+	_muffle.resonance = 0.4
+	AudioServer.add_bus_effect(idx, _muffle)
 
 func _wants_duck() -> bool:
 	## Any running dialogue box ducks the street beds (issue #94).

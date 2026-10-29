@@ -73,6 +73,9 @@ func _process(_delta: float) -> void:
 	if inside != _inside:
 		_inside = inside
 		_audio.door_chime()
+		# Rain and street beds low-pass behind the shopfront (issue #227).
+		if _audio.has_method("set_indoors"):
+			_audio.set_indoors(inside)
 
 
 func _npc(model_path: String, seed: int, female: bool, height: float,
