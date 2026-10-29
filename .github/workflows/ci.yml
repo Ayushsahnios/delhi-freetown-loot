@@ -27,6 +27,12 @@ jobs:
         run: |
           timeout 180 godot --headless --path . res://scenes/loudness_check.tscn
 
+      - name: Monsoon squall cycle gate (issue 205)
+        run: |
+          set -o pipefail
+          timeout 180 godot --headless --path . res://scenes/squall_check.tscn 2>&1 | tee /tmp/squall.log
+          grep -q "verdict=PASS" /tmp/squall.log
+
       - name: Smoke run (5s, zero script errors)
         run: |
           set -o pipefail
