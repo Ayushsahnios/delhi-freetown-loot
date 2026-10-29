@@ -24,7 +24,7 @@ const PANIC_SPEED := 8.0
 const SCATTER_RADIUS := 18.0
 const REJOIN_SPEED := 5.5
 const REJOIN_LIMIT := 4.0
-const ZONE_EXTRA := 18
+const ZONE_EXTRA := 40
 const ZONE_WAKE := 130.0
 const ZONE_RECYCLE := 150.0
 const ZONE_SPAWN_MIN := 26.0
@@ -68,7 +68,10 @@ func set_crowd_zone(center: Vector3, radius: float) -> void:
 	## Crowd density boost: ZONE_EXTRA extra shoppers walk the sidewalk
 	## lines around each registered zone while the player is nearby; they
 	## sleep (and cost nothing) when every zone is far away. Districts
-	## each register their own zone (issue #97).
+	## each register their own zone (issue #97). Issue #181 wave 1 raised
+	## the squad 18 -> 40: with the 26 ambient walkers a busy strip now
+	## carries ~66 bodies (~+50%) instead of 44, using the same recycler
+	## and identity seeds — no new models.
 	_zones.append({"c": center, "r": radius})
 
 

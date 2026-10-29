@@ -193,7 +193,14 @@ func _ready() -> void:
 	_peds = PedestrianScript.new()
 	add_child(_peds)
 	_peds.setup(WORLD, PITCH, ROAD, GRID + 1)
+	# Gameplay-critical strips (issue #181): the bazaar, Connaught Place
+	# and Purani Dilli all carry crowd zones, plus the two social
+	# districts from issue #97. Zones within ZONE_WAKE of each other share
+	# one 40-shopper squad, so overlapping Old Delhi blocks read as one
+	# continuous busy belt rather than two thin pockets.
 	_peds.set_crowd_zone(_block_center(4, 7) + Vector3(6.0, 0.0, 0.0), 46.0)
+	_peds.set_crowd_zone(_block_center(5, 5), 40.0)
+	_peds.set_crowd_zone(_block_center(3, 7) + Vector3(0.0, 0.0, 6.0), 36.0)
 	_peds.set_crowd_zone(_block_center(2, 8) + Vector3(0.0, 0.0, -8.0), 40.0)
 	_peds.set_crowd_zone(_block_center(9, 8) + Vector3(-11.0, 0.0, 0.0), 40.0)
 	_audio = AudioScript.new()
