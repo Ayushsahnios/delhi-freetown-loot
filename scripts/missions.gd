@@ -5,6 +5,9 @@ extends Node
 ## flow, cash rewards. All visuals procedural — zero assets.
 ## First two real jobs: the chai run (three stops before it cools) and
 ## the CP ring race (checkpoints against two AI rickshaws).
+## Issue #190 variety pack: hot-box timed delivery with speed-tier
+## bonuses, the bazaar chor chase (moving objective), and the shaadi
+## collect arc (multi-stop pickups + finale bonus).
 
 const DialogueScript := preload("res://scripts/dialogue.gd")
 const StoryArcs := preload("res://scripts/story_arcs.gd")
@@ -49,6 +52,7 @@ var _cash_hud: Label
 var _obj_ring: MeshInstance3D = null
 var _obj_beam: MeshInstance3D = null
 var _racers: Array[Dictionary] = []
+var _thief: Dictionary = {}
 const RACER_CANOPIES := [Color(0.95, 0.35, 0.15), Color(0.25, 0.55, 0.95)]
 
 
@@ -314,6 +318,131 @@ func _build_defs() -> void:
 			"reward": 650,
 			"repeatable": true,
 		},
+		{
+			"id": "hot_box",
+			"title": "Hot box sprint: samosas to CP",
+			"lines": [
+				{
+				"speaker": "Halwai counter",
+				"text": "Sixty samosas, frying hot, boxed for a CP office party. They lose their crunch in forty-five seconds flat.",
+				"color": Color(0.95, 0.72, 0.30),
+				},
+				{
+				"speaker": "Halwai counter",
+				"text": "Run it to the CP green before they cool — Rs 350 base, and a real tip if you sprint it. Bonus tiers on the clock left!",
+				"color": Color(0.95, 0.72, 0.30),
+				"choices": ["Take the job", "Not now"],
+				},
+			],
+			"giver": Vector3(-74.0, 0.0, 68.0),
+			"marker_color": Color(1.0, 0.55, 0.25),
+			"objective": {
+				"kind": "deliver",
+				"label": "Deliver the hot box to the CP green",
+				"pos": Vector3(-17.0, 0.0, -17.0),
+				"radius": 10.0,
+				"time": 45.0,
+			},
+			"tiers": [
+				{"name": "GOLD", "min": 0.45, "bonus": 200},
+				{"name": "SILVER", "min": 0.25, "bonus": 100},
+			],
+			"fail": "the samosas went cold",
+			"reward": 350,
+			"repeatable": true,
+		},
+		{
+			"id": "chor_chase",
+			"title": "Chor in the bazaar: catch the till-thief",
+			"lines": [
+				{
+				"speaker": "Bazaar shopkeeper",
+				"text": "CHOooR! He grabbed my whole till and took off down the market lane — red shirt, red bag, fast little devil.",
+				"color": Color(0.95, 0.45, 0.30),
+				},
+				{
+				"speaker": "Bazaar shopkeeper",
+				"text": "He's lapping the bazaar streets, but he tires. Catch him before he melts into the crowd — Rs 450, cash, no police report.",
+				"color": Color(0.95, 0.45, 0.30),
+				"choices": ["Take the job", "Not now"],
+				},
+			],
+			"giver": Vector3(-74.0, 0.0, 44.0),
+			"marker_color": Color(0.9, 0.25, 0.2),
+			"objective": {
+				"kind": "chase",
+				"label": "Catch the chor",
+				"pos": Vector3(-86.0, 0.0, 52.0),
+				"radius": 3.0,
+				"time": 90.0,
+			},
+			"chase": {
+				"path": [
+					Vector3(-86.0, 0.0, 52.0),
+					Vector3(-40.0, 0.0, 52.0),
+					Vector3(-40.0, 0.0, 98.0),
+					Vector3(-86.0, 0.0, 98.0),
+				],
+				"speed": 10.0,
+			},
+			"fail": "the chor melted into the crowd",
+			"reward": 450,
+			"repeatable": true,
+		},
+		{
+			"id": "shaadi_run",
+			"title": "Shaadi run: three parcels, one banquet",
+			"lines": [
+				{
+				"speaker": "Wedding planner",
+				"text": "Tonight's shaadi at Hauz Khas and NOTHING has arrived! Marigold garlands from the flower cart at Purani Dilli, the sweets box from the CP confectioner, the silk roll from the park-side tailor.",
+				"color": Color(0.92, 0.5, 0.72),
+				},
+				{
+				"speaker": "Wedding planner",
+				"text": "Everything back to the banquet before the baraat rolls — Rs 500 base, and a finale bonus if you beat my clock properly. An auto is strongly advised!",
+				"color": Color(0.92, 0.5, 0.72),
+				"choices": ["Take the job", "Not now"],
+				},
+			],
+			"giver": Vector3(-149.0, 0.0, 121.0),
+			"marker_color": Color(0.9, 0.45, 0.7),
+			"objectives": [
+				{
+					"kind": "pickup",
+					"label": "Garlands — flower cart, Purani Dilli",
+					"pos": Vector3(-100.0, 0.0, 96.0),
+					"radius": 8.0,
+				},
+				{
+					"kind": "pickup",
+					"label": "Sweets box — CP confectioner",
+					"pos": Vector3(-24.0, 0.0, -24.0),
+					"radius": 8.0,
+				},
+				{
+					"kind": "pickup",
+					"label": "Silk roll — park-side tailor",
+					"pos": Vector3(132.0, 0.0, -140.0),
+					"radius": 8.0,
+				},
+				{
+					"kind": "deliver",
+					"label": "Finale — all parcels to the banquet",
+					"pos": Vector3(-155.0, 0.0, 121.0),
+					"radius": 10.0,
+				},
+			],
+			"time": 200.0,
+			"unit": "parcels",
+			"tiers": [
+				{"name": "FINALE GOLD", "min": 0.30, "bonus": 200},
+				{"name": "FINALE SILVER", "min": 0.15, "bonus": 100},
+			],
+			"fail": "the baraat left without its parcels",
+			"reward": 500,
+			"repeatable": true,
+		},
 	]
 	# Story arcs come from a const (read-only) dictionary — duplicate them
 	# so the runtime state fields written in _ready() never hit the shared
@@ -390,10 +519,15 @@ func _tick_active(delta: float) -> void:
 	var objs: Array = def["objs"]
 	var stage := int(_active["stage"])
 	var obj: Dictionary = objs[stage]
+	if String(obj.get("kind", "")) == "chase" and not _thief.is_empty():
+		# Moving objective (issue #190): the chor keeps sprinting, and the
+		# HUD, minimap and route arrow all track him live via obj["pos"].
+		_tick_thief(delta)
+		obj["pos"] = _thief["node"].global_position
 	if float(_active["time"]) > 0.0:
 		_active["left"] = float(_active["left"]) - delta
 		if float(_active["left"]) <= 0.0:
-			_fail_mission("the chai went cold")
+			_fail_mission(String(def.get("fail", "the chai went cold")))
 			return
 	if def.has("race"):
 		if _tick_racers(delta):
@@ -445,6 +579,8 @@ func _start_mission(def: Dictionary) -> void:
 	_active = {"def": def, "stage": 0, "time": float(def["time"]), "left": float(def["time"])}
 	if def.has("race"):
 		_spawn_racers(def)
+	if def.has("chase"):
+		_spawn_thief(def)
 	_spawn_objective(def["objs"][0])
 	_obj_hud.visible = true
 	_toast.add_theme_color_override("font_color", Color(1.0, 0.86, 0.3))
@@ -460,7 +596,10 @@ func _advance_stage(objs: Array, stage: int) -> void:
 	if _active["def"].has("race"):
 		_toast.text = "CHECKPOINT %d/%d" % [stage + 1, objs.size() - 1]
 	else:
-		_toast.text = "DELIVERED  ·  %d of %d %s" % [stage + 1, objs.size(), String(_active["def"].get("unit", "stops"))]
+		var verb := "DELIVERED"
+		if String(objs[stage].get("kind", "")) == "pickup":
+			verb = "PICKED UP"
+		_toast.text = "%s  ·  %d of %d %s" % [verb, stage + 1, objs.size(), String(_active["def"].get("unit", "stops"))]
 	_toast.visible = true
 	_toast_t = 1.2
 
@@ -468,12 +607,22 @@ func _advance_stage(objs: Array, stage: int) -> void:
 func _complete_mission() -> void:
 	var def: Dictionary = _active["def"]
 	var reward := int(def["reward"])
+	var tier_note := ""
+	if def.has("tiers") and float(_active["time"]) > 0.0:
+		# Speed-tier bonus (issue #190): the more clock left, the fatter
+		# the tip — first matching tier wins (listed best-first).
+		var ratio := float(_active["left"]) / float(_active["time"])
+		for tier in def["tiers"]:
+			if ratio >= float(tier["min"]):
+				reward += int(tier["bonus"])
+				tier_note = "  ·  %s +Rs %d" % [String(tier["name"]), int(tier["bonus"])]
+				break
 	cash += reward
 	_cash_hud.text = "Rs %d" % cash
 	var id := String(def["id"])
 	completed[id] = int(completed.get(id, 0)) + 1
 	_toast.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55))
-	_toast.text = "MISSION COMPLETE  ·  + Rs %d" % reward
+	_toast.text = "MISSION COMPLETE  ·  + Rs %d%s" % [reward, tier_note]
 	_toast.visible = true
 	_toast_t = 2.5
 	mission_completed.emit(String(def["title"]), reward)
@@ -503,6 +652,9 @@ func _end_mission(def: Dictionary) -> void:
 	for r in _racers:
 		r["node"].queue_free()
 	_racers.clear()
+	if not _thief.is_empty():
+		_thief["node"].queue_free()
+		_thief = {}
 	_obj_hud.visible = false
 	_active = {}
 	if bool(def.get("repeatable", false)):
@@ -560,6 +712,10 @@ func _spawn_giver(def: Dictionary) -> void:
 
 func _spawn_objective(obj: Dictionary) -> void:
 	_clear_marker()
+	if String(obj.get("kind", "")) == "chase":
+		# No static ring for a moving target — the thief figure and his
+		# CHOR tag are the marker (issue #190).
+		return
 	var pos: Vector3 = obj["pos"]
 	var radius := float(obj["radius"])
 	_obj_ring = MeshInstance3D.new()
@@ -663,6 +819,67 @@ func _build_racer_visual(parent: Node3D, canopy: Color) -> void:
 		w.rotation.z = PI / 2.0
 		w.position = spec
 		parent.add_child(w)
+
+
+func _spawn_thief(def: Dictionary) -> void:
+	## Issue #190: the chor sprints a fixed street loop — kinematic like
+	## the racers, so he never snags on market-lane geometry.
+	var chase: Dictionary = def["chase"]
+	var path: Array = chase["path"]
+	var node := Node3D.new()
+	_build_thief_visual(node)
+	add_child(node)
+	var from: Vector3 = path[0]
+	var to: Vector3 = path[1]
+	node.position = from
+	node.look_at(to, Vector3.UP)
+	_thief = {"node": node, "path": path, "at": 0,
+			"remain": from.distance_to(to), "speed": float(chase["speed"]),
+			"run": 0.0}
+
+
+func _tick_thief(delta: float) -> void:
+	## Laps the circuit forever with a running bob; the mission clock is
+	## the only thing that stops him (or the player's hands).
+	var node: Node3D = _thief["node"]
+	var path: Array = _thief["path"]
+	_thief["remain"] = float(_thief["remain"]) - float(_thief["speed"]) * delta
+	var at := int(_thief["at"])
+	var from: Vector3 = path[at]
+	var to: Vector3 = path[(at + 1) % path.size()]
+	var dir := (to - from).normalized()
+	node.position = to - dir * maxf(float(_thief["remain"]), 0.0)
+	while float(_thief["remain"]) <= 0.0:
+		var overshoot := -float(_thief["remain"])
+		_thief["at"] = (at + 1) % path.size()
+		from = path[int(_thief["at"])]
+		to = path[(int(_thief["at"]) + 1) % path.size()]
+		_thief["remain"] = from.distance_to(to) - overshoot
+		dir = (to - from).normalized()
+		node.position = to - dir * maxf(float(_thief["remain"]), 0.0)
+	_thief["run"] = float(_thief["run"]) + delta
+	node.position.y = absf(sin(float(_thief["run"]) * 11.0)) * 0.12
+	node.look_at(node.position + dir, Vector3.UP)
+
+
+func _build_thief_visual(parent: Node3D) -> void:
+	## Small runner: red shirt, pale cap, red loot sack, CHOR tag.
+	parent.add_child(_rbox(Vector3(0.52, 0.62, 0.30), Color(0.72, 0.18, 0.14), Vector3(0, 0.95, 0)))
+	parent.add_child(_rbox(Vector3(0.30, 0.30, 0.30), Color(0.78, 0.58, 0.42), Vector3(0, 1.45, 0)))
+	parent.add_child(_rbox(Vector3(0.34, 0.10, 0.34), Color(0.92, 0.90, 0.82), Vector3(0, 1.63, 0)))
+	parent.add_child(_rbox(Vector3(0.36, 0.42, 0.24), Color(0.82, 0.22, 0.16), Vector3(0.27, 0.88, -0.14)))
+	for side in [-0.16, 0.16]:
+		parent.add_child(_rbox(Vector3(0.16, 0.55, 0.16), Color(0.13, 0.14, 0.16), Vector3(side, 0.32, 0)))
+	var label := Label3D.new()
+	label.text = "CHOR"
+	label.font_size = 48
+	label.outline_size = 10
+	label.modulate = Color(1.0, 0.35, 0.25)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.fixed_size = true
+	label.no_depth_test = true
+	label.position = Vector3(0, 2.3, 0)
+	parent.add_child(label)
 
 
 func _rbox(size: Vector3, color: Color, pos: Vector3) -> MeshInstance3D:
