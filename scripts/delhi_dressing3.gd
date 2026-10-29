@@ -40,6 +40,8 @@ const ROOT := Color(0.42, 0.37, 0.30)
 
 # Halwai sweet-shop front.
 const SHOP_WALL := Color(0.82, 0.70, 0.50)
+const SHOP_FLOOR := Color(0.72, 0.66, 0.56)
+const SHOP_ROOF := Color(0.55, 0.42, 0.30)
 const COUNTER := Color(0.90, 0.88, 0.80)
 const GLASS := Color(0.78, 0.84, 0.82)
 const AWNING_A := Color(0.72, 0.16, 0.16)
@@ -58,6 +60,9 @@ const CHARPAI := Color(0.62, 0.47, 0.28)
 const WEAVE := Color(0.78, 0.68, 0.45)
 const TIN := Color(0.62, 0.63, 0.65)
 const BAMBOO := Color(0.72, 0.64, 0.38)
+const PARATHA := Color(0.85, 0.68, 0.35)
+const PLATE := Color(0.95, 0.93, 0.88)
+const STEEL := Color(0.58, 0.58, 0.60)
 
 # Temple gate.
 const GATE_STONE := Color(0.76, 0.68, 0.55)
@@ -91,17 +96,33 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 				else:
 					banyan_xfs.append(xf)
 				flip += 1
-	# One-off fronts, all with kerbside colliders (issue #77 rule).
+	# One-off fronts (issue #183: the sweet shop and dhaba are hollow,
+	# walk-in places — walls with a real doorway, per-prop colliders).
 	var cc := _block_center(world, pitch, road_w, Vector2i(4, 7))
 	var pd := _block_center(world, pitch, road_w, Vector2i(3, 7))
+	var hx := cc.x - 5.0
+	var hz := cc.y + 4.0
+	var dx := pd.x + 9.5
+	var dz := pd.y - 9.5
 	var colliders: Array = [
-		[Vector3(3.0, 2.4, 2.6), Vector3(cc.x - 5.0, 0, cc.y + 4.0)],  # sweet shop
-		[Vector3(4.6, 2.6, 4.6), Vector3(pd.x + 9.5, 0, pd.y - 9.5)],  # dhaba
-		[Vector3(1.4, 3.4, 1.4), Vector3(pd.x - 10.6, 0, pd.y - 0.5)], # gate W post
-		[Vector3(1.4, 3.4, 1.4), Vector3(pd.x - 5.4, 0, pd.y - 0.5)],  # gate E post
+		# Halwai shop: wall segments leave the east doorway open.
+		[Vector3(0.25, 2.7, 3.2), Vector3(hx - 1.575, 0, hz)],
+		[Vector3(3.4, 2.7, 0.25), Vector3(hx, 0, hz - 1.475)],
+		[Vector3(3.4, 2.7, 0.25), Vector3(hx, 0, hz + 1.475)],
+		[Vector3(0.25, 2.1, 1.0), Vector3(hx + 1.575, 0, hz - 1.1)],
+		[Vector3(0.25, 2.1, 1.0), Vector3(hx + 1.575, 0, hz + 1.1)],
+		[Vector3(0.5, 0.95, 2.2), Vector3(hx - 1.4, 0, hz + 0.15)],
+		# Dhaba: per-prop boxes under the tin roof, open to walk in.
+		[Vector3(1.3, 1.2, 1.3), Vector3(dx - 1.2, 0, dz - 1.0)],
+		[Vector3(1.0, 0.7, 1.0), Vector3(dx + 0.4, 0, dz - 1.3)],
+		[Vector3(0.9, 0.95, 1.8), Vector3(dx + 1.55, 0, dz - 0.1)],
+		[Vector3(1.9, 0.55, 0.9), Vector3(dx + 0.4, 0, dz + 1.0)],
+		# Temple gate posts.
+		[Vector3(1.4, 3.4, 1.4), Vector3(pd.x - 10.6, 0, pd.y - 0.5)],
+		[Vector3(1.4, 3.4, 1.4), Vector3(pd.x - 5.4, 0, pd.y - 0.5)],
 	]
-	_sweet_shop(b, cc.x - 5.0, cc.y + 4.0)
-	_dhaba(b, pd.x + 9.5, pd.y - 9.5)
+	_sweet_shop(b, hx, hz)
+	_dhaba(b, dx, dz)
 	_temple_gate(b, pd.x - 8.0, pd.y - 0.5)
 
 	var root := Node3D.new()
@@ -201,41 +222,49 @@ static func _crown(b: MeshTools, cy: float, radius: float, h: float,
 # ------------------------------------------------------------ food fronts
 
 static func _sweet_shop(b: MeshTools, x: float, z: float) -> void:
-	## Halwai front against the bazaar shop row: glass mithai counter,
-	## tray stacks, a jar shelf and a striped awning facing the lane.
+	## Halwai sweet shop, walk-in (issue #183): hollow masonry box with
+	## a doorway in the east face — inside, a glass mithai counter
+	## against the back wall, brass jars on a shelf, worn floor tiles.
 	var y := Roads.CURB_H
-	# Back drop against the shop wall + counter with a glass top.
-	b.add_box(Vector3(0.6, 2.6, 2.8), Vector3(x - 0.9, y + 1.3, z), SHOP_WALL)
-	b.add_box(Vector3(1.5, 1.0, 2.4), Vector3(x, y + 0.5, z), COUNTER)
-	b.add_box(Vector3(1.6, 0.12, 2.5), Vector3(x, y + 1.06, z), GLASS)
-	# Mithai trays stacked behind the glass, two shelf rows.
-	for row in 2:
-		for s in 4:
-			b.add_box(Vector3(0.5, 0.16, 0.5),
-					Vector3(x - 0.25, y + 1.32 + row * 0.6, z - 0.9 + s * 0.6),
-					MITHAI[(row + s) % 4])
-	b.add_box(Vector3(0.35, 1.9, 2.6), Vector3(x - 1.05, y + 1.3, z), SHOP_WALL)
-	# Brass sweet jars on the top shelf ledge.
-	for j in 3:
+	# Floor: worn concrete patch inside the walls.
+	b.add_box(Vector3(3.15, 0.04, 2.95), Vector3(x, y + 0.02, z), SHOP_FLOOR)
+	# Back wall (west) + the two ends.
+	b.add_box(Vector3(0.25, 2.7, 3.2), Vector3(x - 1.575, y + 1.35, z), SHOP_WALL)
+	b.add_box(Vector3(3.4, 2.7, 0.25), Vector3(x, y + 1.35, z - 1.475), SHOP_WALL)
+	b.add_box(Vector3(3.4, 2.7, 0.25), Vector3(x, y + 1.35, z + 1.475), SHOP_WALL)
+	# East face: two segments flanking a 1.2 m doorway + lintel above.
+	b.add_box(Vector3(0.25, 2.1, 1.0), Vector3(x + 1.575, y + 1.05, z - 1.1), SHOP_WALL)
+	b.add_box(Vector3(0.25, 2.1, 1.0), Vector3(x + 1.575, y + 1.05, z + 1.1), SHOP_WALL)
+	b.add_box(Vector3(0.25, 0.6, 1.2), Vector3(x + 1.575, y + 2.4, z), SHOP_WALL)
+	b.add_box(Vector3(3.7, 0.12, 3.5), Vector3(x, y + 2.76, z), SHOP_ROOF)
+	# Counter against the back wall: glass top with mithai trays on it.
+	b.add_box(Vector3(0.5, 0.95, 2.2), Vector3(x - 1.4, y + 0.475, z + 0.15), COUNTER)
+	b.add_box(Vector3(0.6, 0.1, 2.3), Vector3(x - 1.4, y + 1.0, z + 0.15), GLASS)
+	for s in 5:
+		b.add_box(Vector3(0.42, 0.16, 0.42),
+				Vector3(x - 1.4, y + 1.08, z - 0.85 + s * 0.5), MITHAI[s % 4])
+	# Brass sweet jars on a back-wall shelf ledge.
+	b.add_box(Vector3(0.2, 0.05, 2.4), Vector3(x - 1.72, y + 1.7, z + 0.15), SHOP_WALL)
+	for j in 4:
 		var jm := CylinderMesh.new()
-		jm.top_radius = 0.14
-		jm.bottom_radius = 0.11
-		jm.height = 0.42
+		jm.top_radius = 0.13
+		jm.bottom_radius = 0.1
+		jm.height = 0.4
 		b.add_mesh(jm, Transform3D(Basis(),
-				Vector3(x - 1.05, y + 2.45, z - 0.8 + j * 0.8)), JAR_BRASS)
-	# Striped awning on two poles, sloping out over the counter.
-	for pole_z in [-1.2, 1.2]:
-		b.add_box(Vector3(0.1, 2.6, 0.1), Vector3(x + 1.0, y + 1.3, z + pole_z),
+				Vector3(x - 1.68, y + 1.93, z - 0.85 + j * 0.66)), JAR_BRASS)
+	# Striped awning on two poles over the doorway.
+	for pole_z in [-1.15, 1.15]:
+		b.add_box(Vector3(0.1, 2.6, 0.1), Vector3(x + 2.05, y + 1.3, z + pole_z),
 				Color(0.35, 0.25, 0.16))
 	for s in 4:
 		var col := AWNING_A if s % 2 == 0 else AWNING_B
-		b.add_box(Vector3(0.95, 0.08, 0.72),
-				Vector3(x + 0.45, y + 2.78 - 0.16, z - 1.08 + s * 0.72), col)
-
+		b.add_box(Vector3(1.15, 0.08, 0.72),
+				Vector3(x + 1.62, y + 2.62, z - 1.08 + s * 0.72), col)
 
 static func _dhaba(b: MeshTools, x: float, z: float) -> void:
-	## Roadside dhaba corner: clay tandoor with a glow at the mouth,
-	## a wood pile, a woven charpai cot and a tin roof on bamboo poles.
+	## Roadside dhaba corner (walk-in, issue #183): clay tandoor with a
+	## glow at the mouth, a wood pile, a service counter with tawa and
+	## paratha stack, a woven charpai cot and a tin roof on bamboo poles.
 	var y := Roads.CURB_H
 	# Tandoor: squat clay drum, ember glow at the mouth.
 	var td := CylinderMesh.new()
@@ -248,6 +277,30 @@ static func _dhaba(b: MeshTools, x: float, z: float) -> void:
 	for w in 3:
 		b.add_box(Vector3(0.9, 0.22, 0.9), Vector3(x + 0.4, y + 0.13 + w * 0.24,
 				z - 1.3), WOOD)
+	# Service counter (issue #183) along the east edge, serving face to
+	# the west: wooden body, woven top, tawa griddle, paratha + plates.
+	b.add_box(Vector3(0.9, 0.92, 1.8), Vector3(x + 1.55, y + 0.46, z - 0.1), CHARPAI)
+	b.add_box(Vector3(1.0, 0.06, 1.9), Vector3(x + 1.55, y + 0.95, z - 0.1), WEAVE)
+	var tawa := CylinderMesh.new()
+	tawa.top_radius = 0.28
+	tawa.bottom_radius = 0.28
+	tawa.height = 0.05
+	b.add_mesh(tawa, Transform3D(Basis(),
+				Vector3(x + 1.55, y + 1.0, z - 0.72)), STEEL)
+	for p in 3:
+		var pr := CylinderMesh.new()
+		pr.top_radius = 0.12
+		pr.bottom_radius = 0.12
+		pr.height = 0.03
+		b.add_mesh(pr, Transform3D(Basis(),
+					Vector3(x + 1.55, y + 1.02 + p * 0.035, z + 0.5)), PARATHA)
+	for pl in 3:
+		var pc := CylinderMesh.new()
+		pc.top_radius = 0.16
+		pc.bottom_radius = 0.16
+		pc.height = 0.025
+		b.add_mesh(pc, Transform3D(Basis(),
+					Vector3(x + 1.42, y + 1.01 + pl * 0.03, z + 0.05)), PLATE)
 	# Charpai: frame + woven top.
 	b.add_box(Vector3(1.9, 0.28, 0.9), Vector3(x + 0.4, y + 0.5, z + 1.0), CHARPAI)
 	b.add_box(Vector3(1.7, 0.08, 0.7), Vector3(x + 0.4, y + 0.62, z + 1.0), WEAVE)
@@ -260,7 +313,6 @@ static func _dhaba(b: MeshTools, x: float, z: float) -> void:
 		for pz in [-1.5, 1.5]:
 			b.add_box(Vector3(0.12, 2.5, 0.12), Vector3(x + px, y + 1.25, z + pz), BAMBOO)
 	b.add_box(Vector3(4.0, 0.08, 3.7), Vector3(x, y + 2.55, z), TIN)
-
 
 static func _temple_gate(b: MeshTools, x: float, z: float) -> void:
 	## Small masonry gateway on the shrine approach: two pillars, a

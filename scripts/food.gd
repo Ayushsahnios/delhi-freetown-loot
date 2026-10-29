@@ -10,6 +10,10 @@ const Chars := preload("res://scripts/characters.gd")
 const BUY_R := 3.6
 const CHAI := {"name": "CHAI", "price": 20, "heal": 20}
 const SAMOSA := {"name": "SAMOSA", "price": 35, "heal": 45}
+## Counter service (issue #183): the walk-in halwai and dhaba counters
+## sell through the same wallet/HP path as the carts.
+const MITHAI := {"name": "MITHAI", "price": 30, "heal": 35}
+const PARATHA := {"name": "PARATHA", "price": 45, "heal": 55}
 
 ## Flat offset from each landmark center — sidewalk spots that stay clear
 ## of mission givers, spawns and drivable roads.
@@ -59,8 +63,15 @@ func setup(landmarks: Array[Dictionary]) -> void:
 			continue
 		var center: Vector3 = lm["center"]
 		var pos: Vector3 = center + OFFSETS[key]
-		_stalls.append({"pos": pos, "steam": _build_cart(pos, center)})
+		_stalls.append({"pos": pos, "steam": _build_cart(pos, center),
+				"items": [CHAI, SAMOSA]})
 	_build_ui()
+
+
+func add_counter(pos: Vector3, items: Array) -> void:
+	## Walk-in counters (issue #183): same economy, same Q/R prompt —
+	## the interior dressing owns the visuals, this only takes orders.
+	_stalls.append({"pos": pos, "steam": [], "items": items})
 
 
 func stall_positions() -> Array[Vector3]:
@@ -112,12 +123,16 @@ func _process(delta: float) -> void:
 		if d.is_running():
 			_prompt.visible = false
 			return
-	_prompt.text = "CHAI Rs %d [Q]  ·  SAMOSA Rs %d [R]  ·  stall food is hot%s" % [CHAI["price"], SAMOSA["price"], _mood()]
+	var its: Array = near.get("items", [CHAI, SAMOSA])
+	if its.size() < 2:
+		its = [CHAI, SAMOSA]
+	_prompt.text = "%s Rs %d [Q]  ·  %s Rs %d [R]  ·  stall food is hot%s" % [
+			its[0]["name"], its[0]["price"], its[1]["name"], its[1]["price"], _mood()]
 	_prompt.visible = true
 	if Input.is_action_just_pressed("buy_chai"):
-		_buy(CHAI)
+		_buy(its[0])
 	elif Input.is_action_just_pressed("buy_samosa"):
-		_buy(SAMOSA)
+		_buy(its[1])
 
 
 func _mood() -> String:

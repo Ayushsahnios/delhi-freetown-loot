@@ -25,6 +25,7 @@ const MapScreenScript := preload("res://scripts/map_screen.gd")
 const RouteArrowScript := preload("res://scripts/route_arrow.gd")
 const CharactersScript := preload("res://scripts/characters.gd")
 const FoodScript := preload("res://scripts/food.gd")
+const InteriorsScript := preload("res://scripts/interiors.gd")
 const WeatherScript := preload("res://scripts/weather.gd")
 const TouchControlsScript := preload("res://scripts/touch_controls.gd")
 const PauseScript := preload("res://scripts/pause.gd")
@@ -112,6 +113,7 @@ var _map_screen: Control
 var _route_arrow: Control
 var _waypoint := Vector3.INF
 var _food: Node
+var _interiors: Node
 var _taxi: Node
 var _courier: Node
 var _photo: Node
@@ -193,6 +195,12 @@ func _ready() -> void:
 	_food = FoodScript.new()
 	add_child(_food)
 	_food.setup(_landmarks)
+	# Walk-in interiors (issue #183): the halwai shop and the dhaba
+	# corner take customers — counter service through the food system,
+	# a chime on the sweet-shop door, idle locals inside.
+	_interiors = InteriorsScript.new()
+	add_child(_interiors)
+	_interiors.setup(WORLD, PITCH, ROAD, _food)
 	_taxi = TaxiScript.new()
 	add_child(_taxi)
 	_taxi.setup(_landmarks)
@@ -1332,6 +1340,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_missions.register_player(player)
 	_missions.mission_completed.connect(_on_mission_completed)
 	_food.register(player, _health, _missions, _audio)
+	_interiors.register(player, _audio)
 	_taxi.register(player, _missions)
 	_courier.register(player, _missions)
 	_photo = PhotoScript.new()
