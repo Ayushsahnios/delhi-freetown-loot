@@ -10,6 +10,7 @@ const DEFAULTS := {"master": 100.0, "ambient": 100.0, "radio": 100.0,
 	"shadows": true, "muted": false}
 
 var _game: Node
+var _visible_last_frame := false
 var _settings := {}
 var _resume_btn: Button
 var _settings_box: VBoxContainer
@@ -33,6 +34,8 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	## ALWAYS-mode polling (not _input): the touch pad drives actions via
 	## Input.action_press, which never reaches _input handlers.
+	var was_visible := _visible_last_frame
+	_visible_last_frame = visible
 	if not Input.is_action_just_pressed("pause"):
 		return
 	if _game == null or not _game._playing:
@@ -44,6 +47,13 @@ func _process(_delta: float) -> void:
 	# itself on the same press.
 	var city_map := get_tree().get_first_node_in_group("map_screen")
 	if city_map != null and city_map.visible:
+		return
+	# Credits and stats overlays (issue #211) own ESC the same way.
+	if get_tree().get_first_node_in_group("overlay_screen") != null:
+		return
+	# An overlay closing on this same press may have re-shown this menu
+	# within the frame (issue #211); that press must not also resume.
+	if visible and not was_visible:
 		return
 	if visible:
 		_resume()
@@ -146,10 +156,24 @@ func _build() -> void:
 		save_btn.text = "SAVED ✓"
 		saved_reset.start())
 	saved_reset.timeout.connect(func() -> void: save_btn.text = "SAVE GAME")
+	var stats_btn := _menu_button(box, "SESSION STATS")
+	stats_btn.pressed.connect(func() -> void:
+		visible = false
+		_game._open_stats(true))
+	var credits_btn := _menu_button(box, "CREDITS")
+	credits_btn.pressed.connect(func() -> void:
+		visible = false
+		_game._open_credits(true))
 	var settings_btn := _menu_button(box, "SETTINGS")
 	settings_btn.pressed.connect(_toggle_settings)
 	var quit_btn := _menu_button(box, "QUIT TO TITLE")
 	quit_btn.pressed.connect(_quit_to_title)
+	var stamp := Label.new()
+	stamp.text = "Delhi Freetown Loot · v%s" % Game.VERSION
+	stamp.add_theme_font_size_override("font_size", 12)
+	stamp.modulate = Color(1.0, 1.0, 1.0, 0.5)
+	stamp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(stamp)
 
 	_settings_box = VBoxContainer.new()
 	_settings_box.add_theme_constant_override("separation", 8)

@@ -21,6 +21,11 @@ const MARKER_CD := 4.0
 const LEGEND_NAMES := {"sardarji": "Sardar Ji", "riya": "Riya", "monty": "Monty"}
 
 var cash := 0
+## Session stats (issue #211): counters since this legend took the
+## street — they reset on scene load and never persist with the save.
+var session_earned := 0
+var session_fares := 0
+var session_missions := 0
 var enabled := true
 ## Day ledger (issue #219): today's earnings by source (missions/fares/
 ## finds) — closed out at the midnight rent tick, carried in the save.
@@ -132,6 +137,9 @@ func earn(amount: int, source := "finds") -> void:
 	## day ledger (issue #219); default keeps old callers on "finds".
 	if amount <= 0:
 		return
+	session_earned += amount
+	if source == "fares":
+		session_fares += 1
 	cash += amount
 	_ledger_add(source, amount)
 	_cash_hud.text = "Rs %d" % cash
@@ -656,6 +664,8 @@ func _complete_mission() -> void:
 	_cash_hud.text = "Rs %d" % cash
 	var id := String(def["id"])
 	completed[id] = int(completed.get(id, 0)) + 1
+	session_missions += 1
+	session_earned += reward
 	_toast.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55))
 	_toast.text = "MISSION COMPLETE  ·  + Rs %d%s" % [reward, tier_note]
 	_toast.visible = true

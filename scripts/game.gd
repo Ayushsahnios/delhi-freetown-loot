@@ -1,6 +1,10 @@
 extends Node
 ## Game autoload: input map, character roster, shared state.
 
+## Release version (issue #211): the project settings file is the single
+## source of truth; title and pause stamps read this.
+var VERSION := String(ProjectSettings.get_setting("application/config/version", "dev"))
+
 const CHARACTERS := [
 	{
 		"id": "sardarji",
