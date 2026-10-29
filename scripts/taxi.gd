@@ -241,7 +241,7 @@ func _drop_off(current_auto) -> void:
 		note = "SILVER tip Rs %d — fast run" % tip
 	_fare = {}
 	_drop_t = 0.0
-	_missions.earn(fare + tip)
+	_missions.earn(fare + tip, "fares")
 	_show_toast("FARE PAID · +Rs %d at %s · %s" % [fare + tip, String(dest["name"]), note])
 	_prompt.visible = false
 

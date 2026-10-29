@@ -151,7 +151,7 @@ func _deliver() -> void:
 	var rounded := int(roundf(pay / 5.0) * 5.0)
 	_streak += 1
 	_run = {}
-	_missions.earn(rounded)
+	_missions.earn(rounded, "fares")
 	_show_toast("DELIVERED · +Rs %d at %s — streak %d" % [rounded, String(dest["name"]), _streak])
 	_prompt.visible = false
 

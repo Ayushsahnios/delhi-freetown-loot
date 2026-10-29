@@ -7,6 +7,9 @@ const PITCH := BLOCK + ROAD
 const GRID := 11
 const WORLD := GRID * PITCH
 const DAY_LEN := 240.0
+## Auto-stand rent per in-game day (issue #219): comes off at the
+## midnight rollover; a shortfall warns, never kills.
+const AUTO_STAND_RENT := 60
 
 const PlayerScript := preload("res://scripts/player.gd")
 const AutoScript := preload("res://scripts/auto.gd")
@@ -87,6 +90,9 @@ var _cloud_layer: Node3D = null
 var _cloud_mat: StandardMaterial3D = null
 
 var day_t := 0.32
+## Last frame's day_t (issue #219): a wrap = midnight = rent + ledger.
+## -1.0 = unset, so a fresh boot or save load never fires it falsely.
+var _prev_day_t := -1.0
 var current_auto: CharacterBody3D = null
 var _autos: Array[CharacterBody3D] = []
 var _speed_bumps: Array = []
@@ -141,6 +147,8 @@ var _card_alive := 0.0
 var _flash_tween: Tween
 var _toast: Label
 var _toast_tween: Tween
+var _ledger_card: Control
+var _ledger_tween: Tween
 var _hud_radio_tween: Tween
 var _char_states := {}
 var _switch_lock := 0.0
@@ -1879,6 +1887,10 @@ func _update_day(delta: float) -> void:
 		_hud_clock.text = "%02d:%02d" % [hh, mm]
 		var phase := "Day" if daylight > 0.55 else ("Golden hour" if daylight > 0.2 else "Night")
 		_hud_day.text = "Delhi \u00b7 " + phase + " \u00b7 " + _weather.label
+		# Midnight wrap (issue #219): rent + the day's ledger card.
+		if _prev_day_t >= 0.0 and day_t < _prev_day_t:
+			_end_of_day()
+		_prev_day_t = day_t
 
 
 func _apply_wetness() -> void:
@@ -2331,6 +2343,7 @@ func _collect_save() -> Dictionary:
 		"heading": heading,
 		"day_t": day_t,
 		"missions_completed": _missions.completed,
+		"day_ledger": _missions.ledger_snapshot(),
 	}
 	# Per-character snapshots so everyone's wallet, health and last spot
 	# survive a save/load cycle, not just the current lead.
@@ -2351,11 +2364,15 @@ func _collect_save() -> Dictionary:
 
 func _apply_save(save: Dictionary) -> void:
 	day_t = clampf(float(save.get("day_t", day_t)), 0.0, 1.0)
+	_prev_day_t = day_t
 	_health.restore(float(save.get("hp", 100.0)))
 	var missions_done = save.get("missions_completed", {})
 	if typeof(missions_done) != TYPE_DICTIONARY:
 		missions_done = {}
 	_missions.restore(int(save.get("cash", 0)), missions_done)
+	var ledger_saved = save.get("day_ledger", {})
+	if typeof(ledger_saved) == TYPE_DICTIONARY:
+		_missions.restore_ledger(ledger_saved)
 	var chars = save.get("chars", {})
 	if typeof(chars) == TYPE_DICTIONARY:
 		for id in chars:
@@ -2398,6 +2415,79 @@ func _on_waypoint_cleared() -> void:
 	_waypoint = Vector3.INF
 	_minimap.set_waypoint(Vector3.INF)
 	_show_toast("Waypoint cleared")
+
+
+func _end_of_day() -> void:
+	## Midnight (issue #219): auto-stand rent off the top, then the
+	## day's books on a card. A shortfall warns — never health, never
+	## death.
+	var books: Dictionary = _missions.day_close(int(AUTO_STAND_RENT))
+	_show_ledger_card(books)
+	if int(books["shortfall"]) > 0:
+		_show_toast("RENT SHORTFALL \u00b7 Rs %d short — the stand took what you had" % int(books["shortfall"]))
+
+
+func _show_ledger_card(books: Dictionary) -> void:
+	## End-of-day ledger (issue #219): earnings by source, rent, wallet
+	## after — one glance, then it fades itself out.
+	if _ledger_card == null:
+		_ledger_card = _build_ledger_card()
+	var names := {"missions": "Missions", "fares": "Fares", "finds": "Finds"}
+	var lines: Array[String] = []
+	var total := 0
+	for src in ["missions", "fares", "finds"]:
+		var amt := int(books["sources"].get(src, 0))
+		total += amt
+		lines.append("%s  Rs %d" % [String(names[src]), amt])
+	lines.append("Earned  Rs %d" % total)
+	lines.append("Rent  -Rs %d" % int(books["rent"]))
+	lines.append("Wallet  Rs %d" % _missions.cash)
+	(_ledger_card.get_node("Cols/Body") as Label).text = "\n".join(lines)
+	_ledger_card.visible = true
+	_ledger_card.modulate.a = 1.0
+	if _ledger_tween != null and _ledger_tween.is_valid():
+		_ledger_tween.kill()
+	_ledger_tween = create_tween()
+	_ledger_tween.tween_interval(6.0)
+	_ledger_tween.tween_property(_ledger_card, "modulate:a", 0.0, 0.8)
+	_ledger_tween.tween_callback(func() -> void: _ledger_card.visible = false)
+
+
+func _build_ledger_card() -> Control:
+	var layer := CanvasLayer.new()
+	layer.layer = 13
+	add_child(layer)
+	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.07, 0.06, 0.05, 0.92)
+	style.border_color = Color(1.0, 0.85, 0.2, 0.8)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(10)
+	style.content_margin_left = 24.0
+	style.content_margin_right = 24.0
+	style.content_margin_top = 14.0
+	style.content_margin_bottom = 16.0
+	panel.add_theme_stylebox_override("panel", style)
+	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	panel.offset_top = 130.0
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var box := VBoxContainer.new()
+	box.name = "Cols"
+	panel.add_child(box)
+	var title := Label.new()
+	title.text = "DAY'S BOOKS"
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	var body := Label.new()
+	body.name = "Body"
+	body.add_theme_font_size_override("font_size", 15)
+	body.add_theme_color_override("font_color", Color(1.0, 0.93, 0.8))
+	box.add_child(body)
+	panel.visible = false
+	layer.add_child(panel)
+	return panel
 
 
 func _show_toast(text: String) -> void:
