@@ -75,6 +75,14 @@ static func _albedo(kind: String) -> ImageTexture:
 					n = col * 0.50 + _pnoise(u, v, 9, 19) * 0.26
 					n += _pnoise(u, v, 36, 25) * 0.10  # close-range strand flock
 					n += _hash(x, y, 20) * 0.14
+				"wrap":
+					# Turban fold bands: wide soft bands crossing the tile
+					# over a cloth mottle — wrapped cloth layers, not
+					# smooth solid rings.
+					var fb := 0.5 + 0.5 * sin(v * TAU * 6.0
+							+ _pnoise(u, v, 4, 27) * 2.5)
+					n = fb * 0.55 + _pnoise(u, v, 12, 28) * 0.28
+					n += _hash(x, y, 29) * 0.17
 				_:
 					n = 1.0
 			# Issue 158: amplitude raised so the weave reads in portrait
@@ -82,7 +90,7 @@ static func _albedo(kind: String) -> ImageTexture:
 			# to a near-flat average at gameplay distance, keeping the
 			# street read calm. Skin stays the subtlest (its depth cue is
 			# sculpted shading, not grain).
-			var amp: float = {"cotton": 0.22, "denim": 0.27, "skin": 0.10, "hair": 0.27}.get(kind, 0.0)
+			var amp: float = {"cotton": 0.22, "denim": 0.27, "skin": 0.10, "hair": 0.27, "wrap": 0.24}.get(kind, 0.0)
 			var g := clampf(1.0 - amp * n, 0.0, 1.0)
 			data[y * S + x] = clampi(int(g * 255.0), 0, 255)
 	var img := Image.create_from_data(S, S, false, Image.FORMAT_L8, data)
@@ -95,8 +103,8 @@ static func _rough(kind: String) -> ImageTexture:
 	## smooth, hair carrying a painted sheen (the art-ref vocabulary).
 	var data := PackedByteArray()
 	data.resize(S * S)
-	var base: float = {"cotton": 0.94, "denim": 0.88, "skin": 0.72, "hair": 0.52}.get(kind, 0.95)
-	var swing: float = {"cotton": 0.10, "denim": 0.14, "skin": 0.06, "hair": 0.18}.get(kind, 0.0)
+	var base: float = {"cotton": 0.94, "denim": 0.88, "skin": 0.72, "hair": 0.52, "wrap": 0.93}.get(kind, 0.95)
+	var swing: float = {"cotton": 0.10, "denim": 0.14, "skin": 0.06, "hair": 0.18, "wrap": 0.10}.get(kind, 0.0)
 	for y in S:
 		for x in S:
 			var u := float(x) / S
@@ -121,6 +129,14 @@ static func apply(m: StandardMaterial3D, role: String) -> void:
 	var kind: String = {"shirt": "cotton", "pants": "denim", "skin": "skin", "hair": "hair"}.get(role, "")
 	if kind == "":
 		return
+	apply_kind(m, kind, {"shirt": 9.0, "pants": 9.0, "hair": 8.0, "skin": 5.0}.get(role, 6.0))
+
+
+static func apply_kind(m: StandardMaterial3D, kind: String, repeats := 4.0) -> void:
+	## Full fabric treatment for an explicit kind (procedural meshes
+	## whose material carries no authored role name): woven or folded
+	## albedo detail that multiplies the tint, plus matching roughness
+	## modulation, tiled `repeats` times across the surface.
 	if not _albedo_cache.has(kind):
 		_albedo_cache[kind] = _albedo(kind)
 	if not _rough_cache.has(kind):
@@ -128,9 +144,14 @@ static func apply(m: StandardMaterial3D, role: String) -> void:
 	m.albedo_texture = _albedo_cache[kind]
 	m.roughness = 1.0
 	m.roughness_texture = _rough_cache[kind]
-	# The authored garment UVs span roughly one tile per body part;
-	# scaling up repeats the weave so grain reads at gameplay scale.
-	# Issue 158: garments repeat tighter so the raised grain reads
-	# woven in closeups; skin repeats looser to stay a soft mottle.
-	var repeats: float = {"shirt": 9.0, "pants": 9.0, "hair": 8.0, "skin": 5.0}.get(role, 6.0)
+	m.uv1_scale = Vector3(repeats, repeats, repeats)
+
+
+static func apply_detail(m: StandardMaterial3D, kind: String, repeats := 4.0) -> void:
+	## Albedo grain only, keeping the material's authored roughness —
+	## glossy finishes (slicked-back hair) get the strand detail
+	## without losing their sheen.
+	if not _albedo_cache.has(kind):
+		_albedo_cache[kind] = _albedo(kind)
+	m.albedo_texture = _albedo_cache[kind]
 	m.uv1_scale = Vector3(repeats, repeats, repeats)
