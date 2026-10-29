@@ -36,6 +36,11 @@ var _bumps: Array = []
 var _jolt := 0.0
 var _body_mesh: MeshInstance3D = null
 var _prev_pos := Vector3.INF  # INF = skip the crossing test on first frame
+## Whole-trip crash tally (issue #203 tip tiers): a hard slide contact
+## while moving at speed counts once per ~second, so wall scrapes do not
+## spam it. The taxi reads snapshots of this to grade rides.
+var _crashes := 0
+var _crash_cool := 0.0
 
 var _spec: Dictionary = KINDS["auto"]
 var _wheels: Array[MeshInstance3D] = []
@@ -172,6 +177,11 @@ func current_speed() -> float:
 	return absf(_speed)
 
 
+func crash_count() -> int:
+	## Public snapshot for systems grading a ride (taxi tip tiers).
+	return _crashes
+
+
 func tyre_burst(duration := 7.0) -> void:
 	## Spike-strip puncture (issue #188): top speed and pickup collapse
 	## until the spare set goes on. Refreshes the timer if re-spiked.
@@ -226,6 +236,14 @@ func drive(delta: float) -> void:
 	else:
 		velocity = Vector3.ZERO
 	move_and_slide()
+
+	# Crash tally (issue #203): contact while still travelling at speed,
+	# rate-limited so a grind along one wall is one knock, not thirty.
+	if _crash_cool > 0.0:
+		_crash_cool = maxf(_crash_cool - delta, 0.0)
+	elif get_slide_collision_count() > 0 and absf(_speed) > 6.0:
+		_crashes += 1
+		_crash_cool = 0.9
 
 	# Speed bumps (issue #69): kinematic crossing test, then the
 	# suspension settles — body dips and noses down as the jolt decays.
