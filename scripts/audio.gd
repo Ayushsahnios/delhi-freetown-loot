@@ -35,6 +35,18 @@ const SPATIAL_HORN_MIN_DB := -20.0
 const SPATIAL_HORN_MAX_DB := -8.0  # reactive honk from a real nearby auto
 const TRAFFIC_SWELL_MAX_DB := 2.5  # bed swells as traffic breathes past
 const EVENING_DROP_DB := 4.5    # the whole street quiets after dusk
+# Interaction foley (issue #187): feet, doors and paisa — quiet layers
+# that sit UNDER the street bed, never on top of it.
+const FOOTSTEP_WALK_DB := -25.0  # own feet: present, never the loudest thing
+const FOOTSTEP_RUN_DB := -17.0   # sprint stride lands harder
+const FOOTSTEP_STRIDE_MIN := 3.0 # metres per step at walk pace
+const FOOTSTEP_STRIDE_MAX := 3.7 # sprint stretches the stride
+const STEP_WALK_MPS := 6.5       # player.gd walk speed, mirrored for cadence
+const STEP_RUN_MPS := 11.5       # player.gd run speed, mirrored for cadence
+const DOOR_CHIME_DB := -15.0     # shop-door ding-dong on entry/exit beats
+const PURCHASE_BLIP_DB := -16.0  # cash pip under the food toast
+const CAR_HORN_DB := -6.0        # fuller twin-tone against the bed
+const SCOOTER_HORN_DB := -8.0    # thin city meep, present not piercing
 
 var _horn_player: AudioStreamPlayer
 var _ambient_player: AudioStreamPlayer
@@ -64,6 +76,14 @@ var _day_gain_db := 0.0
 var _night_f := 0.0
 var _traffic_swell_db := 0.0
 var _murmur_target_db := -60.0
+var _step_players: Array[AudioStreamPlayer] = []
+var _chime_player: AudioStreamPlayer
+var _blip_player: AudioStreamPlayer
+var _horn_voices := {}          # vehicle kind -> AudioStreamWAV (issue #187)
+var _step_voices := {}          # surface -> AudioStreamWAV (issue #187)
+var _step_dist := 0.0
+var _step_alt := 0
+var _rain_level := 0.0
 
 
 func setup() -> void:
@@ -107,6 +127,25 @@ func setup() -> void:
 	_call_player = AudioStreamPlayer.new()
 	_call_player.stream = _make_call()
 	add_child(_call_player)
+	# Interaction foley (issue #187): footsteps by surface and speed,
+	# shop-door chime, purchase pip, and one horn voice per vehicle kind.
+	for surface in ["pave", "dirt", "wet"]:
+		_step_voices[surface] = _make_footstep(surface)
+		var step := AudioStreamPlayer.new()
+		step.stream = _step_voices[surface]
+		add_child(step)
+		_step_players.append(step)
+	_chime_player = AudioStreamPlayer.new()
+	_chime_player.stream = _make_door_chime()
+	add_child(_chime_player)
+	_blip_player = AudioStreamPlayer.new()
+	_blip_player.stream = _make_purchase_blip()
+	add_child(_blip_player)
+	_horn_voices["auto"] = horn  # the e-rickshaw two-tone stays the lead
+	_horn_voices["car"] = _make_car_horn()
+	_horn_voices["van"] = _horn_voices["car"]  # van shares the car voice,
+	# pitched down at play time so it reads heavier.
+	_horn_voices["scooter"] = _make_scooter_horn()
 	# Reactive street horns (issue #165): one-shot 3D players positioned
 	# at the actual honking auto, so panning and distance come free.
 	var spatial_root := Node3D.new()
@@ -122,13 +161,21 @@ func setup() -> void:
 	# Settings sliders scale the Ambient bus, never these players directly.
 	for p in [_horn_player, _ambient_player, _rain_player, _thunder_player,
 			_thunk_player, _jingle_player, _murmur_player, _clatter_player,
-			_call_player] + _distant_players:
+			_call_player, _chime_player, _blip_player] + _distant_players \
+			+ _step_players:
 		p.bus = "Ambient"
 
 
-func horn() -> void:
-	if _horn_player != null:
-		_horn_player.play()
+func horn(kind := "auto") -> void:
+	## One voice per vehicle kind (issue #187): the e-rickshaw's buzzy
+	## two-tone, a fuller car/van blast, a thin scooter meep. On foot the
+	## lead voice plays — a street-side hand on the horn button.
+	if _horn_player == null:
+		return
+	_horn_player.stream = _horn_voices.get(kind, _horn_voices["auto"])
+	_horn_player.pitch_scale = 0.85 if kind == "van" \
+			else _rng.randf_range(0.96, 1.04)
+	_horn_player.play()
 
 
 func start_ambient() -> void:
@@ -142,8 +189,10 @@ func start_ambient() -> void:
 
 
 func set_rain(level: float) -> void:
-	## Rain bed volume follows the weather intensity (silent when dry).
+	## Rain bed volume follows the weather intensity (silent when dry);
+	## the level also switches footsteps to the wet squelch voice.
 	var l := clampf(level, 0.0, 1.0)
+	_rain_level = l
 	if _rain_player != null:
 		_rain_player.volume_db = -60.0 if l <= 0.03 else lerpf(-34.0, RAIN_TOP_DB, l)
 
@@ -176,6 +225,23 @@ func jingle() -> void:
 	if not _jingle_player.playing:
 		_jingle_player.play()
 
+func door_chime() -> void:
+	## Shop-door ding-dong (issue #187): every entry/exit beat rings it
+	## — vehicle doors and metro gates today, walk-in interiors when
+	## they land. Skipped if one is already ringing, so it never stacks.
+	if _chime_player == null or _chime_player.playing:
+		return
+	_chime_player.volume_db = DOOR_CHIME_DB - _duck * DIALOGUE_DUCK_DB
+	_chime_player.play()
+
+func purchase_blip() -> void:
+	## Cash pip (issue #187): the beat the moment paisa leaves the
+	## wallet for street food — two quick register notes under the toast.
+	if _blip_player == null or _blip_player.playing:
+		return
+	_blip_player.volume_db = PURCHASE_BLIP_DB - _duck * DIALOGUE_DUCK_DB
+	_blip_player.play()
+
 
 func _process(delta: float) -> void:
 	if not _ambient_on:
@@ -185,6 +251,7 @@ func _process(delta: float) -> void:
 	if _ctx_cd <= 0.0:
 		_ctx_cd = 0.2
 		_update_context()
+	_tick_footsteps(delta)
 	_ambient_player.volume_db = AMBIENT_DB - _duck * DIALOGUE_DUCK_DB \
 			+ _day_gain_db + _traffic_swell_db
 	if _murmur_player != null:
@@ -200,6 +267,11 @@ func _process(delta: float) -> void:
 		p.volume_db = _rng.randf_range(DISTANT_MIN_DB, DISTANT_MAX_DB) \
 				- _duck * DIALOGUE_DUCK_DB
 		p.pitch_scale = _rng.randf_range(0.55, 0.85)
+		# Phantom traffic takes turns on all three voices (issue #187):
+		# mostly the e-rickshaw fleet, sometimes a car or a scooter.
+		var roll := _rng.randf()
+		p.stream = _horn_voices["car"] if roll > 0.85 else \
+				_horn_voices["scooter"] if roll > 0.75 else _horn_voices["auto"]
 		p.play()
 		break
 
@@ -252,10 +324,10 @@ func _update_context() -> void:
 		_refresh_stalls()
 	var pos: Vector3 = _player.global_position
 	_traffic_swell_db = 0.0
-	if _traffic != null and _traffic.has_method("near_positions"):
-		var near: Array = _traffic.near_positions(pos, 24.0, 3)
+	if _traffic != null and _traffic.has_method("near_horns"):
+		var near: Array = _traffic.near_horns(pos, 24.0, 3)
 		if not near.is_empty():
-			var d_near := pos.distance_to(near[0])
+			var d_near := pos.distance_to(near[0]["pos"])
 			_traffic_swell_db = lerpf(TRAFFIC_SWELL_MAX_DB, 0.0,
 					clampf((d_near - 4.0) / 18.0, 0.0, 1.0))
 			_reactive_cd -= 0.2
@@ -312,19 +384,52 @@ func _nearest_distance(pos: Vector3, points: Array[Vector3]) -> float:
 	return best
 
 
-func _horn_at(pos: Vector3) -> void:
-	## A real auto honks from its actual street position: spatialised,
-	## distance-attenuated, never louder than the player's own horn.
+func _horn_at(hit: Dictionary) -> void:
+	## A real vehicle honks from its street position in its own voice
+	## (issue #187): e-rickshaw buzz, car blast or scooter meep —
+	## spatialised, distance-attenuated, never louder than the player's
+	## own horn.
 	for p in _spatial_horns:
 		if p.playing:
 			continue
-		p.global_position = pos + Vector3(0.0, 0.9, 0.0)
-		var d := _player.global_position.distance_to(pos)
+		p.global_position = hit["pos"] + Vector3(0.0, 0.9, 0.0)
+		var d := _player.global_position.distance_to(hit["pos"])
 		p.volume_db = lerpf(SPATIAL_HORN_MAX_DB, SPATIAL_HORN_MIN_DB,
 				clampf(d / 20.0, 0.0, 1.0)) - _duck * DIALOGUE_DUCK_DB
+		p.stream = _horn_voices.get(String(hit["kind"]), _horn_voices["auto"])
 		p.pitch_scale = _rng.randf_range(0.85, 1.05)
 		p.play()
 		return
+
+func _tick_footsteps(delta: float) -> void:
+	## The player's own feet (issue #187): stride cadence follows ground
+	## speed, one voice per surface — paved lane, dirt verge, monsoon
+	## wet — loudness stepping up from walk to sprint. Only while the
+	## legend is visibly on foot (hidden means driving or riding).
+	if _player == null or not is_instance_valid(_player) or not _player.visible:
+		_step_dist = 0.0
+		return
+	var vel: Vector3 = _player.velocity
+	var spd := Vector2(vel.x, vel.z).length()
+	if spd < 0.8 or absf(vel.y) > 3.0:
+		_step_dist = 0.0
+		return
+	_step_dist += spd * delta
+	var f := clampf((spd - STEP_WALK_MPS) / (STEP_RUN_MPS - STEP_WALK_MPS), 0.0, 1.0)
+	if _step_dist < lerpf(FOOTSTEP_STRIDE_MIN, FOOTSTEP_STRIDE_MAX, f):
+		return
+	_step_dist = 0.0
+	var surface := "dirt"
+	if _traffic != null and _traffic.has_method("on_road") \
+				and _traffic.on_road(_player.global_position, 1.2):
+		surface = "pave" if _rain_level <= 0.03 else "wet"
+	var p := _step_players[_step_alt % _step_players.size()]
+	_step_alt += 1
+	p.stream = _step_voices[surface]
+	p.volume_db = lerpf(FOOTSTEP_WALK_DB, FOOTSTEP_RUN_DB, f) \
+			- _duck * DIALOGUE_DUCK_DB
+	p.pitch_scale = _rng.randf_range(0.93, 1.07)
+	p.play()
 
 
 func loudness_profile() -> Array:
@@ -335,7 +440,9 @@ func loudness_profile() -> Array:
 	if _ambient_player == null:
 		return []
 	return [
-		_measure("horn", _horn_player.stream, HORN_DB),
+		_measure("horn", _horn_voices["auto"], HORN_DB),
+		_measure("horn_car", _horn_voices["car"], CAR_HORN_DB),
+		_measure("horn_scooter", _horn_voices["scooter"], SCOOTER_HORN_DB),
 		_measure("thunder", _thunder_player.stream, THUNDER_MAX_DB),
 		_measure("thunk", _thunk_player.stream, THUNK_MAX_DB),
 		_measure("ambient", _ambient_player.stream, AMBIENT_DB),
@@ -345,6 +452,11 @@ func loudness_profile() -> Array:
 		_measure("clatter", _clatter_player.stream, CLATTER_MAX_DB),
 		_measure("vendor_call", _call_player.stream, CALL_MAX_DB),
 		_measure("spatial_horn", _spatial_horns[0].stream, SPATIAL_HORN_MAX_DB),
+		_measure("footstep_pave", _step_voices["pave"], FOOTSTEP_RUN_DB),
+		_measure("footstep_dirt", _step_voices["dirt"], FOOTSTEP_RUN_DB),
+		_measure("footstep_wet", _step_voices["wet"], FOOTSTEP_RUN_DB),
+		_measure("door_chime", _chime_player.stream, DOOR_CHIME_DB),
+		_measure("purchase_blip", _blip_player.stream, PURCHASE_BLIP_DB),
 	]
 
 
@@ -366,6 +478,124 @@ func _measure(name: String, wav: AudioStreamWAV, channel_db: float) -> Dictionar
 
 
 # ---------------------------------------------------------------- synthesis
+
+func _make_footstep(surface) -> AudioStreamWAV:
+	## One stride of the player's own feet (issue #187), one texture per
+	## surface: a sharp paved slap, a soft dirt scuff, a monsoon squelch
+	## — each gone in ~160 ms so a fast cadence never stacks into buzz.
+	var dur := 0.16 if String(surface) == "wet" else 0.11
+	var frames := int(MIX_RATE * dur)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var lp := 0.0
+	var lp2 := 0.0
+	var phase := 0.0
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		var n := _rng.randf_range(-1.0, 1.0)
+		var s := 0.0
+		match String(surface):
+			"pave":
+				# Hard slap: bright click over a low body thump.
+				lp += (n - lp) * 0.55
+				phase += TAU * 95.0 / MIX_RATE
+				s = lp * 0.8 + sin(phase) * 0.5
+			"dirt":
+					# Soft scuff: darker shuffle, no click.
+				lp += (n - lp) * 0.16
+				lp2 += (lp - lp2) * 0.5
+				s = lp2 * 1.1
+			"wet":
+				# Squelch: splashy hiss over a downward heel chirp.
+				lp += (n - lp) * 0.38
+				phase += TAU * lerpf(240.0, 90.0, t / dur) / MIX_RATE
+				s = lp * 0.7 + sin(phase) * 0.4
+		var env: float = minf(t / 0.008, 1.0) * pow(maxf(1.0 - t / dur, 0.0), 1.8)
+		var sample := int(clampf(s * env * 0.5, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+func _make_door_chime() -> AudioStreamWAV:
+	## Shop-door ding-dong (issue #187): the two-note electronic bell over
+	## every shop door in the city — E5 drops to C5, each note struck fast
+	## and ringing out, done in half a second.
+	var frames := int(MIX_RATE * 0.52)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var phase := 0.0
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		var f := 659.25 if t < 0.24 else 523.25
+		var note_t := t if t < 0.24 else t - 0.24
+		phase += TAU * f / MIX_RATE
+		var env: float = minf(note_t / 0.006, 1.0) * pow(maxf(1.0 - note_t / 0.26, 0.0), 2.0)
+		var wave := sin(phase) * 0.75 + sin(phase * 2.0) * 0.18 + sin(phase * 3.0) * 0.07
+		var sample := int(clampf(wave * env * 0.42, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+func _make_purchase_blip() -> AudioStreamWAV:
+	## Cash pip (issue #187): two quick register notes — paisa left the
+	## wallet, HP on the way. A quarter second, gone before the toast.
+	var frames := int(MIX_RATE * 0.28)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var phase := 0.0
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		var f := 1318.5 if t < 0.09 else 987.77
+		var note_t := t if t < 0.09 else t - 0.09
+		phase += TAU * f / MIX_RATE
+		var env: float = minf(note_t / 0.004, 1.0) * pow(maxf(1.0 - note_t / 0.18, 0.0), 2.2)
+		var wave := sin(phase) * 0.8 + sin(phase * 2.0) * 0.2
+		var sample := int(clampf(wave * env * 0.4, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+func _make_car_horn() -> AudioStreamWAV:
+	## Car/van blast (issue #187): a fuller twin tone than the e-rickshaw
+	## buzz — 415+494 Hz paired sines with a second-harmonic edge, the
+	## round "paarp" of a proper car horn.
+	var frames := int(MIX_RATE * 0.45)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var pa := 0.0
+	var pb := 0.0
+	for i in frames:
+		pa += TAU * 415.3 / MIX_RATE
+		pb += TAU * 493.9 / MIX_RATE
+		var wave := sin(pa) * 0.45 + sin(pb) * 0.45 + sin(pa * 2.0) * 0.1
+		var env := 1.0
+		var attack: float = MIX_RATE * 0.012
+		var release: float = MIX_RATE * 0.06
+		if i < attack:
+			env = i / attack
+		elif i > frames - release:
+			env = (frames - i) / release
+		var sample := int(clampf(wave * env * 0.5, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+func _make_scooter_horn() -> AudioStreamWAV:
+	## Scooter meep (issue #187): one thin bright ~940 Hz tone, short and
+	## polite — the two-wheeler's chirp against the big horns.
+	var frames := int(MIX_RATE * 0.22)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var phase := 0.0
+	for i in frames:
+		phase += TAU * 940.0 / MIX_RATE
+		var wave := signf(sin(phase)) * 0.22 + sin(phase) * 0.6
+		var env := 1.0
+		var attack: float = MIX_RATE * 0.006
+		var release: float = MIX_RATE * 0.05
+		if i < attack:
+			env = i / attack
+		elif i > frames - release:
+			env = (frames - i) / release
+		var sample := int(clampf(wave * env * 0.4, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
 
 func _make_horn() -> AudioStreamWAV:
 	## Delhi e-rickshaw two-tone: a buzzy B4 blast then a D5 blast.

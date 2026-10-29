@@ -198,10 +198,11 @@ func _bump_limit(v: Dictionary) -> float:
 	return limit
 
 
-func near_positions(pos: Vector3, radius: float, max_n: int = 4) -> Array[Vector3]:
-	## Positions of live traffic within radius of pos, nearest first —
-	## the reactive street-horn bed samples this (issue #165).
-	var out: Array[Vector3] = []
+func near_horns(pos: Vector3, radius: float, max_n: int = 4) -> Array[Dictionary]:
+	## Live traffic within radius of pos, nearest first, as {pos, kind}
+	## pairs — the reactive street-horn bed samples this (issue #165) and
+	## gives each vehicle its own horn voice (issue #187).
+	var out: Array[Dictionary] = []
 	var best: Array[float] = []
 	for v in _vehicles:
 		var d := pos.distance_to(v.pos)
@@ -210,12 +211,26 @@ func near_positions(pos: Vector3, radius: float, max_n: int = 4) -> Array[Vector
 		var idx := out.size()
 		while idx > 0 and best[idx - 1] > d:
 			idx -= 1
-		out.insert(idx, v.pos)
+		out.insert(idx, {"pos": v.pos, "kind": v.kind})
 		best.insert(idx, d)
 		if out.size() > max_n:
 			out.pop_back()
 			best.pop_back()
 	return out
+
+func on_road(pos: Vector3, tol := 1.0) -> bool:
+	## True when pos sits on a driving-lane strip (within tol) — the
+	## foley bed uses it to pick paved vs dirt footsteps (issue #187).
+	## Lane coordinates are shared by the x- and z-running roads.
+	if _roads <= 0:
+		return false
+	var base := -_world / 2.0 - (_pitch - _road_w) / 2.0
+	var edge := _road_w / 2.0 + tol
+	for c in [pos.x, pos.z]:
+		var i := clampi(roundi((float(c) - base) / _pitch), 0, _roads - 1)
+		if absf(float(c) - (base + i * _pitch)) <= edge:
+			return true
+	return false
 
 
 func nearest_enterable(pos: Vector3, max_dist: float) -> Dictionary:
