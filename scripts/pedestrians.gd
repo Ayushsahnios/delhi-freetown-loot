@@ -48,6 +48,10 @@ var _roads := 0
 var _placed := false
 var _zones: Array[Dictionary] = []
 var _chars := Chars.new()
+var _night := 0.0
+var _rush := 0.0
+var _base_target := 0
+var _zone_target := 0
 var _last_model := -1
 
 
@@ -57,9 +61,12 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 	_road_w = road_width
 	_roads = road_count
 	_rng.randomize()
+	_base_target = COUNT
+	_zone_target = ZONE_EXTRA
 	var total := COUNT + ZONE_EXTRA
 	for i in range(total):
 		var v := _new_ped(i >= COUNT)
+		v.rank = i - COUNT if i >= COUNT else i
 		_dress(v)
 		_peds.append(v)
 
@@ -73,6 +80,33 @@ func set_crowd_zone(center: Vector3, radius: float) -> void:
 	## carries ~66 bodies (~+50%) instead of 44, using the same recycler
 	## and identity seeds — no new models.
 	_zones.append({"c": center, "r": radius})
+
+
+func set_life_pattern(night: float, rush: float, keep: float) -> void:
+	## Daily rhythm (issue #185), driven by daily_life.gd: night thins the
+	# street crowd to the keep floor; the morning chai rush fills the
+	# bazaar zones back up regardless of the hour's darkness.
+	_night = night
+	_rush = rush
+	_base_target = roundi(float(COUNT) * clampf(keep, 0.0, 1.0))
+	_zone_target = roundi(float(ZONE_EXTRA)
+			* clampf(maxf(keep, rush), 0.0, 1.0))
+
+
+func life_debug() -> Dictionary:
+	## Read-back for the headless gate (daily_life_check.gd).
+	var base_vis := 0
+	var zone_vis := 0
+	for v in _peds:
+		if v.visible:
+			if bool(v.get("zone", false)):
+				zone_vis += 1
+			else:
+				base_vis += 1
+	return {"night": _night, "rush": _rush,
+			"base_target": _base_target, "zone_target": _zone_target,
+			"base_visible": base_vis, "zone_visible": zone_vis,
+			"base_total": COUNT, "zone_total": ZONE_EXTRA}
 
 
 func register_player(p: Node3D) -> void:
@@ -91,16 +125,29 @@ func _physics_process(delta: float) -> void:
 		_scatter(_player.global_position)
 	for v in _peds:
 		var is_zone := bool(v.get("zone", false))
+		if is_zone and not _zone_awake():
+			if v.visible:
+				v.visible = false
+				_hide_ped(v)
+				v.panic = 0.0
+				v.rejoin = 0.0
+			continue
+		# Night thinning (issue #185): walkers past the day's target sleep
+		# out of sight — the tail of each squad stops ticking until dawn
+		# (or the chai rush refills the bazaar zones).
+		var target := _zone_target if is_zone else _base_target
+		if v.rank >= target:
+			if v.visible:
+				v.visible = false
+				_hide_ped(v)
+				v.panic = 0.0
+				v.rejoin = 0.0
+			continue
 		if is_zone:
-			if not _zone_awake():
-				if v.visible:
-					v.visible = false
-					_hide_ped(v)
-					v.panic = 0.0
-					v.rejoin = 0.0
-				continue
 			if not v.visible:
 				_place_zone(v)
+		elif not v.visible:
+			_place(v)
 		if v.cd > 0.0:
 			v.cd -= delta
 		if v.panic > 0.0 or v.rejoin > 0.0:

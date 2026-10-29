@@ -13,6 +13,7 @@ const AutoScript := preload("res://scripts/auto.gd")
 const TrafficScript := preload("res://scripts/traffic.gd")
 const VehiclesScript := preload("res://scripts/vehicles.gd")
 const PedestrianScript := preload("res://scripts/pedestrians.gd")
+const DailyLifeScript := preload("res://scripts/daily_life.gd")
 const HealthScript := preload("res://scripts/health.gd")
 const PoliceScript := preload("res://scripts/police.gd")
 const MissionScript := preload("res://scripts/missions.gd")
@@ -163,6 +164,9 @@ var _win_lit_xfs: Array[Transform3D] = []
 var _frame_xfs: Array[Transform3D] = []
 var _balcony_xfs: Array[Transform3D] = []
 var _shutter_xfs: Array[Transform3D] = []
+var _anim_shutter_xfs: Array[Transform3D] = []
+var _anim_shutter_mm: MultiMeshInstance3D = null
+var _daily_life: Node = null
 var _interior_xfs: Array[Transform3D] = []
 var _shoptrim_xfs: Array[Transform3D] = []
 var _win_lit_mat: StandardMaterial3D = null
@@ -212,6 +216,10 @@ func _ready() -> void:
 	_peds.set_crowd_zone(_block_center(3, 7) + Vector3(0.0, 0.0, 6.0), 36.0)
 	_peds.set_crowd_zone(_block_center(2, 8) + Vector3(0.0, 0.0, -8.0), 40.0)
 	_peds.set_crowd_zone(_block_center(9, 8) + Vector3(-11.0, 0.0, 0.0), 40.0)
+	_daily_life = DailyLifeScript.new()
+	add_child(_daily_life)
+	_daily_life.setup_shutters(_anim_shutter_mm, _anim_shutter_xfs)
+	_daily_life.register_life(_peds, _food)
 	_audio = AudioScript.new()
 	add_child(_audio)
 	_audio.setup()
@@ -473,6 +481,8 @@ func _build_city() -> void:
 					_balcony_xfs.append_array(balconies)
 					var shutters: Array[Transform3D] = fac["shutters"]
 					_shutter_xfs.append_array(shutters)
+					var anim: Array[Transform3D] = fac["anim"]
+					_anim_shutter_xfs.append_array(anim)
 					var interiors: Array[Transform3D] = fac["interiors"]
 					_interior_xfs.append_array(interiors)
 					var trims: Array[Transform3D] = fac["trim"]
@@ -651,6 +661,13 @@ func _commit_props() -> void:
 			FacadesScript.shutter_mesh(), _shutter_xfs)
 	if shutter_mm != null:
 		add_child(shutter_mm)
+	# Day/night shopfronts (issue #185): these shutters roll with the sun —
+	# daily_life.gd drives the MultiMesh between a lintel slat and the
+	# closed night panel.
+	_anim_shutter_mm = MeshTools.make_multimesh(
+			FacadesScript.shutter_mesh(), _anim_shutter_xfs)
+	if _anim_shutter_mm != null:
+		add_child(_anim_shutter_mm)
 	var interior_mm := MeshTools.make_multimesh(
 			FacadesScript.interior_mesh(), _interior_xfs)
 	if interior_mm != null:
@@ -1822,6 +1839,10 @@ func _update_day(delta: float) -> void:
 	var lamp_glow := lerpf(2.1, 0.0, clampf(daylight * 1.4, 0.0, 1.0))
 	for l in _street_lights:
 		l.light_energy = lamp_glow
+	# Life patterns (issue #185): shutters, street crowds and chai stalls
+	# all ride the same dusk curve so the city breathes as one motion.
+	if _daily_life != null:
+		_daily_life.tick(day_t, daylight)
 	var sky := SKY_NIGHT.lerp(SKY_DAY, daylight)
 	sky = sky.lerp(SKY_DUSK, dusk * 0.55)
 	sky = sky.lerp(STORM_SKY, _weather.cloud * 0.6)
@@ -1835,7 +1856,10 @@ func _update_day(delta: float) -> void:
 		tint.a = 0.28 + cover * 0.62
 		_cloud_mat.albedo_color = tint
 	if _playing:
-		var hours: float = fmod(day_t * 24.0 + 6.0, 24.0)
+		# Sun-aligned clock (issue #185): day_t 0.5 reads 12:00 under the
+		# sun model (full daylight), day_t 0 is midnight — the old +6 h
+		# offset showed noon at 18:00.
+		var hours: float = fmod(day_t * 24.0, 24.0)
 		var hh := int(hours)
 		var mm := int((hours - hh) * 60.0)
 		_hud_clock.text = "%02d:%02d" % [hh, mm]

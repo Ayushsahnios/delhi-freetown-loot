@@ -2,11 +2,12 @@ extends RefCounted
 ## Street-facing facade detail pass (issue #162): the art-ref bar asks for
 ## depth on every street wall — window grids get real frames with sills and
 ## lintel ledges, mid-floor concrete balconies appear on a subset of
-## towers, hut shopfronts get roll-down corrugated shutters (some open
-## into dark recesses), and each building's plaster tint varies slightly
-## so blocks stop reading as one flat colour. Purely procedural: panes and
-## shutters draw as textured MultiMesh units, frames/balconies/trim as
-## merged ArrayMesh units, plinths fold into the district mesh.
+## towers, hut shopfronts get roll-down corrugated shutters that close
+## after dusk and roll back up at dawn (a few stay boarded), and each
+## building's plaster tint varies slightly so blocks stop reading as one
+## flat colour. Purely procedural: panes and shutters draw as textured
+## MultiMesh units, frames/balconies/trim as merged ArrayMesh units,
+## plinths fold into the district mesh.
 
 const MeshTools := preload("res://scripts/meshtools.gd")
 
@@ -43,6 +44,7 @@ static func dress_building(pos: Vector3, size: Vector3, outward: Vector3,
 	var frames: Array[Transform3D] = []
 	var balconies: Array[Transform3D] = []
 	var shutters: Array[Transform3D] = []
+	var anim: Array[Transform3D] = []
 	var interiors: Array[Transform3D] = []
 	var trim: Array[Transform3D] = []
 
@@ -65,14 +67,19 @@ static func dress_building(pos: Vector3, size: Vector3, outward: Vector3,
 					+ nrm * (half_out + 0.02)
 			var xf := Transform3D(basis, at)
 			trim.append(xf)
-			if rng.randf() < 0.58:
+			# Daily rhythm (issue #185): every shopfront keeps its dark
+			# interior recess; the shutter in front either rolls with the
+			# day (daily_life.gd squashes it up to a lintel slat after
+			# dawn) or is boarded around the clock for variety.
+			interiors.append(xf)
+			if rng.randf() < 0.18:
 				shutters.append(xf)
 			else:
-				interiors.append(xf)
+				anim.append(xf)
 		return {
 			"plaster": plaster, "skirt": false, "panes": panes, "lit": lit,
 			"frames": frames, "balconies": balconies, "shutters": shutters,
-			"interiors": interiors, "trim": trim,
+			"anim": anim, "interiors": interiors, "trim": trim,
 		}
 
 	# Towers: keep the glazing grid, add a frame unit per pane.
@@ -125,7 +132,8 @@ static func dress_building(pos: Vector3, size: Vector3, outward: Vector3,
 	return {
 		"plaster": plaster, "skirt": rng.randf() < 0.65, "panes": panes,
 		"lit": lit, "frames": frames, "balconies": balconies,
-		"shutters": shutters, "interiors": interiors, "trim": trim,
+		"shutters": shutters, "anim": anim, "interiors": interiors,
+		"trim": trim,
 	}
 
 
