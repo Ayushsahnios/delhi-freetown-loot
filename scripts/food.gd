@@ -30,6 +30,7 @@ const OFFSETS := {
 var _player: CharacterBody3D = null
 var _health: HealthScript = null
 var _missions: MissionScript = null
+var _audio: Node = null
 var _stalls: Array[Dictionary] = []
 var _t := 0.0
 
@@ -60,10 +61,12 @@ func stall_positions() -> Array[Vector3]:
 	return out
 
 
-func register(p: CharacterBody3D, health: HealthScript, missions: MissionScript) -> void:
+func register(p: CharacterBody3D, health: HealthScript, missions: MissionScript,
+		audio: Node = null) -> void:
 	_player = p
 	_health = health
 	_missions = missions
+	_audio = audio
 
 
 # ---------------------------------------------------------------- loop
@@ -111,6 +114,9 @@ func _buy(item: Dictionary) -> void:
 	if not _missions.spend(int(item["price"])):
 		_show_toast("Not enough paisa — Rs %d needed" % int(item["price"]))
 		return
+	# Cash pip the moment paisa leaves the wallet (issue #187).
+	if _audio != null and _audio.has_method("purchase_blip"):
+		_audio.purchase_blip()
 	_health.heal(float(item["heal"]))
 	_show_toast("%s  ·  +%d HP  ·  Rs %d" % [item["name"], int(item["heal"]), int(item["price"])])
 	_prompt.visible = false

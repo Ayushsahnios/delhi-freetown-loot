@@ -1314,7 +1314,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	add_child(_missions)
 	_missions.register_player(player)
 	_missions.mission_completed.connect(_on_mission_completed)
-	_food.register(player, _health, _missions)
+	_food.register(player, _health, _missions, _audio)
 	_taxi.register(player, _missions)
 	_courier.register(player, _missions)
 	_photo = PhotoScript.new()
@@ -1464,7 +1464,7 @@ func _process(delta: float) -> void:
 		if Input.is_action_just_pressed("switch_character"):
 			_switch_character()
 		if Input.is_action_just_pressed("horn"):
-			_audio.horn()
+			_audio.horn(current_auto.kind if current_auto != null else "auto")
 		if current_auto != null and Input.is_action_just_pressed("radio"):
 			_hud_radio.text = _radio.cycle_station()
 			_show_toast(_hud_radio.text)
@@ -1554,6 +1554,7 @@ func _toggle_vehicle() -> void:
 		current_auto.driver_inside = false
 		current_auto = null
 		_radio_off()
+		_audio.door_chime()
 		return
 	var best: CharacterBody3D = null
 	var best_d := 6.0
@@ -1566,6 +1567,7 @@ func _toggle_vehicle() -> void:
 		current_auto = best
 		current_auto.driver_inside = true
 		player.visible = false
+		_audio.door_chime()
 		_radio_on()
 		return
 	# Metro gate (issue #98 part 2): board the elevated shuttle before
@@ -1590,6 +1592,7 @@ func _toggle_vehicle() -> void:
 		current_auto = v
 		current_auto.driver_inside = true
 		player.visible = false
+		_audio.door_chime()
 		_radio_on()
 
 
@@ -1608,6 +1611,7 @@ func _metro_board(idx: int) -> void:
 	player.visible = false
 	player.controls_enabled = false
 	player.suspend_for_ride()
+	_audio.door_chime()
 	_cam_anchor = camera.global_position
 	_cam_look_pt = _metro.cam_look()
 	_show_toast("BOARDED · NEXT STOP " + _metro.station_name(_metro.other_idx(idx)))
@@ -1621,6 +1625,7 @@ func _metro_alight() -> void:
 	player.controls_enabled = true
 	player.global_position = _metro.alight_pos(idx)
 	player.resume_after_ride()
+	_audio.door_chime()
 	_show_toast("STEP OUT · " + _metro.station_name(idx))
 
 
