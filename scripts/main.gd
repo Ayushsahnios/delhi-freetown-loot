@@ -22,6 +22,7 @@ const PoliceScript := preload("res://scripts/police.gd")
 const MissionScript := preload("res://scripts/missions.gd")
 const AudioScript := preload("res://scripts/audio.gd")
 const RadioScript := preload("res://scripts/radio.gd")
+const ChaseScript := preload("res://scripts/chase_music.gd")
 const LodScript := preload("res://scripts/lod.gd")
 const MiniMapScript := preload("res://scripts/minimap.gd")
 const MapScreenScript := preload("res://scripts/map_screen.gd")
@@ -114,6 +115,8 @@ var _dead := false
 var _impact_cd := 0.0
 var _audio: Node
 var _radio: Node
+var _chase: Node
+var _chase_radio_paused := false
 var _minimap: Control
 var _map_screen: Control
 var _route_arrow: Control
@@ -243,6 +246,9 @@ func _ready() -> void:
 	_radio = RadioScript.new()
 	add_child(_radio)
 	_radio.setup()
+	_chase = ChaseScript.new()
+	add_child(_chase)
+	_chase.setup()
 	camera = Camera3D.new()
 	# Draw distance (issue 167): the city fits in a 506 m square, so an
 	# 800 m far plane still takes in every rooftop corner-to-corner
@@ -1708,6 +1714,7 @@ func _radio_on() -> void:
 
 func _radio_off() -> void:
 	_radio.set_active(false)
+	_chase_radio_paused = false
 	_hud_radio.visible = false
 
 
@@ -1937,10 +1944,23 @@ func _on_stars_changed(s: int) -> void:
 		_hud_stars.modulate.a = 1.0
 		if _last_stars > 0:
 			_show_toast("HEAT LOST  ·  clean again")
+			_chase.set_stars(0)
+			# No resolve sting on the busted path — the arrest sting
+			# owns that beat (issue #226).
+			if not _dead:
+				_chase.cleared()
+				if _chase_radio_paused:
+					_chase_radio_paused = false
+					_radio.set_active(true)
 		_last_stars = 0
 		return
 	_hud_stars.visible = true
 	_hud_stars.text = "WANTED  " + "*".repeat(s)
+	_chase.set_stars(s)
+	if bool(_radio.get("_active")):
+		# Wanted music takes the head unit until the heat is gone.
+		_chase_radio_paused = true
+		_radio.set_active(false)
 	if s > _last_stars:
 		# Escalation pulse (issue #154): the HUD bucks when heat rises.
 		_hud_stars.pivot_offset = _hud_stars.size / 2.0
@@ -2245,6 +2265,7 @@ func _start_busted_flow() -> void:
 	if _dead:
 		return
 	_dead = true
+	_chase.busted()
 	var stars := 1
 	if _police != null:
 		stars = maxi(_police.stars(), 1)
