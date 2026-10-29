@@ -14,6 +14,7 @@ const RING_WANTED := Color(0.95, 0.25, 0.2)
 const PLAYER_FILL := Color(1.0, 1.0, 1.0)
 const PLAYER_EDGE := Color(0.05, 0.05, 0.08)
 const MISSION_COLOR := Color(0.35, 1.0, 0.5)
+const WAYPOINT_COLOR := Color(1.0, 0.78, 0.2)
 const LM_COLORS: Array[Color] = [
 	Color(0.2, 0.85, 0.45), Color(1.0, 0.62, 0.2),
 	Color(0.95, 0.35, 0.3), Color(0.55, 0.85, 1.0),
@@ -29,6 +30,7 @@ var _scale := 1.0
 var _pos := Vector3.ZERO
 var _heading := 0.0
 var _target := Vector3.INF
+var _waypoint := Vector3.INF
 var _police_pts: Array[Vector3] = []
 var _wanted := 0
 var _t := 0.0
@@ -57,6 +59,12 @@ func track(p: Vector3, heading: float) -> void:
 
 func set_mission_target(p: Vector3) -> void:
 	_target = p
+
+
+func set_waypoint(p: Vector3) -> void:
+	## Custom map waypoint (issue #189): drawn as a gold diamond so it
+	## never reads as another mission blip.
+	_waypoint = p
 
 
 func set_police(pts: Array[Vector3]) -> void:
@@ -92,6 +100,8 @@ func _draw() -> void:
 				_initials(String(lm["name"])))
 	if _target.is_finite():
 		_blip(_target, MISSION_COLOR, 4.0 + sin(_t * 5.0) * 1.5, true)
+	if _waypoint.is_finite():
+		_pin(_waypoint)
 	if _wanted > 0:
 		var flash := Color(1.0, 0.25, 0.2) if int(_t * 5.0) % 2 == 0 \
 				else Color(0.25, 0.45, 1.0)
@@ -110,6 +120,27 @@ func _draw() -> void:
 	var ring := RING if _wanted <= 0 \
 			else RING_WANTED.lerp(RING, 0.5 + 0.5 * sin(_t * 6.0))
 	draw_arc(_center, SIZE / 2.0 - 2.0, 0.0, TAU, 64, ring, 2.0, true)
+
+
+func _pin(world_pos: Vector3) -> void:
+	## Gold diamond for the custom waypoint, pinned to the rim when far.
+	var m: Vector2 = Vector2(world_pos.x - _pos.x, world_pos.z - _pos.z) \
+			.rotated(_heading) * _scale
+	var lim := SIZE / 2.0 - 10.0
+	var pinned := false
+	if m.length() > lim:
+		m = m.normalized() * lim
+		pinned = true
+	var pt := _center + m
+	var col := WAYPOINT_COLOR if not pinned \
+			else Color(1.0, 0.78, 0.2, 0.75)
+	var r := 5.5
+	var d := PackedVector2Array([pt + Vector2(0.0, -r),
+			pt + Vector2(r * 0.72, 0.0), pt + Vector2(0.0, r),
+			pt + Vector2(-r * 0.72, 0.0)])
+	draw_colored_polygon(d, col)
+	draw_polyline(PackedVector2Array([d[0], d[1], d[2], d[3], d[0]]),
+			Color(0.0, 0.0, 0.0, 0.55), 1.5, true)
 
 
 func _seg(a_world: Vector2, b_world: Vector2) -> void:
