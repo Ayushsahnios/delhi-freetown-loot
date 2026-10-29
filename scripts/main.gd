@@ -38,6 +38,8 @@ const InteriorsScript := preload("res://scripts/interiors.gd")
 const WeatherScript := preload("res://scripts/weather.gd")
 const TouchControlsScript := preload("res://scripts/touch_controls.gd")
 const PauseScript := preload("res://scripts/pause.gd")
+const CreditsScript := preload("res://scripts/credits.gd")
+const StatsPageScript := preload("res://scripts/stats_page.gd")
 const MeshTools := preload("res://scripts/meshtools.gd")
 const RoadsScript := preload("res://scripts/roads.gd")
 const FurnitureScript := preload("res://scripts/street_furniture.gd")
@@ -167,6 +169,10 @@ var _road_mat: StandardMaterial3D
 var _applied_wet := -1.0
 var _touch: CanvasLayer
 var _pause: CanvasLayer
+var _credits: CanvasLayer
+var _stats_page: CanvasLayer
+## Distance driven this session, in metres (issue #211 stats page).
+var _stat_m := 0.0
 var _districts := {}
 var _cur_district: MeshTools = null
 var _tree_trunk_xfs: Array[Transform3D] = []
@@ -267,6 +273,12 @@ func _ready() -> void:
 	_pause = PauseScript.new()
 	_pause.setup(self)
 	add_child(_pause)
+	_credits = CreditsScript.new()
+	_credits.setup(self)
+	add_child(_credits)
+	_stats_page = StatsPageScript.new()
+	_stats_page.setup(self)
+	add_child(_stats_page)
 	Input.joy_connection_changed.connect(_on_joy_connection_changed)
 	get_tree().root.close_requested.connect(_save_game)
 
@@ -1195,6 +1207,19 @@ func _build_hud() -> void:
 	layer.add_child(_map_screen)
 
 
+func _open_credits(from_pause := false) -> void:
+	## Credits overlay (issue #211): reachable from the title screen
+	## and the pause menu.
+	if _credits != null:
+		_credits.open(from_pause)
+
+
+func _open_stats(from_pause := false) -> void:
+	## Session stats overlay (issue #211): a pause-menu page.
+	if _stats_page != null:
+		_stats_page.open(from_pause)
+
+
 func _build_select_ui() -> void:
 	_select_layer = CanvasLayer.new()
 	_select_layer.layer = 20
@@ -1220,6 +1245,12 @@ func _build_select_ui() -> void:
 	sub.add_theme_font_size_override("font_size", 15)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sub)
+	var stamp := Label.new()
+	stamp.text = "v%s · full-fledged build" % Game.VERSION
+	stamp.add_theme_font_size_override("font_size", 12)
+	stamp.modulate = Color(1.0, 1.0, 1.0, 0.55)
+	stamp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(stamp)
 	var portraits := HBoxContainer.new()
 	portraits.alignment = BoxContainer.ALIGNMENT_CENTER
 	portraits.add_theme_constant_override("separation", 16)
@@ -1258,6 +1289,11 @@ func _build_select_ui() -> void:
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
+	var credits_btn := Button.new()
+	credits_btn.text = "CREDITS"
+	credits_btn.custom_minimum_size = Vector2(220, 0)
+	credits_btn.pressed.connect(_open_credits)
+	box.add_child(credits_btn)
 
 
 func _portrait_card(def: Dictionary) -> Control:
@@ -1540,6 +1576,7 @@ func _process(delta: float) -> void:
 				_health.damage(clampf(4.0 + hazard * 1.4, 8.0, 35.0))
 				_impact_cd = 0.8
 	if current_auto != null:
+		_stat_m += current_auto.current_speed() * delta
 		current_auto.drive(delta)
 		player.global_position = current_auto.global_position
 		if _chaos_cd <= 0.0 and current_auto.current_speed() > 3.0:
