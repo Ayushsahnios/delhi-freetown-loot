@@ -235,7 +235,8 @@ func lively(holder: Node3D) -> Node:
 ## baked into a per-instance copy of the mesh, so every surface keeps a
 ## real material — never a null slot for the renderer to trip on.
 func tint(holder: Node3D, shirt: Color, pants: Color, skin: Color,
-		hair: Color = Color(0.0, 0.0, 0.0, -1.0)) -> void:
+		hair: Color = Color(0.0, 0.0, 0.0, -1.0),
+		print_kind := 0, print_var := 0) -> void:
 	for mi_node in holder.find_children("*", "MeshInstance3D", true, false):
 		var mi: MeshInstance3D = mi_node
 		if mi.mesh == null:
@@ -266,7 +267,12 @@ func tint(holder: Node3D, shirt: Color, pants: Color, skin: Color,
 				m.albedo_color = plain if role != "skin" else skin
 			# Issue #153: woven grain + matte roughness per garment kind,
 			# so the tint keeps its shade but stops reading as flat toon.
-			Fabrics.apply(m, role)
+			# Issue 182: patterned tops bake checks/plaid/stripes into
+			# the albedo instead of the plain weave.
+			if role == "shirt" and print_kind > 0:
+				Fabrics.apply_print(m, print_kind, print_var, shirt)
+			else:
+				Fabrics.apply(m, role)
 			mesh.surface_set_material(s, m)
 			changed = true
 		if changed:
@@ -796,6 +802,16 @@ const PORTER_RED := Color(0.62, 0.16, 0.12)
 const GUARD_KHAKI := Color(0.56, 0.51, 0.38)
 const GUARD_KHAKI_DARK := Color(0.44, 0.40, 0.30)
 const BUNDLE_CLOTH := Color(0.90, 0.86, 0.78)
+## Drape border accents (issue 182): zari-style edge bands on sarees,
+## solid contrast bands on lungis — rolled per identity seed.
+const ZARI_ACCENTS := [
+	Color(0.90, 0.73, 0.30),  # gold zari
+	Color(0.78, 0.44, 0.22),  # copper zari
+	Color(0.90, 0.87, 0.78),  # cream zari
+]
+const LUNGI_BORDERS := [
+	Color(0.44, 0.16, 0.12), Color(0.15, 0.18, 0.30), Color(0.10, 0.28, 0.18),
+]
 
 
 ## Roll a full identity from `seed`: deterministic, so a given NPC
@@ -900,6 +916,36 @@ static func _wardrobe_roll(id: Dictionary, rng: RandomNumberGenerator,
 		W_SAREE:
 			shoes = 1 if sr < 0.70 else 0
 	id["shoes"] = shoes
+	# Issue 182: garment prints — checked/plaid/striped tops for western
+	# walkers, contrast collars on kurtas, zari borders on sarees and
+	# lungis. Rolled from the same identity RNG so a walker's print is
+	# as sticky as its palette; uniforms (porter/guard) stay plain.
+	var print_kind := 0
+	var print_var := 0
+	var collar := false
+	var border := 0
+	if role == 0:
+		var pr := rng.randf()
+		match outfit:
+			W_WESTERN:
+				if pr < 0.20:
+					print_kind = Fabrics.PRINT_CHECKS
+				elif pr < 0.36:
+					print_kind = Fabrics.PRINT_PLAID
+				elif pr < 0.56:
+					print_kind = Fabrics.PRINT_STRIPES
+				print_var = rng.randi_range(0, 1)
+			W_KURTA:
+				collar = pr < 0.35
+			W_LUNGI:
+				collar = pr < 0.35
+				border = rng.randi_range(0, 2)
+			W_SAREE:
+				border = rng.randi_range(0, 2)
+	id["print"] = print_kind
+	id["print_var"] = print_var
+	id["collar"] = collar
+	id["border"] = border
 
 
 ## Apply a full identity: palette tint (authored hair recolors to the
@@ -910,7 +956,8 @@ static func _wardrobe_roll(id: Dictionary, rng: RandomNumberGenerator,
 ## slots carry their variety instead. Wardrobe meshes (issue #134)
 ## attach holder-fixed in world units, so they fit every rig alike.
 func dress(holder: Node3D, id: Dictionary) -> void:
-	tint(holder, id["shirt"], id["pants"], id["skin"], id["hair"])
+	tint(holder, id["shirt"], id["pants"], id["skin"], id["hair"],
+			int(id.get("print", 0)), int(id.get("print_var", 0)))
 	_wardrobe(holder, id)
 	_footwear(holder, id)
 	if _has_authored_hair(holder):
@@ -952,29 +999,52 @@ func _wardrobe(holder: Node3D, id: Dictionary) -> void:
 			skirt.height = 0.27 * h
 			_held_mesh(gear, skirt, _solid(id["shirt"]),
 					Transform3D(Basis(), Vector3(0.0, 0.40 * h, 0.0)))
+			if bool(id.get("collar", false)):
+				# Issue 182: contrast collar — a placket strip down the
+				# chest plus a flat collar ring, cut from the rolled hat
+				# accent so trim and outfit stay one palette family.
+				var con: Color = (id["hat"] as Color).darkened(0.10)
+				var placket := BoxMesh.new()
+				placket.size = Vector3(0.034 * h, 0.15 * h, 0.016 * h)
+				_held_mesh(gear, placket, _solid(con), Transform3D(Basis(),
+						Vector3(0.0, 0.66 * h, -0.088 * h)))
+				var cring := TorusMesh.new()
+				cring.inner_radius = 0.052 * h
+				cring.outer_radius = 0.068 * h
+				cring.rings = 36
+				cring.ring_segments = 10
+				_held_mesh(gear, cring, _solid(con), Transform3D(
+						Basis().scaled(Vector3(1.0, 0.55, 1.0)),
+						Vector3(0.0, 0.80 * h, -0.004 * h)))
 		W_LUNGI:
 			# Lungi: wrapped cloth from waist to the ankles.
 			var wrap := CylinderMesh.new()
 			wrap.top_radius = 0.088 * h
 			wrap.bottom_radius = 0.105 * h
 			wrap.height = 0.50 * h
-			_held_mesh(gear, wrap, _solid(id["pants"]),
+			var lb := int(id.get("border", 0))
+			var wmat := _solid(Color.WHITE)
+			Fabrics.apply_border(wmat, lb, id["pants"], LUNGI_BORDERS[lb])
+			_held_mesh(gear, wrap, wmat,
 					Transform3D(Basis(), Vector3(0.0, 0.30 * h, 0.0)))
 		W_SAREE:
 			# Saree: fitted-ankle skirt in the saree fabric, plus the
 			# pallu — a long drape from the right hip up over the left
 			# shoulder, so the silhouette reads at gameplay scale.
+			var sb := int(id.get("border", 0))
+			var smat := _solid(Color.WHITE)
+			Fabrics.apply_border(smat, sb, id["pants"], ZARI_ACCENTS[sb])
 			var petticoat := CylinderMesh.new()
 			petticoat.top_radius = 0.078 * h
 			petticoat.bottom_radius = 0.098 * h
 			petticoat.height = 0.50 * h
-			_held_mesh(gear, petticoat, _solid(id["pants"]),
+			_held_mesh(gear, petticoat, smat,
 					Transform3D(Basis(), Vector3(0.0, 0.30 * h, 0.0)))
 			var pallu := BoxMesh.new()
 			pallu.size = Vector3(0.13 * h, 0.62 * h, 0.02 * h)
 			var xf := Transform3D(Basis(Vector3(0.0, 0.0, 1.0), 0.55)
 					* Basis(Vector3.UP, 0.5), Vector3(0.0, 0.56 * h, 0.0))
-			_held_mesh(gear, pallu, _solid(id["pants"]), xf)
+			_held_mesh(gear, pallu, smat, xf)
 	if int(id.get("role", 0)) == 1:
 		# Porter head-load: a cloth-wrapped bundle balanced on a ring, in
 		# world units off the rendered height (the same holder-fixed
