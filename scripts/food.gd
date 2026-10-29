@@ -37,11 +37,22 @@ var _t := 0.0
 var _prompt: Label
 var _toast: Label
 var _toast_tween: Tween
+var night_f := 0.0
+var rush_f := 0.0
+var _bulb_mat: StandardMaterial3D = null
 
 
 func setup(landmarks: Array[Dictionary]) -> void:
 	## Carts exist from the main menu on (world dressing); buying only
 	## works once register() has handed over the live game nodes.
+	# Night-market bulbs (issue #185): one shared emissive material lights
+	# every cart's bulb + counter strip after dusk — glow bloom does the
+	# halo, no extra OmniLights to blow the light budget.
+	_bulb_mat = StandardMaterial3D.new()
+	_bulb_mat.albedo_color = Color(1.0, 0.92, 0.74)
+	_bulb_mat.emission_enabled = true
+	_bulb_mat.emission = Color(1.0, 0.74, 0.4)
+	_bulb_mat.emission_energy_multiplier = 0.0
 	for lm in landmarks:
 		var key := String(lm["name"])
 		if not OFFSETS.has(key):
@@ -71,11 +82,24 @@ func register(p: CharacterBody3D, health: HealthScript, missions: MissionScript,
 
 # ---------------------------------------------------------------- loop
 
+func set_night_rush(night: float, rush: float) -> void:
+	## Daily rhythm (issue #185), driven by daily_life.gd: dusk lights the
+	# market bulbs, the 07:00-10:00 chai rush boils the kettles harder.
+	night_f = night
+	rush_f = rush
+
+
 func _process(delta: float) -> void:
 	_t += delta
+	# Kettle boil rides the rush (issue #185): morning steam cycles faster
+	# and wider; the night market keeps a calm simmer.
+	var boil := 1.0 + 0.9 * rush_f
 	for stall in _stalls:
 		for puff in stall["steam"]:
-			puff["mesh"].position.y = float(puff["base"]) + sin(_t * 2.2 + float(puff["phase"])) * 0.13
+			puff["mesh"].position.y = float(puff["base"]) \
+					+ sin(_t * 2.2 * boil + float(puff["phase"])) * 0.13 * boil
+	if _bulb_mat != null:
+		_bulb_mat.emission_energy_multiplier = lerpf(0.0, 2.6, night_f)
 	if _player == null or _health == null or _missions == null:
 		return
 	var near := _nearest_stall(_player.global_position)
@@ -88,12 +112,21 @@ func _process(delta: float) -> void:
 		if d.is_running():
 			_prompt.visible = false
 			return
-	_prompt.text = "CHAI Rs %d [Q]  ·  SAMOSA Rs %d [R]  ·  stall food is hot" % [CHAI["price"], SAMOSA["price"]]
+	_prompt.text = "CHAI Rs %d [Q]  ·  SAMOSA Rs %d [R]  ·  stall food is hot%s" % [CHAI["price"], SAMOSA["price"], _mood()]
 	_prompt.visible = true
 	if Input.is_action_just_pressed("buy_chai"):
 		_buy(CHAI)
 	elif Input.is_action_just_pressed("buy_samosa"):
 		_buy(SAMOSA)
+
+
+func _mood() -> String:
+	## Prompt tail for the daily rhythm (issue #185).
+	if rush_f > 0.5:
+		return "  ·  morning rush"
+	if night_f > 0.5:
+		return "  ·  night market"
+	return ""
 
 
 func _nearest_stall(pos: Vector3) -> Dictionary:
@@ -154,6 +187,15 @@ func _build_cart(pos: Vector3, face_toward: Vector3) -> Array[Dictionary]:
 		var stripe := _box(Vector3(0.78, 0.08, 2.1), Color(0.9, 0.2, 0.16) if i % 2 == 0 else Color(0.95, 0.92, 0.85), Vector3(-1.17 + i * 0.78, 3.78, 0))
 		stripe.rotation.x = -0.16
 		root.add_child(stripe)
+	# Night-market glow (issue #185): hanging bulb under the awning plus a
+	# warm strip along the counter front — dark until dusk.
+	var bulb := SphereMesh.new()
+	bulb.radius = 0.09
+	bulb.height = 0.18
+	root.add_child(_glow(bulb, Vector3(0, 3.3, 0.55)))
+	var strip := BoxMesh.new()
+	strip.size = Vector3(2.8, 0.05, 0.03)
+	root.add_child(_glow(strip, Vector3(0, 1.48, 0.77)))
 	var kettle := MeshInstance3D.new()
 	var km := CylinderMesh.new()
 	km.top_radius = 0.28
@@ -219,6 +261,16 @@ func _box(size: Vector3, color: Color, pos: Vector3) -> MeshInstance3D:
 func _mat(color: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
+	return m
+
+
+func _glow(mesh: Mesh, pos: Vector3) -> MeshInstance3D:
+	## A night-market bulb mesh (issue #185) wearing the shared emissive
+	## material that daily_life.gd fades in after dusk.
+	var m := MeshInstance3D.new()
+	m.mesh = mesh
+	m.position = pos
+	m.material_override = _bulb_mat
 	return m
 
 
