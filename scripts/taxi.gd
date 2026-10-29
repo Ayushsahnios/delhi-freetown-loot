@@ -19,6 +19,18 @@ const HAIL_COOLDOWN := 45.0
 const MIN_TRIP := 70.0
 const SHOW_R := 95.0
 const MAX_SHOWN := 2
+## Tip tiers + ride grading (issue #203 part 2): par time is the
+## straight-line run at a cruise pace plus pickup/drop slack; a clean
+## (crash-free) AND fast ride earns GOLD, either alone earns SILVER.
+const PAR_SPEED := 9.0
+const PAR_PAD := 6.0
+const TIP_GOLD := 0.30
+const TIP_SILVER := 0.15
+## Three hard knocks mid-fare and the passenger bails without paying.
+const BAIL_CRASHES := 3
+## Idle radio calls (issue #203): quiet cruising gets pinged toward the
+## nearest roadside hail so the hustle never stalls for lack of a fare.
+const RADIO_EVERY := 22.0
 
 const KURTA := Color(0.92, 0.72, 0.25)
 const PANTS := Color(0.2, 0.22, 0.28)
@@ -53,6 +65,7 @@ var _fare: Dictionary = {}
 var _board_t := 0.0
 var _drop_t := 0.0
 var _t := 0.0
+var _radio_t := 0.0
 
 var _prompt: Label
 var _toast: Label
@@ -105,6 +118,7 @@ func _tick_cruising(delta: float, current_auto, driving: bool) -> void:
 		for h in _hails:
 			h["node"].visible = false
 		_prompt.visible = false
+		_radio_t = 0.0
 		return
 	var pos: Vector3 = current_auto.global_position
 	var shown := 0
@@ -127,13 +141,30 @@ func _tick_cruising(delta: float, current_auto, driving: bool) -> void:
 			node.visible = false
 	if nearest.is_empty():
 		_prompt.visible = false
+		# Radio call (issue #203): nothing waving nearby, so dispatch
+		# points the driver at the closest roadside hail on the map.
+		_radio_t += delta
+		if _radio_t >= RADIO_EVERY:
+			_radio_t = 0.0
+			var spot: Dictionary = {}
+			var spot_d := INF
+			for h in _hails:
+				var d := _flat(pos, h["pos"])
+				if d < spot_d:
+					spot_d = d
+					spot = h
+			if not spot.is_empty() and float(spot["cool"]) > 0.0:
+				spot["cool"] = 0.0
+			_show_toast("RADIO · hail waving %s of you, %dm — go get it" % [
+				_compass(pos, spot["pos"]), int(spot_d)])
 		return
+	_radio_t = 0.0
 	_prompt.text = "TAXI · stop by the raised hand to pick up"
 	_prompt.visible = true
 	if current_auto.current_speed() < STOP_SPEED:
 		_board_t += delta
 		if _board_t >= DWELL:
-			_board(nearest)
+			_board(nearest, current_auto)
 	else:
 		_board_t = 0.0
 
@@ -144,15 +175,20 @@ func _tick_fare(delta: float, current_auto, driving: bool) -> void:
 		_fare["grace"] = GRACE
 		var pos: Vector3 = current_auto.global_position
 		_fare["trip_m"] = float(_fare["trip_m"]) + current_auto.current_speed() * delta
+		var knocks := _knocks(current_auto)
+		if knocks >= BAIL_CRASHES:
+			drop_fare("too rough a ride")
+			return
 		var d := _flat(pos, dest["center"])
 		var meter := _meter()
-		_prompt.text = "FARE → %s %s %dm  ·  meter Rs %d — stop at the drop" % [
-			String(dest["name"]), _compass(pos, dest["center"]), int(d), meter]
+		var ride := "clean" if knocks == 0 else "%d knocks" % knocks
+		_prompt.text = "FARE → %s %s %dm  ·  meter Rs %d · %s — stop at the drop" % [
+			String(dest["name"]), _compass(pos, dest["center"]), int(d), meter, ride]
 		_prompt.visible = true
 		if d < DROP_R and current_auto.current_speed() < STOP_SPEED:
 			_drop_t += delta
 			if _drop_t >= DWELL:
-				_drop_off()
+				_drop_off(current_auto)
 		else:
 			_drop_t = 0.0
 	else:
@@ -166,7 +202,7 @@ func _tick_fare(delta: float, current_auto, driving: bool) -> void:
 
 # ---------------------------------------------------------------- events
 
-func _board(hail: Dictionary) -> void:
+func _board(hail: Dictionary, current_auto) -> void:
 	var from: Vector3 = hail["pos"]
 	var options: Array[Dictionary] = []
 	for lm in _landmarks:
@@ -175,20 +211,38 @@ func _board(hail: Dictionary) -> void:
 	if options.is_empty():
 		options = _landmarks
 	var dest: Dictionary = options[randi() % options.size()]
-	_fare = {"dest": dest, "trip_m": 0.0, "grace": GRACE}
+	var crash0 := 0
+	if current_auto != null:
+		crash0 = int(current_auto.crash_count())
+	var par := _flat(from, dest["center"]) / PAR_SPEED + PAR_PAD
+	_fare = {"dest": dest, "trip_m": 0.0, "grace": GRACE, "t0": _t, "crash0": crash0, "par": par}
 	hail["node"].visible = false
 	hail["cool"] = HAIL_COOLDOWN
 	_board_t = 0.0
 	_show_toast("FARE ABOARD · %s — run the meter" % String(dest["name"]))
 
 
-func _drop_off() -> void:
+func _drop_off(current_auto) -> void:
 	var dest: Dictionary = _fare["dest"]
 	var fare := _meter()
+	var knocks := _knocks(current_auto)
+	var clean := knocks == 0
+	var fast := _t - float(_fare["t0"]) <= float(_fare["par"])
+	var tip := 0
+	var note := "no tip — keep it smooth"
+	if clean and fast:
+		tip = _round5(fare * TIP_GOLD)
+		note = "GOLD tip Rs %d — clean and fast" % tip
+	elif clean:
+		tip = _round5(fare * TIP_SILVER)
+		note = "SILVER tip Rs %d — clean ride" % tip
+	elif fast:
+		tip = _round5(fare * TIP_SILVER)
+		note = "SILVER tip Rs %d — fast run" % tip
 	_fare = {}
 	_drop_t = 0.0
-	_missions.earn(fare)
-	_show_toast("FARE PAID · +Rs %d at %s" % [fare, String(dest["name"])])
+	_missions.earn(fare + tip)
+	_show_toast("FARE PAID · +Rs %d at %s · %s" % [fare + tip, String(dest["name"]), note])
 	_prompt.visible = false
 
 
@@ -196,7 +250,18 @@ func _drop_off() -> void:
 
 func _meter() -> int:
 	var raw := BASE_FARE + float(_fare["trip_m"]) * RATE_PER_M
-	return int(roundf(raw / 5.0) * 5.0)
+	return _round5(raw)
+
+
+func _round5(v: float) -> int:
+	return int(roundf(v / 5.0) * 5.0)
+
+
+func _knocks(current_auto) -> int:
+	## Crashes landed since boarding — the ride's cleanliness grade.
+	if current_auto == null or _fare.is_empty():
+		return 0
+	return maxi(int(current_auto.crash_count()) - int(_fare["crash0"]), 0)
 
 
 func _grace_reset() -> void:
