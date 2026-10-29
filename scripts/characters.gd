@@ -290,16 +290,31 @@ func attach_sardar(holder: Node3D, turban: Color, beard: Color = Color(0.13, 0.0
 	var wraps := [
 		[0.36, 0.56], [0.50, 0.60], [0.64, 0.52], [0.76, 0.42],
 	]
-	var mat := _solid(turban)
-	for w in wraps:
+	var mat := _wrap_mat(turban)
+	# Issue 160: each wrap layer gets the fold-grain cloth material at
+	# a slightly different depth shade, so the stack reads as folded
+	# cloth layers instead of one smooth solid.
+	var layers := [0.0, 0.07, 0.13, 0.05]
+	for i in wraps.size():
 		var ring := TorusMesh.new()
-		ring.inner_radius = float(w[1]) * u
-		ring.outer_radius = (float(w[1]) + 0.17) * u
+		ring.inner_radius = float(wraps[i][1]) * u
+		ring.outer_radius = (float(wraps[i][1]) + 0.17) * u
 		ring.rings = 48
 		ring.ring_segments = 10
-		_bone_mesh(att, head_xf, ring, mat,
+		_bone_mesh(att, head_xf, ring, _wrap_mat(turban.darkened(layers[i])),
 				Transform3D(Basis().scaled(Vector3(1.0, 0.5, 1.0)),
-					Vector3(0.0, float(w[0]) * u, 0.0)))
+					Vector3(0.0, float(wraps[i][0]) * u, 0.0)))
+	# Issue 160: a diagonal cross-wrap band — the cloth crossing over
+	# the layered wraps.
+	var cross := TorusMesh.new()
+	cross.inner_radius = 0.52 * u
+	cross.outer_radius = 0.68 * u
+	cross.rings = 48
+	cross.ring_segments = 10
+	_bone_mesh(att, head_xf, cross, _wrap_mat(turban.darkened(0.03)),
+			Transform3D(Basis(Vector3(0.0, 0.0, 1.0), 0.45)
+					* Basis().scaled(Vector3(1.0, 0.5, 1.0)),
+					Vector3(0.0, 0.55 * u, 0.0)))
 	var dome := SphereMesh.new()
 	dome.radius = 0.42 * u
 	dome.height = 0.84 * u
@@ -313,7 +328,7 @@ func attach_sardar(holder: Node3D, turban: Color, beard: Color = Color(0.13, 0.0
 			Transform3D(Basis(Vector3(1.0, 0.0, 0.0), 0.45), Vector3(0.0, 0.92 * u, 0.34 * u)))
 	# Beard: a slab tucked under the chin and swept slightly forward, with
 	# a mustache bar on the lip. Reads clearly at gameplay scale.
-	var bmat := _solid(beard)
+	var bmat := _hair_mat(beard)
 	var chin := BoxMesh.new()
 	# Issue 152: beard slab sized to read at title-portrait scale —
 	# the first cut was too small to see against the face at 128x168.
@@ -566,6 +581,9 @@ func _slick_hair(kit: Dictionary, hair: Color) -> void:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = hair
 	mat.roughness = 0.22
+	# Issue 160: combed-back strand grain keeps the gloss — the detail
+	# lives in the albedo, the sheen stays authored.
+	Fabrics.apply_detail(mat, "hair", 10.0)
 	var crop := SphereMesh.new()
 	crop.radius = 0.5 * u
 	crop.height = 0.98 * u
@@ -642,13 +660,33 @@ func _rider_gear(holder: Node3D, def: Dictionary) -> void:
 	_held_mesh(gear, strap, _solid(def.get("shirt", Color.WHITE)),
 			Transform3D(Basis(Vector3(0.0, 0.0, 1.0), 0.18),
 					Vector3(0.0, 0.6 * h, 0.135 * h)))
-	# Ponytail: a capsule off the back of the head, swept down-back.
+	# Ponytail (issue 160): a strand-textured mass off the back of the
+	# head, swept down-back, with fanned strand locks and a dark tie
+	# band — hair, not a solid peg.
+	var hair: Color = def.get("hair", Color(0.14, 0.09, 0.06))
+	var hmat := _hair_mat(hair)
 	var tail := CapsuleMesh.new()
-	tail.radius = 0.02 * h
+	tail.radius = 0.018 * h
 	tail.height = 0.15 * h
-	_held_mesh(gear, tail, _solid(def.get("hair", Color(0.14, 0.09, 0.06))),
+	_held_mesh(gear, tail, hmat,
 			Transform3D(Basis(Vector3(1.0, 0.0, 0.0), 0.6),
 					Vector3(0.0, 0.86 * h, 0.075 * h)))
+	for side in [-1, 0, 1]:
+		var lock := CapsuleMesh.new()
+		lock.radius = 0.007 * h
+		lock.height = 0.13 * h
+		_held_mesh(gear, lock, hmat,
+				Transform3D(Basis(Vector3(1.0, 0.0, 0.0), 0.6 + side * 0.16)
+						* Basis(Vector3.UP, side * 0.10),
+						Vector3(side * 0.012 * h, 0.845 * h, 0.078 * h)))
+	var tie := TorusMesh.new()
+	tie.inner_radius = 0.016 * h
+	tie.outer_radius = 0.024 * h
+	tie.rings = 20
+	tie.ring_segments = 8
+	_held_mesh(gear, tie, _solid(Color(0.10, 0.08, 0.07)),
+			Transform3D(Basis(Vector3(1.0, 0.0, 0.0), 0.6),
+					Vector3(0.0, 0.885 * h, 0.070 * h)))
 
 
 ## Holder-fixed mesh at a world-unit transform (no bone riding).
@@ -712,10 +750,15 @@ const ID_BOTTOMS := [
 	Color(0.14, 0.18, 0.30), Color(0.30, 0.30, 0.34), Color(0.32, 0.24, 0.18),
 	Color(0.10, 0.10, 0.12), Color(0.62, 0.55, 0.40), Color(0.45, 0.50, 0.55),
 ]
+## Hair shades (issue 160): a black-brown spectrum — the roll lerps a
+## random step between adjacent stops so no two heads share a flat
+## shade, and elders wash subtly grey off whichever stop they drew.
 const ID_HAIRS := [
-	Color(0.07, 0.05, 0.04), Color(0.15, 0.10, 0.06), Color(0.27, 0.17, 0.09),
-	Color(0.42, 0.30, 0.18), Color(0.55, 0.52, 0.50), Color(0.38, 0.15, 0.10),
+	Color(0.05, 0.035, 0.03), Color(0.09, 0.06, 0.045),
+	Color(0.15, 0.10, 0.06), Color(0.23, 0.15, 0.08),
+	Color(0.34, 0.23, 0.13),
 ]
+const HAIR_GREY := Color(0.56, 0.54, 0.51)
 const ID_HATS := [
 	Color(0.95, 0.55, 0.12), Color(0.92, 0.90, 0.86), Color(0.35, 0.16, 0.12),
 	Color(0.85, 0.72, 0.20), Color(0.45, 0.50, 0.25), Color(0.55, 0.35, 0.60),
@@ -762,17 +805,28 @@ const BUNDLE_CLOTH := Color(0.90, 0.86, 0.78)
 static func identity(seed: int, female := false) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
+	# Issue 160: hair rolls a lerped step across the black-brown
+	# spectrum; roughly 1 in 8 walkers is an elder washed subtly grey.
+	var hi := rng.randi_range(0, ID_HAIRS.size() - 2)
+	var shade: Color = ID_HAIRS[hi].lerp(ID_HAIRS[hi + 1], rng.randf() * 0.8)
+	var elder := rng.randf() < 0.12
+	if elder:
+		shade = shade.lerp(HAIR_GREY, 0.45 + rng.randf() * 0.2)
+	var part := rng.randi_range(0, 2) - 1
 	var id := {
 		"seed": seed,
 		"skin": ID_SKINS[rng.randi_range(0, ID_SKINS.size() - 1)],
 		"shirt": ID_TOPS[rng.randi_range(0, ID_TOPS.size() - 1)],
 		"pants": ID_BOTTOMS[rng.randi_range(0, ID_BOTTOMS.size() - 1)],
-		"hair": ID_HAIRS[rng.randi_range(0, ID_HAIRS.size() - 1)],
+		"hair": shade,
 		"hat": ID_HATS[rng.randi_range(0, ID_HATS.size() - 1)],
 		# 0 authored-only, 1 crop, 2 crop + bun, 3 crop + ponytail
 		"hair_style": rng.randi_range(0, 3),
 		# 0 none, 1 cap, 2 wrap, 3 patka, 4 headband
 		"headwear": rng.randi_range(0, 4),
+		"elder": elder,
+		# Parting side for the hair kit: -1 left, 0 center, 1 right.
+		"part": part,
 		"height": rng.randf_range(0.93, 1.07),
 	}
 	_wardrobe_roll(id, rng, female)
@@ -1227,17 +1281,67 @@ func _attach_face(kit: Dictionary, id: Dictionary) -> void:
 				Vector3(0.0, 0.05 * u, 0.43 * u)))
 
 
+## Hair as shaped masses (issue 160): the solid cap becomes a strand-
+## textured crop tilted with the part roll, a combed-over crown ridge,
+## a fringe lock past the brow and a parting groove meeting a small
+## crown whorl — left / center / right per identity. Buns and
+## ponytails keep their style mass plus a darker tie. Headwear hides
+## the brow pieces, so those skip under caps and wraps.
 func _attach_hair(kit: Dictionary, id: Dictionary) -> void:
 	var att: BoneAttachment3D = kit["att"]
 	var xf: Transform3D = kit["xf"]
 	var u: float = kit["u"]
-	var mat := _solid(id["hair"])
+	var shade: Color = id["hair"]
+	var mat := _hair_mat(shade)
+	var dark := _solid(shade.darkened(0.45))
+	var part := int(id.get("part", 0))
+	var bare := int(id.get("headwear", 0)) == 0
 	var crop := SphereMesh.new()
 	crop.radius = 0.52 * u
 	crop.height = 1.02 * u
 	_bone_mesh(att, xf, crop, mat,
-			Transform3D(Basis().scaled(Vector3(1.0, 0.74, 1.0)),
-					Vector3(0.0, 0.52 * u, 0.0)))
+			Transform3D(Basis(Vector3(0.0, 0.0, 1.0), part * 0.07)
+					* Basis().scaled(Vector3(1.0, 0.74, 1.0)),
+					Vector3(part * 0.03 * u, 0.52 * u, 0.0)))
+	if bare:
+		# Crown ridge: a combed-over ellipsoid riding the top of the
+		# crop, swept toward the part side — the shaped-mass read.
+		var ridge := SphereMesh.new()
+		ridge.radius = 0.34 * u
+		ridge.height = 0.68 * u
+		_bone_mesh(att, xf, ridge, mat,
+				Transform3D(Basis(Vector3(0.0, 0.0, 1.0), -part * 0.06)
+						* Basis().scaled(Vector3(0.80, 0.30, 1.30)),
+						Vector3(part * 0.08 * u, 0.95 * u, 0.10 * u)))
+		# Fringe lock: volume poking past the crop above the brow,
+		# pushed to the part side; its underside sits at 0.55u so brows
+		# (0.53u) and pupils (0.42u) stay clear.
+		var fringe := SphereMesh.new()
+		fringe.radius = 0.28 * u
+		fringe.height = 0.56 * u
+		_bone_mesh(att, xf, fringe, mat,
+				Transform3D(Basis(Vector3(0.0, 0.0, 1.0), -part * 0.08)
+						* Basis().scaled(Vector3(0.85, 0.45, 1.0)),
+						Vector3(part * 0.08 * u, 0.68 * u, 0.36 * u)))
+	# Parting groove: a thin darker seam along the crown where the
+	# mass divides, offset to the part side.
+	var seam := BoxMesh.new()
+	seam.size = Vector3(0.035 * u, 0.045 * u, 0.50 * u)
+	_bone_mesh(att, xf, seam, dark,
+			Transform3D(Basis(Vector3(0.0, 0.0, 1.0), part * 0.07),
+					Vector3(part * 0.15 * u, 0.90 * u, -0.02 * u)))
+	if bare:
+		# Crown whorl: a small dark ring on the back of the crown —
+		# the swirl the strands seem to comb out of.
+		var whorl := TorusMesh.new()
+		whorl.inner_radius = 0.05 * u
+		whorl.outer_radius = 0.10 * u
+		whorl.rings = 24
+		whorl.ring_segments = 8
+		_bone_mesh(att, xf, whorl, dark,
+				Transform3D(Basis(Vector3(1.0, 0.0, 0.0), -0.35)
+						* Basis().scaled(Vector3(1.0, 0.50, 1.0)),
+						Vector3(part * 0.04 * u, 0.88 * u, -0.16 * u)))
 	match int(id["hair_style"]):
 		2:
 			var bun := SphereMesh.new()
@@ -1246,6 +1350,14 @@ func _attach_hair(kit: Dictionary, id: Dictionary) -> void:
 			_bone_mesh(att, xf, bun, mat,
 					Transform3D(Basis().scaled(Vector3(1.0, 0.85, 1.0)),
 						Vector3(0.0, 0.78 * u, -0.44 * u)))
+			var tie := TorusMesh.new()
+			tie.inner_radius = 0.10 * u
+			tie.outer_radius = 0.155 * u
+			tie.rings = 24
+			tie.ring_segments = 8
+			_bone_mesh(att, xf, tie, _solid(Color(0.10, 0.08, 0.07)),
+					Transform3D(Basis().scaled(Vector3(1.0, 0.6, 1.0)),
+						Vector3(0.0, 0.74 * u, -0.38 * u)))
 		3:
 			var tail := CapsuleMesh.new()
 			tail.radius = 0.13 * u
@@ -1253,14 +1365,25 @@ func _attach_hair(kit: Dictionary, id: Dictionary) -> void:
 			_bone_mesh(att, xf, tail, mat,
 					Transform3D(Basis(Vector3(1.0, 0.0, 0.0), 0.35),
 						Vector3(0.0, 0.42 * u, -0.56 * u)))
+			var band := CylinderMesh.new()
+			band.top_radius = 0.135 * u
+			band.bottom_radius = 0.135 * u
+			band.height = 0.07 * u
+			_bone_mesh(att, xf, band, _solid(Color(0.10, 0.08, 0.07)),
+					Transform3D(Basis(Vector3(1.0, 0.0, 0.0), 0.35),
+						Vector3(0.0, 0.58 * u, -0.50 * u)))
+
 
 
 func _attach_headwear(kit: Dictionary, id: Dictionary) -> void:
 	var att: BoneAttachment3D = kit["att"]
 	var xf: Transform3D = kit["xf"]
 	var u: float = kit["u"]
-	var mat := _solid(id["hat"])
-	match int(id["headwear"]):
+	# Issue 160: wraps and patkas take the fold-grain cloth material;
+	# caps and headbands stay smooth solids.
+	var hw := int(id["headwear"])
+	var mat := _wrap_mat(id["hat"]) if hw == 2 or hw == 3 else _solid(id["hat"])
+	match hw:
 		1:
 			# Cap: soft dome plus a stitched brim over the brow.
 			var dome := SphereMesh.new()
@@ -1303,6 +1426,17 @@ func _attach_headwear(kit: Dictionary, id: Dictionary) -> void:
 			knot.height = 0.40 * u
 			_bone_mesh(att, xf, knot, mat, Transform3D(Basis(),
 					Vector3(0.0, 0.72 * u, 0.38 * u)))
+			# Issue 160: a diagonal cross-wrap band — the cloth crossing
+			# over the layered wraps, folded over itself.
+			var cross := TorusMesh.new()
+			cross.inner_radius = 0.56 * u
+			cross.outer_radius = 0.70 * u
+			cross.rings = 40
+			cross.ring_segments = 10
+			_bone_mesh(att, xf, cross, mat,
+					Transform3D(Basis(Vector3(0.0, 0.0, 1.0), 0.5)
+						* Basis().scaled(Vector3(1.0, 0.55, 1.0)),
+						Vector3(0.0, 0.50 * u, 0.0)))
 		4:
 			# Headband: a thin band across the brow.
 			var strip := TorusMesh.new()
@@ -1350,6 +1484,23 @@ func _solid(color: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
 	m.roughness = 0.85
+	return m
+
+
+## Strand-flow hair material (issue 160): the tinted shade multiplied
+## by the combed-strand texture with its sheen roughness map, so caps
+## read as shaped hair masses instead of solid helmets.
+func _hair_mat(shade: Color) -> StandardMaterial3D:
+	var m := _solid(shade)
+	Fabrics.apply_kind(m, "hair", 6.0)
+	return m
+
+
+## Wrapped-cloth material (issue 160): fold-band grain so dastaars and
+## wrap turbans read as layered fabric, not smooth solid rings.
+func _wrap_mat(cloth: Color) -> StandardMaterial3D:
+	var m := _solid(cloth)
+	Fabrics.apply_kind(m, "wrap", 4.0)
 	return m
 
 
