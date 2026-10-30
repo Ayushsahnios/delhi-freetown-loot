@@ -10,6 +10,7 @@ const MeshTools := preload("res://scripts/meshtools.gd")
 const Vehicles := preload("res://scripts/vehicles.gd")
 const Exhaust := preload("res://scripts/exhaust.gd")
 const Ambulance := preload("res://scripts/ambulance.gd")
+const Breakdown := preload("res://scripts/breakdown.gd")
 
 const COUNT := 22
 const LANE := 2.8
@@ -25,6 +26,13 @@ const AMB_YIELD_M := 16.0   # AI within this radius pulls toward the kerb
 const AMB_KERB := 1.3       # metres of pull-in while yielding
 const AMB_EASE := 2.2       # ease-in / merge-back rate (m/s)
 const AMB_SLOW := 0.65      # yielders also lift off the throttle
+
+# Kerbside breakdowns (issue #216): a rare dead-vehicle event. One at a
+# time; the pull-in target sits at the road edge, well outside the
+# ±LANE flow, so ambient AI never has reason to queue behind it.
+const BD_FIRST_GAP := Vector2(50.0, 110.0)
+const BD_GAP := Vector2(170.0, 340.0)
+const BD_KERB_IN := 0.45    # metres in from the kerb line — half on, half off
 
 var _vehicles: Array[Dictionary] = []
 var _player: Node3D = null
@@ -44,6 +52,8 @@ var _puffs: Node3D = null
 var _puff_t := 0.0
 var _amb = null
 var _amb_timer := 60.0
+var _bd: Node3D = null
+var _bd_timer := 90.0
 
 
 func setup(world_size: float, pitch: float, road_width: float, road_count: int) -> void:
@@ -68,6 +78,11 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 	# immediately so headless checks can exercise spawn/yield/despawn.
 	if "amb-now" in OS.get_cmdline_user_args():
 		_amb_timer = 0.5
+	_bd_timer = _rng.randf_range(BD_FIRST_GAP.x, BD_FIRST_GAP.y)
+	# Test hook: `godot . -- --bd-now` forces the first breakdown at
+	# once so headless checks can exercise pull-in/dwell/despawn.
+	if "bd-now" in OS.get_cmdline_user_args():
+		_bd_timer = 0.5
 
 
 func register_player(p: Node3D) -> void:
@@ -132,6 +147,7 @@ func _physics_process(delta: float) -> void:
 		_apply_transform(v)
 	_idle_exhaust(delta)
 	_tick_ambulance(delta)
+	_tick_breakdown(delta)
 
 
 func _idle_exhaust(delta: float) -> void:
@@ -247,6 +263,33 @@ func _spawn_ambulance() -> void:
 	_amb = Ambulance.new()
 	add_child(_amb)
 	_amb.setup(along_z, road, dir, -float(dir) * (edge + 2.0))
+
+
+func _tick_breakdown(delta: float) -> void:
+	## Issue #216 lifecycle: after the gap one vehicle pulls to the
+	## kerb and dies with hazards on; the node frees itself (towed)
+	## after the dark beat, and only then does the timer re-arm.
+	## Never more than one breakdown at a time.
+	if _bd != null and not is_instance_valid(_bd):
+		_bd = null
+		_bd_timer = _rng.randf_range(BD_GAP.x, BD_GAP.y)
+	if _bd == null:
+		_bd_timer -= delta
+		if _bd_timer <= 0.0:
+			_spawn_breakdown()
+
+
+func _spawn_breakdown() -> void:
+	var along_z := _rng.randf() < 0.5
+	var road_i := _rng.randi_range(0, _roads - 1)
+	var road := -_world / 2.0 + road_i * _pitch - (_pitch - _road_w) / 2.0
+	var dir := 1 if _rng.randf() < 0.5 else -1
+	# Roll in from a little inside either end of the road so the
+	# pull-in has ~12 m of run to stop in.
+	var start_t := (_world / 2.0 - 18.0) * (1.0 if _rng.randf() < 0.5 else -1.0)
+	_bd = Breakdown.new()
+	add_child(_bd)
+	_bd.setup(along_z, road, dir, start_t, _road_w / 2.0 - BD_KERB_IN)
 
 
 func _amb_yield(delta: float) -> void:

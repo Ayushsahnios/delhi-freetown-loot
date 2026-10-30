@@ -1219,6 +1219,25 @@ static func make_siren() -> AudioStreamWAV:
 	return _wav(bytes, true)
 
 
+static func make_relay_click() -> AudioStreamWAV:
+	## Hazard-relay click (issue #216): a single 45 ms snap at 2.1 kHz
+	## with a fast decay — the soft tick under every hazard flash of a
+	## kerbside breakdown. One-shot; the breakdown node replays it on
+	## each rising blink, so there is no loop seam at any flash rate.
+	var dur := 0.045
+	var frames := int(MIX_RATE * dur)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		var env := pow(maxf(1.0 - t / dur, 0.0), 2.6)
+		var s := sin(TAU * 2100.0 * t) * 0.85
+		s += sin(TAU * 3400.0 * t) * 0.15
+		var sample := int(clampf(s * env * 0.22, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+
 static func _wav(bytes: PackedByteArray, loop: bool) -> AudioStreamWAV:
 	var wav := AudioStreamWAV.new()
 	wav.format = AudioStreamWAV.FORMAT_16_BITS
