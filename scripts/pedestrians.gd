@@ -113,6 +113,13 @@ func register_player(p: Node3D) -> void:
 	_player = p
 
 
+func walker_list() -> Array[Dictionary]:
+	## Live walker records for the monsoon crowd gear (issue #221) —
+	## raingear.gd reads node/identity/visibility per walker and adds
+	## umbrellas, jackets and soak without touching the walk logic.
+	return _peds
+
+
 func _physics_process(delta: float) -> void:
 	if _player == null:
 		return
