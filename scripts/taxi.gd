@@ -302,23 +302,25 @@ func _bob_marker(node: Node3D) -> void:
 func _build_passenger() -> Node3D:
 	var root := Node3D.new()
 	var b := MeshTools.new()
-	# Stylised hail: standing figure, one arm raised, floating marker.
-	var leg := CylinderMesh.new()
-	leg.top_radius = 0.16
-	leg.bottom_radius = 0.2
-	leg.height = 0.85
-	b.add_mesh(leg, Transform3D(Basis(), Vector3(0, 0.43, 0)), PANTS)
-	var torso := BoxMesh.new()
-	torso.size = Vector3(0.52, 0.72, 0.3)
-	b.add_mesh(torso, Transform3D(Basis(), Vector3(0, 1.2, 0)), KURTA)
-	var head := BoxMesh.new()
-	head.size = Vector3(0.3, 0.32, 0.3)
-	b.add_mesh(head, Transform3D(Basis(), Vector3(0, 1.74, 0)), SKIN)
-	var arm := CylinderMesh.new()
-	arm.top_radius = 0.055
-	arm.bottom_radius = 0.065
-	arm.height = 0.72
-	b.add_mesh(arm, Transform3D(Basis(Vector3(0, 0, 1), PI * 0.42), Vector3(0.3, 1.55, 0)), SKIN)
+	# Stylised hail (de-boxed, issue #238): standing figure with a
+	# capsule-tapered leg column, elliptic capsule torso, stub neck,
+	# ball head, one tapered arm raised on a ball shoulder.
+	b.add_round_lathe(MeshTools.capsule_profile(0.20, 0.16, 0.85),
+			Transform3D(Basis(), Vector3(0, 0.005, 0)), PANTS)
+	b.add_round_lathe(PackedVector2Array([
+				Vector2(0.05, 0.0), Vector2(0.21, 0.06), Vector2(0.20, 0.24),
+				Vector2(0.225, 0.55), Vector2(0.19, 0.66), Vector2(0.06, 0.72)]),
+			Transform3D(Basis(), Vector3(0, 0.84, 0)), KURTA,
+			MeshTools.FINISH_MATTE, 10, 0.62)
+	b.add_round_lathe(MeshTools.capsule_profile(0.05, 0.055, 0.12),
+			Transform3D(Basis(), Vector3(0, 1.56, 0)), SKIN)
+	b.add_round_lathe(MeshTools.ball_profile(0.15, 3),
+			Transform3D(Basis(), Vector3(0, 1.59, 0)), SKIN,
+			MeshTools.FINISH_MATTE, 10, 0.95)
+	b.add_round_lathe(MeshTools.capsule_profile(0.065, 0.052, 0.72),
+			Transform3D(Basis(Vector3(0, 0, 1), PI * 0.42), Vector3(0.3, 1.55, 0)), SKIN)
+	b.add_round_lathe(MeshTools.ball_profile(0.075, 3),
+			Transform3D(Basis(), Vector3(0.27, 1.5, 0)), SKIN)
 	var body := MeshInstance3D.new()
 	body.mesh = b.build_mesh()
 	root.add_child(body)
