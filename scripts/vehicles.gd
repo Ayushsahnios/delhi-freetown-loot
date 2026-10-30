@@ -90,20 +90,19 @@ static func build_rickshaw_body(b: MeshTools, decor := true) -> void:
 	_panel(b, Vector3(1.7, 0.72, 0.1), Vector3(0, 1.08, -0.5), RICK_GREEN, 0.0, MeshTools.FINISH_SATIN)  # bulkhead
 	_panel(b, Vector3(1.5, 0.3, 0.7), Vector3(0, 0.93, 1.0), SEAT)  # bench
 	_panel(b, Vector3(1.5, 0.55, 0.14), Vector3(0, 1.28, 1.38), SEAT)  # backrest
-	_panel(b, Vector3(2.0, 0.13, 3.05), Vector3(0, 1.96, 0.35), RICK_YELLOW, 0.0, MeshTools.FINISH_GLOSS)  # canopy roof
-	_panel(b, Vector3(0.07, 0.3, 3.05), Vector3(-0.97, 1.76, 0.35), RICK_YELLOW, 0.0, MeshTools.FINISH_GLOSS)  # roof rails
-	_panel(b, Vector3(0.07, 0.3, 3.05), Vector3(0.97, 1.76, 0.35), RICK_YELLOW, 0.0, MeshTools.FINISH_GLOSS)
+	_canopy_shell(b)  # ribbed half-cylinder canopy (issue #237)
 	_panel(b, Vector3(1.66, 0.66, 0.05), Vector3(0, 1.67, -1.13), GLASS, 0.18, MeshTools.FINISH_GLOSS)  # windshield
 	_panel(b, Vector3(0.06, 0.7, 0.06), Vector3(-0.8, 1.68, -1.11), RICK_YELLOW, 0.18, MeshTools.FINISH_GLOSS)  # posts
 	_panel(b, Vector3(0.06, 0.7, 0.06), Vector3(0.8, 1.68, -1.11), RICK_YELLOW, 0.18, MeshTools.FINISH_GLOSS)
-	_panel(b, Vector3(1.0, 0.88, 0.95), Vector3(0, 0.94, -1.28), RICK_YELLOW, 0.0, MeshTools.FINISH_GLOSS)  # front cowl
-	_panel(b, Vector3(0.95, 0.5, 0.62), Vector3(0, 0.76, -1.9), RICK_YELLOW, 0.45, MeshTools.FINISH_GLOSS)  # sloped nose
-	_panel(b, Vector3(0.46, 0.06, 1.15), Vector3(0, 1.14, -1.62), RICK_YELLOW, 0.0, MeshTools.FINISH_GLOSS)  # front fender
+	b.add_loft(MeshTools.chamfer_footprint(0.52, 0.55, 0.16),
+			MeshTools.chamfer_footprint(0.34, 0.14, 0.06),
+			Vector3(0, 0, -1.45), 0.50, 1.38, RICK_YELLOW, MeshTools.FINISH_GLOSS)  # tapered cowl hull (issue #237)
+	_arch_lip(b, Vector3(0, 0.55, -1.62), 0.64, 0.40, RICK_YELLOW, 1.5)  # nose fender arc
 	b.add_mesh(_cyl_mesh(0.045, 0.7, 8), Transform3D(Basis(Vector3(1, 0, 0), -0.89), Vector3(0, 1.55, -1.4)), TRIM)  # steering column
 	_cyl_x(b, 0.04, 1.1, Vector3(0, 1.76, -1.66), TRIM)  # handlebar
 	_cyl_x(b, 0.055, 0.2, Vector3(-0.55, 1.76, -1.66), FRAME)  # grips
 	_cyl_x(b, 0.055, 0.2, Vector3(0.55, 1.76, -1.66), FRAME)
-	_cyl_z(b, 0.13, 0.09, Vector3(0, 1.08, -2.1), LAMP, MeshTools.FINISH_GLOSS)  # headlamp
+	_cyl_z(b, 0.13, 0.09, Vector3(0, 1.02, -1.80), LAMP, MeshTools.FINISH_GLOSS)  # headlamp
 	_panel(b, Vector3(0.16, 0.14, 0.42), Vector3(0.55, 0.40, 1.55), TRIM)  # muffler (issue #166)
 	_cyl_z(b, 0.045, 0.4, Vector3(0.55, 0.40, 1.78), TRIM)  # tailpipe
 	if decor:
@@ -117,14 +116,23 @@ static func build_hatchback_body(b: MeshTools, paint: Color, interior := true) -
 	## driver and interior read at street level; dash, wheel and seats
 	## behind the opening. Issue #166: wider lower greenhouse on bigger
 	## wheels, gloss paint and glass against matte bumpers and trim.
-	_panel(b, Vector3(1.9, 0.66, 3.9), Vector3(0, 0.73, 0), paint, 0.0, MeshTools.FINISH_GLOSS)  # body
-	_panel(b, Vector3(1.80, 0.56, 2.15), Vector3(0, 1.37, 0.3), paint, 0.0, MeshTools.FINISH_GLOSS)  # cabin
-	_panel(b, Vector3(1.62, 0.54, 0.06), Vector3(0, 1.31, -0.74), GLASS, 0.4, MeshTools.FINISH_GLOSS)  # windshield
-	_panel(b, Vector3(1.56, 0.48, 0.06), Vector3(0, 1.34, 1.34), GLASS, -0.45, MeshTools.FINISH_GLOSS)  # hatch glass
-	_panel(b, Vector3(0.05, 0.40, 1.05), Vector3(-0.905, 1.40, 0.75), GLASS, 0.0, MeshTools.FINISH_GLOSS)  # side glass (rear)
-	_panel(b, Vector3(0.05, 0.40, 1.05), Vector3(0.905, 1.40, 0.75), GLASS, 0.0, MeshTools.FINISH_GLOSS)
-	_panel(b, Vector3(0.05, 0.40, 0.07), Vector3(-0.905, 1.40, 0.19), TRIM)  # B-pillars
-	_panel(b, Vector3(0.05, 0.40, 0.07), Vector3(0.905, 1.40, 0.19), TRIM)
+	# Beveled, tapered hull (issue #237): lofted from chamfered footprints —
+	# sill-to-belt mass, then a greenhouse lofting into the roof.
+	b.add_loft(MeshTools.chamfer_footprint(0.95, 1.95, 0.16),
+			MeshTools.chamfer_footprint(0.92, 1.90, 0.22),
+			Vector3(0, 0, 0), 0.40, 1.08, paint, MeshTools.FINISH_GLOSS)  # body hull
+	b.add_loft(MeshTools.chamfer_footprint(0.90, 1.60, 0.14),
+			MeshTools.chamfer_footprint(0.60, 1.02, 0.24),
+			Vector3(0, 0, 0.30), 1.08, 1.62, paint, MeshTools.FINISH_GLOSS)  # tapered greenhouse
+	for wz in [-1.32, 1.32]:
+		for sx in [-1.0, 1.0]:
+			_arch_lip(b, Vector3(0.93 * sx, 0.48, wz), 0.60, 0.12, TRIM, 2.6)  # wheel-arch fender lips (issue #237)
+	_panel(b, Vector3(1.34, 0.60, 0.06), Vector3(0, 1.35, -1.00), GLASS, 0.55, MeshTools.FINISH_GLOSS)  # windshield
+	_panel(b, Vector3(1.15, 0.55, 0.06), Vector3(0, 1.34, 1.55), GLASS, -0.50, MeshTools.FINISH_GLOSS)  # hatch glass
+	_panel(b, Vector3(0.05, 0.38, 0.95), Vector3(-0.74, 1.38, 0.78), GLASS, 0.0, MeshTools.FINISH_GLOSS)  # side glass (rear)
+	_panel(b, Vector3(0.05, 0.38, 0.95), Vector3(0.74, 1.38, 0.78), GLASS, 0.0, MeshTools.FINISH_GLOSS)
+	_panel(b, Vector3(0.05, 0.38, 0.07), Vector3(-0.75, 1.38, 0.15), TRIM)  # B-pillars
+	_panel(b, Vector3(0.05, 0.38, 0.07), Vector3(0.75, 1.38, 0.15), TRIM)
 	_panel(b, Vector3(1.94, 0.28, 0.28), Vector3(0, 0.44, -1.97), TRIM)  # bumpers
 	_panel(b, Vector3(1.94, 0.28, 0.28), Vector3(0, 0.44, 1.97), TRIM)
 	_panel(b, Vector3(0.85, 0.13, 0.06), Vector3(0, 0.62, -1.96), FRAME)  # grille
@@ -143,17 +151,29 @@ static func build_van_body(b: MeshTools, paint: Color, interior := true) -> void
 	## #125: cab side windows + interior, so the leaning driver reads.
 	## Issue #166: gloss cab paint against a satin cargo box, plus a
 	## tailpipe and muffler under the rear overhang.
-	_panel(b, Vector3(2.15, 1.35, 1.35), Vector3(0, 1.3, -1.62), paint, 0.0, MeshTools.FINISH_GLOSS)  # cab
-	_panel(b, Vector3(1.9, 0.6, 0.06), Vector3(0, 1.68, -2.3), GLASS, 0.22, MeshTools.FINISH_GLOSS)  # windshield
-	_panel(b, Vector3(2.3, 2.05, 3.0), Vector3(0, 1.53, 0.55), CARGO, 0.0, MeshTools.FINISH_SATIN)  # cargo box
+	# Lofted cab + cargo hulls with a cornice lip (issue #237) — no bare
+	# boxes left in the silhouette.
+	b.add_loft(MeshTools.chamfer_footprint(1.07, 0.68, 0.14),
+			MeshTools.chamfer_footprint(0.94, 0.52, 0.18),
+			Vector3(0, 0, -1.62), 0.55, 1.98, paint, MeshTools.FINISH_GLOSS)  # cab hull
+	b.add_loft(MeshTools.chamfer_footprint(1.15, 1.50, 0.15),
+			MeshTools.chamfer_footprint(1.11, 1.46, 0.22),
+			Vector3(0, 0, 0.55), 0.50, 2.50, CARGO, MeshTools.FINISH_SATIN)  # cargo hull
+	b.add_prism(MeshTools.chamfer_footprint(1.18, 1.53, 0.15),
+			Vector3(0, 0, 0.55), 2.50, 2.66, CARGO, MeshTools.FINISH_SATIN)  # roof cornice lip
+	for wz in [-1.55, 1.75]:
+		for sx in [-1.0, 1.0]:
+			var wx: float = 1.02 * sx if wz < 0.0 else 1.05 * sx
+			_arch_lip(b, Vector3(wx, 0.55, wz), 0.64, 0.12, TRIM, 2.6)  # wheel-arch lips (issue #237)
+	_panel(b, Vector3(1.8, 0.58, 0.06), Vector3(0, 1.62, -2.27), GLASS, 0.18, MeshTools.FINISH_GLOSS)  # windshield
 	_panel(b, Vector3(2.2, 0.3, 0.28), Vector3(0, 0.45, -2.0), TRIM)  # bumpers
 	_panel(b, Vector3(2.32, 0.3, 0.28), Vector3(0, 0.45, 2.1), TRIM)
 	_panel(b, Vector3(0.34, 0.16, 0.07), Vector3(-0.72, 0.85, -2.33), LAMP, 0.0, MeshTools.FINISH_GLOSS)
 	_panel(b, Vector3(0.34, 0.16, 0.07), Vector3(0.72, 0.85, -2.33), LAMP, 0.0, MeshTools.FINISH_GLOSS)
 	_panel(b, Vector3(0.28, 0.16, 0.07), Vector3(-0.88, 1.0, 2.06), TAIL, 0.0, MeshTools.FINISH_GLOSS)
 	_panel(b, Vector3(0.28, 0.16, 0.07), Vector3(0.88, 1.0, 2.06), TAIL, 0.0, MeshTools.FINISH_GLOSS)
-	_panel(b, Vector3(0.03, 0.34, 0.55), Vector3(-1.08, 1.95, -1.62), GLASS, 0.0, MeshTools.FINISH_GLOSS)  # cab windows
-	_panel(b, Vector3(0.03, 0.34, 0.55), Vector3(1.08, 1.95, -1.62), GLASS, 0.0, MeshTools.FINISH_GLOSS)
+	_panel(b, Vector3(0.03, 0.30, 0.50), Vector3(-0.965, 1.90, -1.62), GLASS, 0.0, MeshTools.FINISH_GLOSS)  # cab windows
+	_panel(b, Vector3(0.03, 0.30, 0.50), Vector3(0.965, 1.90, -1.62), GLASS, 0.0, MeshTools.FINISH_GLOSS)
 	_panel(b, Vector3(0.35, 0.16, 0.35), Vector3(-0.58, 0.46, 1.8), TRIM)  # muffler (issue #166)
 	_cyl_z(b, 0.05, 0.4, Vector3(-0.62, 0.48, 2.0), TRIM)  # tailpipe
 	if interior:
@@ -166,12 +186,18 @@ static func build_scooter_body(b: MeshTools, paint: Color) -> void:
 	## handlebar and a small windscreen. Original design, no badges.
 	## Issue #166: gloss body panels and a tiny tailpipe.
 	_panel(b, Vector3(0.5, 0.08, 0.65), Vector3(0, 0.36, 0.18), FRAME)  # floorboard
-	_panel(b, Vector3(0.58, 0.5, 0.42), Vector3(0, 0.62, -0.52), paint, 0.0, MeshTools.FINISH_GLOSS)  # front apron
-	_panel(b, Vector3(0.5, 0.4, 0.06), Vector3(0, 0.55, -0.72), paint, 0.35, MeshTools.FINISH_GLOSS)  # leg shield
-	_panel(b, Vector3(0.52, 0.34, 0.95), Vector3(0, 0.56, 0.42), paint, 0.0, MeshTools.FINISH_GLOSS)  # under-seat body
-	_panel(b, Vector3(0.42, 0.12, 0.7), Vector3(0, 0.8, 0.32), SEAT)  # bench seat
+	b.add_loft(MeshTools.chamfer_footprint(0.30, 0.24, 0.09),
+			MeshTools.chamfer_footprint(0.22, 0.15, 0.07),
+			Vector3(0, 0, -0.52), 0.40, 0.86, paint, MeshTools.FINISH_GLOSS)  # apron hull (issue #237)
+	_leg_shield(b, paint)  # sculpted leg-shield curve (issue #237)
+	b.add_loft(MeshTools.chamfer_footprint(0.27, 0.50, 0.10),
+			MeshTools.chamfer_footprint(0.23, 0.42, 0.12),
+			Vector3(0, 0, 0.42), 0.40, 0.76, paint, MeshTools.FINISH_GLOSS)  # under-seat hull
+	b.add_mesh(_capsule_mesh(0.10, 0.60), Transform3D(
+			Basis.from_scale(Vector3(1.0, 0.8, 1.0)) * Basis(Vector3(0, 1, 0), PI / 2.0),
+			Vector3(0, 0.82, 0.30)), SEAT)  # rounded bench seat (issue #237)
 	_panel(b, Vector3(0.46, 0.05, 0.4), Vector3(0, 0.74, 0.92), TRIM)  # rear rack
-	_panel(b, Vector3(0.34, 0.08, 0.7), Vector3(0, 0.63, -0.95), paint, 0.0, MeshTools.FINISH_GLOSS)  # front fender
+	_arch_lip(b, Vector3(0, 0.30, -0.95), 0.42, 0.40, paint, 2.0)  # front fender arc (issue #237)
 	b.add_mesh(_cyl_mesh(0.045, 0.62, 8), Transform3D(Basis(Vector3(1, 0, 0), -0.28), Vector3(0, 0.85, -0.6)), TRIM)  # steering column
 	_cyl_x(b, 0.035, 0.95, Vector3(0, 1.1, -0.68), TRIM)  # handlebar
 	_cyl_x(b, 0.05, 0.16, Vector3(-0.48, 1.1, -0.68), FRAME)  # grips
@@ -221,8 +247,8 @@ static func _car_driver(b: MeshTools) -> void:
 static func _van_driver(b: MeshTools) -> void:
 	## Leaning out of the cab window — head half-proud of the glass,
 	## forearm on the sill (truck-driver style).
-	_panel(b, Vector3(0.19, 0.19, 0.19), Vector3(-1.09, 1.95, -1.62), SKIN_B)
-	_panel(b, Vector3(0.08, 0.08, 0.38), Vector3(-1.08, 1.79, -1.45), SHIRT_A)
+	_panel(b, Vector3(0.19, 0.19, 0.19), Vector3(-0.97, 1.90, -1.62), SKIN_B)
+	_panel(b, Vector3(0.08, 0.08, 0.38), Vector3(-0.95, 1.76, -1.45), SHIRT_A)
 
 
 static func _scooter_rider(b: MeshTools) -> void:
@@ -245,15 +271,15 @@ static func add_rickshaw_decor(b: MeshTools) -> void:
 	var fringe := [MARIGOLD, FRINGE_RED, FRINGE_GREEN]
 	var i := 0
 	for x in range(-3, 4):
-		_panel(b, Vector3(0.07, 0.16, 0.05), Vector3(x * 0.25, 1.87, -1.16), fringe[i % 3])
+		_panel(b, Vector3(0.07, 0.16, 0.05), Vector3(x * 0.25, 1.93, -1.06), fringe[i % 3])
 		i += 1
 	i = 0
 	for z in range(-3, 7):
-		_panel(b, Vector3(0.05, 0.16, 0.07), Vector3(-0.94, 1.87, z * 0.25), fringe[i % 3])
-		_panel(b, Vector3(0.05, 0.16, 0.07), Vector3(0.94, 1.87, z * 0.25), fringe[i % 3])
+		_panel(b, Vector3(0.05, 0.16, 0.07), Vector3(-0.90, 1.81, z * 0.25), fringe[i % 3])
+		_panel(b, Vector3(0.05, 0.16, 0.07), Vector3(0.90, 1.81, z * 0.25), fringe[i % 3])
 		i += 1
 	for x in range(-4, 5):
-		_panel(b, Vector3(0.06, 0.06, 0.06), Vector3(x * 0.15, 1.98, -1.1),
+		_panel(b, Vector3(0.06, 0.06, 0.06), Vector3(x * 0.15, 2.0, -1.07),
 				MARIGOLD if x % 2 == 0 else RICK_YELLOW)
 	_panel(b, Vector3(0.02, 0.06, 2.5), Vector3(-0.945, 1.02, 0.3), RICK_YELLOW)
 	_panel(b, Vector3(0.02, 0.06, 2.5), Vector3(0.945, 1.02, 0.3), RICK_YELLOW)
@@ -261,7 +287,7 @@ static func add_rickshaw_decor(b: MeshTools) -> void:
 	for x in [-1.0, 1.0]:
 		_panel(b, Vector3(0.3, 0.22, 0.04), Vector3(x, 0.35, 1.72), CAP)
 		_panel(b, Vector3(0.3, 0.05, 0.045), Vector3(x, 0.3, 1.72), RICK_YELLOW)
-	_panel(b, Vector3(0.08, 0.08, 0.08), Vector3(0, 1.0, -2.24), HUB)
+	_panel(b, Vector3(0.08, 0.08, 0.08), Vector3(0, 1.18, -1.70), HUB)
 
 
 ## Basic car interior (issue #125): dash, tilted steering wheel, two
@@ -346,6 +372,60 @@ static func _cyl_mesh(radius: float, height: float, segments: int) -> CylinderMe
 	cm.bottom_radius = radius
 	cm.height = height
 	cm.radial_segments = segments
+	return cm
+
+
+## Ribbed half-cylinder canopy (issue #237): one curved yellow shell
+## rail-to-rail with dark frame ribs proud of the fabric and a canvas
+## rear curtain — replaces the flat canopy roof + box rails.
+static func _canopy_shell(b: MeshTools) -> void:
+	var arc := PackedVector2Array()
+	for i in 7:
+		var t := PI * float(i) / 6.0
+		arc.append(Vector2(cos(t) * 0.96, 1.70 + sin(t) * 0.34))
+	b.add_shell(arc, -1.05, 1.85, Vector3.ZERO, true, RICK_YELLOW, MeshTools.FINISH_GLOSS)
+	for z in [-0.55, 0.0, 0.55, 1.1, 1.65]:
+		var rib := PackedVector2Array()
+		for i in 7:
+			var t := PI * float(i) / 6.0
+			rib.append(Vector2(cos(t) * 0.99, 1.70 + sin(t) * 0.36))
+		b.add_shell(rib, z - 0.035, z + 0.035, Vector3.ZERO, true, FRAME)
+	_panel(b, Vector3(1.86, 0.38, 0.05), Vector3(0, 1.89, 1.84), RICK_YELLOW, 0.0, MeshTools.FINISH_GLOSS)  # rear curtain
+
+
+## Fender lip (issue #237): a curved double-sided shell arc hugging the
+## wheel at `pos` at radius `r`, swept across `width` along X. `cover` is
+## the arc span in radians centred on top of the wheel.
+static func _arch_lip(b: MeshTools, pos: Vector3, r: float, width: float,
+		color: Color, cover := 2.4) -> void:
+	var pts := PackedVector2Array()
+	for i in 9:
+		var t := PI / 2.0 + cover * (0.5 - float(i) / 8.0)
+		pts.append(Vector2(cos(t) * r + pos.z, sin(t) * r + pos.y))
+	b.add_shell(pts, pos.x - width * 0.5, pos.x + width * 0.5,
+			Vector3.ZERO, false, color)
+
+
+## Sculpted leg shield (issue #237): a curved double-sided shell sweeping
+## from the floorboard up to the apron crest — replaces the flat tilted
+## panel. Profile runs in the ZY plane, swept across the width.
+static func _leg_shield(b: MeshTools, paint: Color) -> void:
+	var pts := PackedVector2Array([
+		Vector2(-0.80, 0.38),
+		Vector2(-0.76, 0.56),
+		Vector2(-0.68, 0.72),
+		Vector2(-0.56, 0.84),
+		Vector2(-0.42, 0.90),
+	])
+	b.add_shell(pts, -0.30, 0.30, Vector3.ZERO, false, paint, MeshTools.FINISH_GLOSS)
+
+
+static func _capsule_mesh(radius: float, height: float) -> CapsuleMesh:
+	var cm := CapsuleMesh.new()
+	cm.radius = radius
+	cm.height = height
+	cm.radial_segments = 10
+	cm.rings = 4
 	return cm
 
 
