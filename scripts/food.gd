@@ -272,6 +272,11 @@ func _build_cart(pos: Vector3, face_toward: Vector3) -> Array[Dictionary]:
 	vendor.position = Vector3(0, 0, 1.35)
 	root.add_child(vendor)
 	chars.play(chars.anim_names(vendor), chars.get_player(vendor), "idle", 0.9)
+	# Hawking calls (issue #207): rhythmic nod accents while they wait
+	# on the next chai — matches the bazaar stall hawkers.
+	var rig: Node = chars.lively(vendor)
+	if rig != null:
+		rig.talking = true
 
 	var steam: Array[Dictionary] = []
 	for i in range(3):

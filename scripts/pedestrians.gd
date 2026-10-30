@@ -6,6 +6,11 @@ extends Node
 ## cost and nothing can fall through the world.
 ## Every walker is an instanced rigged CC0 character (see characters.gd)
 ## playing its own walk/run clips — the old MultiMesh box bodies are gone.
+## Street behaviors (issue #207) layer on top of the stroll: phone
+## walkers drift with their heads down (LivelyRig phone pose), plain
+## walkers occasionally pause to window-shop a facade or linger at a
+## paan counter chewing, and converted zone walkers stand as hawkers
+## behind the bazaar stall rows calling their wares (talking accents).
 
 const Chars := preload("res://scripts/characters.gd")
 const ShadowBlob := preload("res://scripts/shadowblob.gd")
@@ -31,6 +36,18 @@ const ZONE_SPAWN_MIN := 26.0
 const ZONE_BIAS := 42.0
 const PED_HEIGHT := 1.68
 const WALK_CLIP_SPEED := 3.8
+# Street behaviors (issue #207).
+const PHONE_SHARE := 0.18      ## walkers whose heads stay in a phone
+const PHONE_MIN := 1.25        ## phone walkers amble slower
+const PHONE_MAX := 1.9
+const PAUSE_MIN := 3.5         ## window-shop / paan pause length (s)
+const PAUSE_MAX := 7.0
+const PAUSE_RETRY_MIN := 3.0   ## gap before another pause roll
+const PAUSE_RETRY_MAX := 6.0
+const PAUSE_GAP_MIN := 9.0     ## cooldown after a full pause
+const PAUSE_GAP_MAX := 22.0
+const PAAN_LINGER_R := 10.0    ## near a paan counter, paan pauses win
+const HAWKER_STAND := 1.85     ## stand-off in front of a stall counter
 const ROAD_Y := 0.08  ## asphalt surface height (roads.gd ROAD_Y)
 const WALK_H := 0.14  ## sidewalk top height (roads.gd CURB_H)
 const WALK_W := 2.2   ## sidewalk band width (roads.gd WALK_TILE)
@@ -53,6 +70,8 @@ var _rush := 0.0
 var _base_target := 0
 var _zone_target := 0
 var _last_model := -1
+var _paan: Array[Vector3] = []
+var _hawker_next := 0
 
 
 func setup(world_size: float, pitch: float, road_width: float, road_count: int) -> void:
@@ -120,6 +139,54 @@ func walker_list() -> Array[Dictionary]:
 	return _peds
 
 
+func register_paan_counters(spots: Array[Vector3]) -> void:
+	## Paan counter anchors (issue #188 carts, main.gd): walkers passing
+	## within PAAN_LINGER_R of one roll paan-eater pauses — stand, face
+	## the counter and chew (talking accents) — before moving on.
+	_paan = spots
+
+
+func station_hawkers(spots: Array) -> void:
+	## Convert zone walkers into stationary hawkers behind the bazaar
+	## stall rows (issue #207): one per stall spot, standing between the
+	## counter and the market lane, facing the street, idle clip plus
+	## hawking call accents (LivelyRig talking). They keep their zone
+	## rank, so the bazaar night thinning still applies to them.
+	for spot in spots:
+		if _hawker_next >= _peds.size():
+			return
+		var v: Dictionary = _peds[_hawker_next]
+		_hawker_next += 1
+		if not bool(v.get("zone", false)):
+			continue
+		v["hawker"] = {"pos": spot["pos"], "face": spot["face"]}
+		v["phone"] = false
+		v["pause"] = 0.0
+		v["pkind"] = ""
+		var rig: Node = _chars.lively(v["node"])
+		if rig != null:
+			rig.phone_override = false
+			rig.talking = true
+
+
+func street_debug() -> Dictionary:
+	## Read-back for the headless gate + PR evidence: how many visible
+	## walkers are in each street-behavior state right now (issue #207).
+	var out := {"phone": 0, "hawker": 0, "window": 0, "paan": 0, "strolling": 0}
+	for v in _peds:
+		if not v.visible:
+			continue
+		if not v["hawker"].is_empty():
+			out["hawker"] += 1
+		elif v["pause"] > 0.0:
+			out[v["pkind"]] += 1
+		elif v["phone"]:
+			out["phone"] += 1
+		else:
+			out["strolling"] += 1
+	return out
+
+
 func _physics_process(delta: float) -> void:
 	if _player == null:
 		return
@@ -161,20 +228,33 @@ func _physics_process(delta: float) -> void:
 			_flee_tick(v, delta)
 		else:
 			_walk_tick(v, delta)
-			var recycle := RECYCLE_DIST
-			if is_zone:
-				recycle = ZONE_RECYCLE
-			if _flat_dist(v) > recycle:
+			if v.hawker.is_empty():
+				var recycle := RECYCLE_DIST
 				if is_zone:
-					_place_zone(v)
-				else:
-					_place(v)
+					recycle = ZONE_RECYCLE
+				if _flat_dist(v) > recycle:
+					if is_zone:
+						_place_zone(v)
+					else:
+						_place(v)
 		_animate(v)
 
 
 # ---------------------------------------------------------------- walking
 
 func _walk_tick(v: Dictionary, delta: float) -> void:
+	if not v.hawker.is_empty():
+		return
+	if v.pause > 0.0:
+		v.pause -= delta
+		if v.pause <= 0.0:
+			_end_pause(v)
+		return
+	if not v.phone:
+		v.pcd -= delta
+		if v.pcd <= 0.0:
+			_begin_pause(v)
+			return
 	v.t += v.dir * v.speed * delta
 	if absf(v.t) > _world / 2.0 + 20.0:
 		v.dir = -v.dir
@@ -208,12 +288,65 @@ func _apply(v: Dictionary) -> void:
 	else:
 		v.pos = Vector3(v.t, 0.0, v.road)
 
+# ------------------------------------------------- street behaviors
+
+func _begin_pause(v: Dictionary) -> void:
+	## Roll a pause (issue #207): near a paan counter the paan-eater
+	## lingers facing the cart with chewing accents; anywhere else a
+	## window-shopper stops and studies the block facade across the
+	## walk band. Either way they stand on the idle clip for a few
+	## seconds, then resume the stroll with a fresh cooldown.
+	var counter: Variant = _paan_counter_near(v.pos)
+	if counter != null and _rng.randf() < 0.6:
+		v.pkind = "paan"
+		var rig: Node = _chars.lively(v.node)
+		if rig != null:
+			rig.talking = true
+		_face(v, Vector3(counter.x - v.pos.x, 0.0, counter.z - v.pos.z))
+	else:
+		v.pkind = "window"
+		var side: float = signf(v.road - _nearest_line(v.road))
+		_face(v, Vector3(side, 0.0, 0.0) if v.along_z else Vector3(0.0, 0.0, side))
+	v.pause = _rng.randf_range(PAUSE_MIN, PAUSE_MAX)
+
+
+func _end_pause(v: Dictionary) -> void:
+	_clear_pause(v)
+	v.pcd = _rng.randf_range(PAUSE_GAP_MIN, PAUSE_GAP_MAX)
+
+
+func _clear_pause(v: Dictionary) -> void:
+	## Drop any active pause state (also used when a walker bolts, sleeps
+	## or respawns — a hidden walker must never keep talking accents on).
+	v.pause = 0.0
+	if v.pkind == "paan":
+		var rig: Node = _chars.lively(v.node)
+		if rig != null:
+			rig.talking = false
+	v.pkind = ""
+	v.pcd = _rng.randf_range(PAUSE_RETRY_MIN, PAUSE_RETRY_MAX)
+
+
+func _paan_counter_near(pos: Vector3) -> Variant:
+	var best: Variant = null
+	var best_d := PAAN_LINGER_R
+	for c in _paan:
+		var d := Vector2(c.x - pos.x, c.z - pos.z).length()
+		if d < best_d:
+			best = c
+			best_d = d
+	return best
+
 
 # ---------------------------------------------------------------- panic
 
 func _scatter(origin: Vector3) -> void:
 	## Horn blast: NPCs within SCATTER_RADIUS bolt away from the sound.
+	## Hawkers hold their stalls — a vendor does not abandon the wares.
 	for v in _peds:
+		if not v.hawker.is_empty():
+			continue
+		_clear_pause(v)
 		var p: Vector3 = v.pos
 		var away := Vector3(p.x - origin.x, 0.0, p.z - origin.z)
 		if away.length() > SCATTER_RADIUS:
@@ -231,6 +364,9 @@ func vehicle_strike(pos: Vector3, radius: float) -> int:
 	## count feeds the wanted system (main.gd).
 	var n := 0
 	for v in _peds:
+		if not v.hawker.is_empty():
+			continue
+		_clear_pause(v)
 		var p: Vector3 = v.pos
 		var away := Vector2(p.x - pos.x, p.z - pos.z)
 		if away.length() > radius:
@@ -274,7 +410,7 @@ func _snap_to_sidewalk(v: Dictionary) -> void:
 	v.road = near["line"]
 	v.t = pos.z if v.along_z else pos.x
 	v.dir = 1 if _rng.randf() < 0.5 else -1
-	v.speed = _rng.randf_range(WALK_MIN, WALK_MAX)
+	v.speed = _roll_speed(v)
 	v.panic = 0.0
 	v.rejoin = 0.0
 	v.cd = 1.0
@@ -290,10 +426,11 @@ func _place(v: Dictionary) -> void:
 	var i := _rng.randi_range(0, _roads - 1)
 	v.road = _line_at(i) + (1.0 if _rng.randf() < 0.5 else -1.0) * _offset()
 	v.dir = 1 if _rng.randf() < 0.5 else -1
-	v.speed = _rng.randf_range(WALK_MIN, WALK_MAX)
+	v.speed = _roll_speed(v)
 	v.panic = 0.0
 	v.rejoin = 0.0
 	v.cd = _rng.randf_range(0.5, 2.5)
+	_clear_pause(v)
 	var p: Vector3 = _player.global_position
 	var base: float = p.z if v.along_z else p.x
 	for _attempt in range(6):
@@ -301,6 +438,28 @@ func _place(v: Dictionary) -> void:
 		_apply(v)
 		if _flat_dist(v) >= SPAWN_MIN_DIST:
 			break
+	v.visible = true
+	if v.node != null:
+		v.node.visible = true
+
+
+func _roll_speed(v: Dictionary) -> float:
+	## Phone walkers amble (heads down, no urgency); everyone else strolls.
+	return _rng.randf_range(PHONE_MIN, PHONE_MAX) if v.phone \
+			else _rng.randf_range(WALK_MIN, WALK_MAX)
+
+
+func _place_hawker(v: Dictionary) -> void:
+	## Pin a hawker behind their stall counter, facing the market lane
+	## (issue #207). Grounded like every other walker; never recycled —
+	## they hold the spot until the bazaar thins for the night.
+	var spot: Dictionary = v.hawker
+	v.pos = Vector3(spot["pos"].x + spot["face"] * HAWKER_STAND, 0.0,
+			spot["pos"].z + _rng.randf_range(-1.1, 1.1))
+	_face(v, Vector3(spot["face"], 0.0, 0.0))
+	v.pause = 0.0
+	v.panic = 0.0
+	v.rejoin = 0.0
 	v.visible = true
 	if v.node != null:
 		v.node.visible = true
@@ -322,6 +481,9 @@ func _zone_awake() -> bool:
 func _place_zone(v: Dictionary) -> void:
 	## (Re)spawn a crowd shopper on a sidewalk line near one of the crowd
 	## zones, biased toward whichever side the player is watching from.
+	if not v.hawker.is_empty():
+		_place_hawker(v)
+		return
 	var zone: Dictionary = _zones[_rng.randi_range(0, _zones.size() - 1)]
 	var zc: Vector3 = zone["c"]
 	var zr: float = zone["r"]
@@ -330,7 +492,7 @@ func _place_zone(v: Dictionary) -> void:
 	v.road = _nearest_line(zc.x if v.along_z else zc.z) \
 			+ (1.0 if _rng.randf() < 0.5 else -1.0) * _offset()
 	v.dir = 1 if _rng.randf() < 0.5 else -1
-	v.speed = _rng.randf_range(WALK_MIN, WALK_MAX)
+	v.speed = _roll_speed(v)
 	v.panic = 0.0
 	v.rejoin = 0.0
 	v.cd = _rng.randf_range(0.5, 2.5)
@@ -409,12 +571,17 @@ func _animate(v: Dictionary) -> void:
 	node.global_transform = Transform3D(Basis(Vector3.UP, v.heading), grounded)
 	if v.panic > 0.0 or v.rejoin > 0.0:
 		_chars.play(v.anims, v.ap, "run", 1.1)
+	elif not v.hawker.is_empty():
+		_chars.play(v.anims, v.ap, "idle", 0.85)
+	elif v.pause > 0.0:
+		_chars.play(v.anims, v.ap, "idle", 0.8)
 	else:
 		_chars.play(v.anims, v.ap, "walk", v.speed / WALK_CLIP_SPEED)
 
 
 func _hide_ped(v: Dictionary) -> void:
 	## Park the walker out of sight until its zone wakes again.
+	_clear_pause(v)
 	if v.node != null:
 		v.node.visible = false
 	if v.ap != null:
@@ -431,6 +598,7 @@ func _new_ped(zone: bool) -> Dictionary:
 		"speed": 3.0, "panic": 0.0, "panic_dir": Vector3.ZERO,
 		"rejoin": 0.0, "cd": 0.0, "phase": _rng.randf() * TAU,
 		"zone": zone, "node": null, "ap": null, "anims": {}, "id": {},
+		"phone": false, "pause": 0.0, "pkind": "", "pcd": 0.0, "hawker": {},
 	}
 
 
@@ -459,3 +627,10 @@ func _dress(v: Dictionary) -> void:
 	v.node = node
 	v.ap = _chars.get_player(node)
 	v.anims = _chars.anim_names(node)
+	# Street behavior roll (issue #207): this walker's head stays in a
+	# phone — slower amble and the head-down LivelyRig phone pose.
+	v["phone"] = _rng.randf() < PHONE_SHARE
+	if v["phone"]:
+		var rig: Node = _chars.lively(node)
+		if rig != null:
+			rig.phone_override = true
