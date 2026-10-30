@@ -10,6 +10,9 @@ extends Node
 ##      stays wet through the drying phase; thunder flashes fire.
 ##   3. Food: the chai cart carries the rain-demand premium only while
 ##      it pours (surge pricing on, then off).
+##   4. Street dressing (issue #225): puddle pools swell with the
+##      soaking and shrink as streets dry, awning drips run only under
+##      rain, and fast traffic throws wheel spray on soaked tarmac.
 ## Usage:
 ##   godot --headless --path . res://scenes/squall_check.tscn
 ## Exits 0 with verdict=PASS when the whole cycle holds, 2 otherwise.
@@ -31,8 +34,10 @@ func _ready() -> void:
 	var weather: Node = main.get("_weather")
 	var audio: Node = main.get("_audio")
 	var food: Node = main.get("_food")
-	if weather == null or audio == null or food == null:
-		print("FAILED: squall wiring missing (weather/audio/food)")
+	var monsoon: Node = main.get("_monsoon")
+	var traffic: Node = main.get("_traffic")
+	if weather == null or audio == null or food == null or monsoon == null:
+		print("FAILED: squall wiring missing (weather/audio/food/monsoon)")
 		get_tree().quit(2)
 		return
 	weather.thunder_flash.connect(func(_s: float) -> void: _flashes += 1)
@@ -44,14 +49,21 @@ func _ready() -> void:
 	var dry_int: float = weather.intensity
 	var dry_bed: float = audio.get("_rain_player").volume_db
 	var dry_price: int = food._price(food.CHAI)
-	print("dry     intensity %.2f  bed %.0f dB  chai Rs %d"
-			% [dry_int, dry_bed, dry_price])
+	var dry_ms: Dictionary = monsoon.stats()
+	print("dry     intensity %.2f  bed %.0f dB  chai Rs %d  | puddle %.2f  drips %d  spray %d"
+			% [dry_int, dry_bed, dry_price, dry_ms.puddle, dry_ms.drips, dry_ms.spray])
 	if dry_int > 0.05:
 		problems.append("not dry before the window: intensity %.2f" % dry_int)
 	if dry_bed > -55.0:
 		problems.append("rain bed audible while dry: %.0f dB" % dry_bed)
 	if dry_price != int(food.CHAI["price"]):
 		problems.append("rain premium on a dry day: Rs %d" % dry_price)
+	if dry_ms.puddle > 0.15:
+		problems.append("puddles pooled on dry streets: %.2f" % dry_ms.puddle)
+	if dry_ms.drips != 0:
+		problems.append("awning drips on a dry day: %d" % dry_ms.drips)
+	if dry_ms.spray != 0:
+		problems.append("wheel spray on dry streets: %d" % dry_ms.spray)
 
 	# RAIN — mid-window: downpour, soaked roads, squelch, thunder,
 	# premium chai.
@@ -63,9 +75,10 @@ func _ready() -> void:
 	var rain_bed: float = audio.get("_rain_player").volume_db
 	var rain_foot: float = audio.get("_wetness")
 	var rain_price: int = food._price(food.CHAI)
-	print("rain    intensity %.2f  cloud %.2f  wet %.2f  bed %.0f dB  footing %.2f  chai Rs %d  flashes %d"
+	var rain_ms: Dictionary = monsoon.stats()
+	print("rain    intensity %.2f  cloud %.2f  wet %.2f  bed %.0f dB  footing %.2f  chai Rs %d  flashes %d  | puddle %.2f  drips %d  spray %d"
 			% [rain_int, rain_cloud, rain_wet, rain_bed, rain_foot,
-					rain_price, _flashes])
+					rain_price, _flashes, rain_ms.puddle, rain_ms.drips, rain_ms.spray])
 	if rain_int < 0.3:
 		problems.append("no downpour mid-window: intensity %.2f" % rain_int)
 	if rain_cloud < 0.4:
@@ -80,6 +93,17 @@ func _ready() -> void:
 		problems.append("no rain-demand premium mid-squall: Rs %d" % rain_price)
 	if _flashes < 1:
 		problems.append("no thunder flash during the squall")
+	if rain_ms.puddle < 0.5:
+		problems.append("puddles never swelled in the rain: %.2f" % rain_ms.puddle)
+	if rain_ms.drips < 16:
+		problems.append("too few awning drips in the rain: %d" % rain_ms.drips)
+	if rain_wet >= 0.5:
+		var src_buf: Array = []
+		src_buf.resize(64)
+		var nsrc: int = traffic.spray_sources(src_buf,
+				main.camera.global_position, 130.0, 6.0)
+		if nsrc > 0 and rain_ms.spray <= int(dry_ms.spray):
+			problems.append("no wheel spray in the downpour (%d fast movers nearby)" % nsrc)
 
 	# DRYING — past the window: bed off, streets still damp, squelch
 	# lingers, premium gone.
@@ -90,8 +114,10 @@ func _ready() -> void:
 	var end_bed: float = audio.get("_rain_player").volume_db
 	var end_foot: float = audio.get("_wetness")
 	var end_price: int = food._price(food.CHAI)
-	print("drying  intensity %.2f  wet %.2f  bed %.0f dB  footing %.2f  chai Rs %d"
-			% [end_int, end_wet, end_bed, end_foot, end_price])
+	var end_ms: Dictionary = monsoon.stats()
+	print("drying  intensity %.2f  wet %.2f  bed %.0f dB  footing %.2f  chai Rs %d  | puddle %.2f  drips %d"
+			% [end_int, end_wet, end_bed, end_foot, end_price,
+					end_ms.puddle, end_ms.drips])
 	if end_int > 0.05:
 		problems.append("rain never stopped: intensity %.2f" % end_int)
 	if end_wet < 0.1:
@@ -102,6 +128,11 @@ func _ready() -> void:
 		problems.append("squelch died the instant rain stopped: %.2f" % end_foot)
 	if end_price != int(food.CHAI["price"]):
 		problems.append("rain premium stuck after the squall: Rs %d" % end_price)
+	if end_ms.drips != 0:
+		problems.append("drips stuck on after the rain: %d" % end_ms.drips)
+	if end_ms.puddle >= rain_ms.puddle:
+		problems.append("puddles never drained: %.2f -> %.2f"
+				% [rain_ms.puddle, end_ms.puddle])
 
 	if problems.is_empty():
 		print("verdict=PASS")

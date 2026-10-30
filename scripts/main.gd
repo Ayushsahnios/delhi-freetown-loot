@@ -37,6 +37,7 @@ const CharactersScript := preload("res://scripts/characters.gd")
 const FoodScript := preload("res://scripts/food.gd")
 const InteriorsScript := preload("res://scripts/interiors.gd")
 const WeatherScript := preload("res://scripts/weather.gd")
+const MonsoonScript := preload("res://scripts/monsoon.gd")
 const TouchControlsScript := preload("res://scripts/touch_controls.gd")
 const PauseScript := preload("res://scripts/pause.gd")
 const CreditsScript := preload("res://scripts/credits.gd")
@@ -167,6 +168,7 @@ var _switch_lock := 0.0
 var _switch_pending_release := false
 var _chandni_seen := false
 var _weather: WeatherScript
+var _monsoon: MonsoonScript
 var _road_mat: StandardMaterial3D
 var _applied_wet := -1.0
 var _touch: CanvasLayer
@@ -235,6 +237,12 @@ func _ready() -> void:
 	add_child(_traffic)
 	_traffic.setup(WORLD, PITCH, ROAD, GRID + 1)
 	_traffic.set_speed_bumps(_speed_bumps)
+	# Monsoon street dressing (issue #225): pooling puddles, awning
+	# drips and wheel spray — pooled instances driven by the weather.
+	_monsoon = MonsoonScript.new()
+	add_child(_monsoon)
+	_monsoon.setup(WORLD, PITCH, ROAD, GRID + 1)
+	_monsoon.register_traffic(_traffic)
 	_peds = PedestrianScript.new()
 	add_child(_peds)
 	_peds.setup(WORLD, PITCH, ROAD, GRID + 1)
@@ -1378,6 +1386,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 				break
 	add_child(player)
 	_traffic.register_player(player)
+	_monsoon.register_player(player)
 	_peds.register_player(player)
 	_police = PoliceScript.new()
 	add_child(_police)
@@ -1528,6 +1537,8 @@ func _process(delta: float) -> void:
 	_apply_wetness()
 	_audio.set_rain(_weather.intensity)
 	_audio.set_wetness(_weather.wetness)
+	_monsoon.tick(delta, _weather.intensity, _weather.wetness,
+			camera, current_auto)
 	if _food != null:
 		_food.set_rain_demand(_weather.intensity)
 	if not _playing:

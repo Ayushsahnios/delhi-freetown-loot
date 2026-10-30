@@ -218,6 +218,28 @@ func near_horns(pos: Vector3, radius: float, max_n: int = 4) -> Array[Dictionary
 			best.pop_back()
 	return out
 
+func spray_sources(buf: Array, pos: Vector3, radius: float,
+		min_speed: float) -> int:
+	## Wheel-spray source points (issue #225): rear positions of fleet
+	## vehicles moving fast enough to throw water, filled into the
+	## caller's pre-sized buffer so the rain dressing never allocates
+	## per frame. Returns how many entries were written.
+	var n := 0
+	var r2 := radius * radius
+	for v in _vehicles:
+		if v.speed < min_speed:
+			continue
+		var p: Vector3 = v.pos - _forward(v) * 1.3
+		var dx := p.x - pos.x
+		var dz := p.z - pos.z
+		if dx * dx + dz * dz > r2:
+			continue
+		buf[n] = p
+		n += 1
+		if n >= buf.size():
+			break
+	return n
+
 func on_road(pos: Vector3, tol := 1.0) -> bool:
 	## True when pos sits on a driving-lane strip (within tol) — the
 	## foley bed uses it to pick paved vs dirt footsteps (issue #187).
