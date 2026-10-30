@@ -68,6 +68,10 @@ func _setup_inputs() -> void:
 	_add_keys("radio", [KEY_N])
 	_add_keys("buy_chai", [KEY_Q])
 	_add_keys("buy_samosa", [KEY_R])
+	# Legend wardrobe (issue #223): the tailor racks beside the shop
+	# counters — T buys the browsed outfit, Y flips to the next look.
+	_add_keys("buy_outfit", [KEY_T])
+	_add_keys("cycle_outfit", [KEY_Y])
 	_add_keys("bribe", [KEY_B])
 	_add_keys("switch_character", [KEY_TAB])
 	_add_keys("debug_hurt", [KEY_X])
@@ -97,6 +101,8 @@ func _setup_inputs() -> void:
 	_add_joy_buttons("run", [JOY_BUTTON_RIGHT_SHOULDER])
 	_add_joy_buttons("buy_chai", [JOY_BUTTON_DPAD_UP])
 	_add_joy_buttons("buy_samosa", [JOY_BUTTON_DPAD_DOWN])
+	_add_joy_buttons("buy_outfit", [JOY_BUTTON_DPAD_RIGHT])
+	_add_joy_buttons("cycle_outfit", [JOY_BUTTON_DPAD_LEFT])
 	_add_joy_buttons("bribe", [JOY_BUTTON_LEFT_SHOULDER])
 	_add_joy_buttons("save", [JOY_BUTTON_START])
 	_add_joy_buttons("pause", [JOY_BUTTON_BACK])

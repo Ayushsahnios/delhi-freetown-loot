@@ -52,6 +52,13 @@ func setup(world: float, pitch: float, road_w: float, food: Node) -> void:
 				[food.CHAI, food.PARATHA])
 
 
+func rack_positions() -> Array[Vector3]:
+	## Legend wardrobe (issue #223): a tailor rack stands just inside each
+	## walk-in shop — beside the halwai's mithai counter and at the dhaba's
+	## charpai corner — so outfit browsing rides the same doorway visit.
+	return [_shop + Vector3(1.6, 0.0, 0.6), _dhaba + Vector3(-1.9, 0.0, 0.4)]
+
+
 func register(p: Node3D, audio: Node) -> void:
 	## Live-game nodes: the doorway check needs the walker, the chime
 	## needs the audio bus.

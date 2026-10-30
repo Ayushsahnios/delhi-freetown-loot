@@ -36,6 +36,7 @@ const RouteArrowScript := preload("res://scripts/route_arrow.gd")
 const CharactersScript := preload("res://scripts/characters.gd")
 const FoodScript := preload("res://scripts/food.gd")
 const InteriorsScript := preload("res://scripts/interiors.gd")
+const WardrobeScript := preload("res://scripts/wardrobe.gd")
 const WeatherScript := preload("res://scripts/weather.gd")
 const MonsoonScript := preload("res://scripts/monsoon.gd")
 const RainGearScript := preload("res://scripts/raingear.gd")
@@ -136,6 +137,7 @@ var _waypoint := Vector3.INF
 var _food: Node
 var _interiors: Node
 var _interiors3: Node
+var _wardrobe: WardrobeScript
 var _taxi: Node
 var _courier: Node
 var _photo: Node
@@ -234,6 +236,13 @@ func _ready() -> void:
 	_interiors = InteriorsScript.new()
 	add_child(_interiors)
 	_interiors.setup(WORLD, PITCH, ROAD, _food)
+	# Legend wardrobe (issue #223): tailor racks beside the walk-in shop
+	# counters sell alternate outfits per legend — recolor + accessory
+	# swap through the existing dress_legend path, wallet-priced and
+	# persisted in the save.
+	_wardrobe = WardrobeScript.new()
+	add_child(_wardrobe)
+	_wardrobe.setup(_interiors.rack_positions())
 	# Walk-in interiors slice 3 (issue #224): the chemist counter on the
 	# India Gate lawns and the second dhaba seating nook on the thana
 	# plaza — MEDS first-aid service, chai/paratha, door chime.
@@ -1547,10 +1556,13 @@ func _build_select_ui() -> void:
 	portraits.alignment = BoxContainer.ALIGNMENT_CENTER
 	portraits.add_theme_constant_override("separation", 16)
 	box.add_child(portraits)
+	# Worn outfits read straight off the save, so CONTINUE portraits
+	# show each legend as they were last dressed (issue #223).
+	var saved := SaveGame.read()
+	_wardrobe.restore(saved.get("wardrobe", {}))
 	for def in Game.CHARACTERS:
 		portraits.add_child(_portrait_card(def))
 
-	var saved := SaveGame.read()
 	if not saved.is_empty():
 		var cont_def := _character_by_id(String(saved.get("character", "")))
 		if not cont_def.is_empty():
@@ -1577,7 +1589,7 @@ func _build_select_ui() -> void:
 		box.add_child(btn)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift run · E vehicle/metro · F mission · H horn · N radio · Q/R street food · Tab switch character · M map · F9 save · X debug hurt · C debug drop · Esc pause\nGamepad · stick move · A interact · B horn · X radio · Y switch · RB sprint · LB map · D-pad food · Select pause · Start save · touch pad UI on touchscreens"
+	hint.text = "WASD move · Shift run · E vehicle/metro · F mission · H horn · N radio · Q/R street food · T/Y tailor outfits · Tab switch character · M map · F9 save · X debug hurt · C debug drop · Esc pause\nGamepad · stick move · A interact · B horn · X radio · Y switch · RB sprint · LB map · D-pad food · D-pad L/R tailor · Select pause · Start save · touch pad UI on touchscreens"
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
@@ -1622,7 +1634,7 @@ func _portrait_card(def: Dictionary) -> Control:
 	# Issue 161: portraits spawn at each legend's own height so the
 	# trio's distinct builds read on the cards immediately.
 	var model := _chars.spawn(path, float(def.get("height", 1.72)))
-	_chars.dress_legend(model, def)
+	_chars.dress_legend(model, _wardrobe.dress_def(def))
 	vp.add_child(model)
 	_chars.play(_chars.anim_names(model), _chars.get_player(model), "idle",
 			float(def.get("anim_rate", 1.0)))
@@ -1646,7 +1658,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_hud_name.text = String(def["name"])
 
 	player = PlayerScript.new()
-	player.setup(def)
+	player.setup(_wardrobe.dress_def(def))
 	player.position = Vector3(ROAD / 2.0 + 2.0, 1.0, 2.0 * PITCH - BLOCK)
 	# Spawn safety: slide along the road until solid ground sits right below,
 	# so a fresh game never opens inside or atop stray geometry.
@@ -1690,6 +1702,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_missions.mission_completed.connect(_on_mission_completed)
 	_missions.mission_failed.connect(_on_mission_failed)
 	_food.register(player, _health, _missions, _audio)
+	_wardrobe.register(player, _missions, _audio, Callable(self, "_autosave_silent"))
 	_interiors.register(player, _audio)
 	_interiors3.register(player, _audio)
 	_taxi.register(player, _missions)
@@ -2091,7 +2104,7 @@ func _switch_character() -> void:
 	var nxt: Dictionary = Game.CHARACTERS[(_char_index(cur_id) + 1) % Game.CHARACTERS.size()]
 	Game.selected_character = nxt
 	_hud_name.text = String(nxt["name"])
-	player.swap_character(nxt)
+	player.swap_character(_wardrobe.dress_def(nxt))
 	var st: Dictionary = _char_states.get(String(nxt["id"]), {})
 	if st.is_empty():
 		# First outing: debut beside the previous character's spot.
@@ -2750,10 +2763,16 @@ func _collect_save() -> Dictionary:
 		chars[String(id)] = {"hp": float(st["hp"]), "cash": int(st["cash"]),
 			"heading": float(st["heading"]), "pos": [p.x, p.y, p.z]}
 	data["chars"] = chars
+	data["wardrobe"] = _wardrobe.snapshot()
 	return data
 
 
 func _apply_save(save: Dictionary) -> void:
+	# Worn wardrobe first (issue #223) — the rebuild below re-dresses the
+	# live model if the save carries outfits.
+	_wardrobe.restore(save.get("wardrobe", {}))
+	if not save.get("wardrobe", {}).is_empty():
+		player.swap_character(_wardrobe.dress_def(Game.selected_character))
 	day_t = clampf(float(save.get("day_t", day_t)), 0.0, 1.0)
 	_prev_day_t = day_t
 	_health.restore(float(save.get("hp", 100.0)))
