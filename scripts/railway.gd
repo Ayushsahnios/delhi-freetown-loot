@@ -372,52 +372,80 @@ func _build_porters(b: MeshTools) -> void:
 
 
 func _porter(b: MeshTools, x: float, z: float, yaw: float, turban: Color, load: bool) -> void:
-	## ~1.75 m blocky figure: dark trousers, long white kurta, arms,
-	## head, turban with topknot, and optionally a white bundle balanced
-	## on top with a steadying strap.
+	## ~1.75 m figure (de-boxed, issue #238): capsule-tapered trouser
+	## legs, elliptic flared kurta lathe, ball head with neck stub,
+	## round turban wrap and knot; hanging arms on ball shoulders, and
+	## for loaders one arm reaching up-inward to steady the head bundle.
 	var base := Basis(Vector3.UP, yaw)
 	var stride := 0.1 if load else 0.0
-	var leg := BoxMesh.new()
-	leg.size = Vector3(0.16, 0.72, 0.2)
-	b.add_mesh(leg, Transform3D(base, base * Vector3(x - 0.12, 0.36, z + stride)), LEGS)
-	b.add_mesh(leg, Transform3D(base, base * Vector3(x + 0.12, 0.36, z - stride)), LEGS)
-	var kurta := BoxMesh.new()
-	kurta.size = Vector3(0.52, 0.86, 0.34)
-	b.add_mesh(kurta, Transform3D(base, Vector3(x, 1.12, z)), KURTA)
-	var arm := BoxMesh.new()
-	arm.size = Vector3(0.13, 0.62, 0.16)
-	b.add_mesh(arm, Transform3D(base, Vector3(x - 0.34, 1.08, z)), KURTA)
-	b.add_mesh(arm, Transform3D(base, Vector3(x + 0.34, 1.08, z)), KURTA)
-	var head := BoxMesh.new()
-	head.size = Vector3(0.24, 0.26, 0.24)
-	b.add_mesh(head, Transform3D(base, Vector3(x, 1.68, z)), SKIN)
+	var at := func(lx: float, ly: float, lz: float) -> Vector3:
+		return base * Vector3(lx, ly, lz) + Vector3(x, 0.0, z)
+	for side in [-1.0, 1.0]:
+		b.add_round_lathe(MeshTools.capsule_profile(0.105, 0.085, 0.76),
+				Transform3D(base, at.call(side * 0.12, 0.0, stride * -side)), LEGS)
+	b.add_round_lathe(PackedVector2Array([
+				Vector2(0.05, 0.0), Vector2(0.22, 0.08), Vector2(0.235, 0.32),
+				Vector2(0.225, 0.60), Vector2(0.20, 0.78), Vector2(0.18, 0.84),
+				Vector2(0.05, 0.86)]),
+				Transform3D(base, at.call(0.0, 0.69, 0.0)), KURTA,
+				MeshTools.FINISH_MATTE, 10, 0.62)
+	for side in [-1.0, 1.0]:
+		if load and side < 0.0:
+			b.add_round_lathe(MeshTools.capsule_profile(0.075, 0.05, 0.62),
+					Transform3D(base * Basis(Vector3(0, 0, 1), -0.5),
+							at.call(side * 0.34, 1.36, 0.06)), KURTA)
+		else:
+			b.add_round_lathe(MeshTools.capsule_profile(0.055, 0.075, 0.60),
+					Transform3D(base, at.call(side * 0.28, 0.88, 0.0)), KURTA)
+		b.add_round_lathe(MeshTools.ball_profile(0.08, 3),
+				Transform3D(base, at.call(side * 0.27, 1.46, 0.0)), KURTA)
+	b.add_round_lathe(MeshTools.capsule_profile(0.05, 0.055, 0.12),
+			Transform3D(base, at.call(0.0, 1.50, 0.0)), SKIN)
+	b.add_round_lathe(MeshTools.ball_profile(0.135, 3),
+			Transform3D(base, at.call(0.0, 1.545, 0.0)), SKIN,
+				MeshTools.FINISH_MATTE, 10, 0.95)
 	var wrap := CylinderMesh.new()
 	wrap.top_radius = 0.17
 	wrap.bottom_radius = 0.18
 	wrap.height = 0.16
-	b.add_mesh(wrap, Transform3D(base, Vector3(x, 1.86, z)), turban)
-	var knot := BoxMesh.new()
-	knot.size = Vector3(0.1, 0.08, 0.1)
-	b.add_mesh(knot, Transform3D(base, Vector3(x, 1.97, z)), turban)
+	b.add_mesh(wrap, Transform3D(base, at.call(0.0, 1.84, 0.0)), turban)
+	b.add_round_lathe(MeshTools.ball_profile(0.055, 3),
+			Transform3D(base, at.call(0.0, 1.94, 0.0)), turban)
 	if load:
-		var bundle := BoxMesh.new()
-		bundle.size = Vector3(0.56, 0.24, 0.42)
-		b.add_mesh(bundle, Transform3D(base, Vector3(x, 2.12, z)), BUNDLE)
-		var strap := BoxMesh.new()
-		strap.size = Vector3(0.58, 0.05, 0.44)
-		b.add_mesh(strap, Transform3D(base, Vector3(x, 2.06, z)), Color(0.55, 0.40, 0.25))
+		b.add_round_lathe(MeshTools.ball_profile(0.30, 3),
+				Transform3D(base * Basis().scaled(Vector3(1.0, 0.42, 0.74)),
+						at.call(0.0, 1.86, 0.0)), BUNDLE)
+		var strap := CylinderMesh.new()
+		strap.top_radius = 0.305
+		strap.bottom_radius = 0.305
+		strap.height = 0.05
+		b.add_mesh(strap, Transform3D(
+				base * Basis().scaled(Vector3(1.0, 1.0, 0.74)),
+				at.call(0.0, 1.99, 0.0)), Color(0.55, 0.40, 0.25))
 
 
 func _seated(b: MeshTools, x: float, z: float, shirt: Color) -> void:
-	## Bench-sized seated passenger: thighs forward, torso upright.
+	## Bench-sized seated passenger (de-boxed, issue #238): forward
+	## capsule thighs on hip balls, elliptic capsule torso, ball head
+	## on a neck stub. The two dark pads are bench parts, kept as-is.
 	b.add_box(Vector3(0.3, 0.09, 0.42), Vector3(x, 0.72, z + 0.3), Color(0.25, 0.28, 0.35))
 	b.add_box(Vector3(0.3, 0.34, 0.1), Vector3(x, 0.55, z + 0.5), Color(0.25, 0.28, 0.35))
-	var torso := BoxMesh.new()
-	torso.size = Vector3(0.46, 0.6, 0.3)
-	b.add_mesh(torso, Transform3D(Basis(), Vector3(x, 1.02, z)), shirt)
-	var head := BoxMesh.new()
-	head.size = Vector3(0.22, 0.24, 0.22)
-	b.add_mesh(head, Transform3D(Basis(), Vector3(x, 1.45, z)), SKIN)
+	var hip := Basis(Vector3(1, 0, 0), PI * 0.5)
+	for side in [-1.0, 1.0]:
+		b.add_round_lathe(MeshTools.capsule_profile(0.095, 0.085, 0.44),
+				Transform3D(hip, Vector3(x + side * 0.12, 0.80, z + 0.06)), shirt)
+		b.add_round_lathe(MeshTools.ball_profile(0.085, 3),
+				Transform3D(Basis(), Vector3(x + side * 0.12, 0.80, z + 0.06)), shirt)
+	b.add_round_lathe(PackedVector2Array([
+				Vector2(0.05, 0.0), Vector2(0.19, 0.07), Vector2(0.205, 0.26),
+				Vector2(0.19, 0.48), Vector2(0.165, 0.56), Vector2(0.05, 0.60)]),
+				Transform3D(Basis(), Vector3(x, 0.72, z)), shirt,
+				MeshTools.FINISH_MATTE, 10, 0.66)
+	b.add_round_lathe(MeshTools.capsule_profile(0.045, 0.05, 0.10),
+			Transform3D(Basis(), Vector3(x, 1.27, z)), SKIN)
+	b.add_round_lathe(MeshTools.ball_profile(0.125, 3),
+			Transform3D(Basis(), Vector3(x, 1.32, z)), SKIN,
+				MeshTools.FINISH_MATTE, 10, 0.95)
 
 
 func _build_catenary(b: MeshTools) -> void:

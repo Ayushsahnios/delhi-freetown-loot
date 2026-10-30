@@ -450,3 +450,67 @@ func build_node() -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = build_mesh()
 	return mi
+
+
+## ------------------------------------------------------------------ bodies
+
+## Capsule-capped tapered profile for de-boxed limbs (issue #238):
+## hemisphere caps blend seamlessly into the taper, so arms and legs
+## read round from every angle instead of tube-on-box. Spans y 0..length
+## with the caps carved inward — placement math stays identical to the
+## cylinders and boxes being replaced.
+static func capsule_profile(rb: float, rt: float, length: float,
+		cap := 3) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	var cb := minf(rb * 0.85, length * 0.3)
+	var ct := minf(rt * 0.85, length * 0.3)
+	for i in cap + 1:
+		var a := PI * 0.5 * float(i) / float(cap)
+		pts.append(Vector2(maxf(rb * sin(a), 0.004), cb * (1.0 - cos(a))))
+	for i in cap + 1:
+		var a := PI * 0.5 * float(i) / float(cap)
+		pts.append(Vector2(maxf(rt * sin(a), 0.004),
+				length - ct * (1.0 - cos(a))))
+	return pts
+
+
+## Full-ball profile (issue #238): poles at y 0 and 2r — heads, ball
+## shoulder/hip joints, turban knots.
+static func ball_profile(r: float, steps := 3) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in steps * 2 + 1:
+		var a := PI * float(i) / float(steps * 2.0)
+		pts.append(Vector2(maxf(r * sin(a), 0.004), r - r * cos(a)))
+	return pts
+
+
+## Transform-placed elliptic revolve (issue #238): like add_lathe but
+## positioned by a full Transform3D (yawed or tilted limbs, heads,
+## torsos) with `squash` shrinking the local Z radius so bodies read
+## wider than deep instead of tubular. Normals follow the ellipse, then
+## the transform basis.
+func add_round_lathe(profile: PackedVector2Array, xf: Transform3D,
+		color: Color, finish := FINISH_MATTE, segments := 10,
+		squash := 1.0) -> void:
+	if profile.size() < 2 or segments < 3:
+		return
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var idx := PackedInt32Array()
+	for s in segments + 1:
+		var ang := TAU * float(s) / float(segments)
+		var ca := cos(ang)
+		var sn := sin(ang)
+		for pt in profile:
+			var p := Vector3(ca * pt.x, pt.y, sn * pt.x * squash)
+			verts.append(xf.basis * p + xf.origin)
+			var nrm := Vector3(ca, 0.0, sn / maxf(squash, 0.05)).normalized()
+			norms.append((xf.basis * nrm).normalized())
+	var cnt := profile.size()
+	for s in segments:
+		for i in cnt - 1:
+			var a0 := s * cnt + i
+			var b0 := (s + 1) * cnt + i
+			idx.append_array(PackedInt32Array([
+					a0, b0 + 1, b0, a0, a0 + 1, b0 + 1]))
+	_add_arrays(verts, norms, idx, color, finish)
