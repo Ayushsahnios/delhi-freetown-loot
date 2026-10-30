@@ -202,6 +202,8 @@ var _shoptrim_xfs: Array[Transform3D] = []
 var _arch_xfs: Array[Transform3D] = []
 var _win_lit_mat: StandardMaterial3D = null
 var _street_lights: Array[OmniLight3D] = []
+var _flood_lights: Array[OmniLight3D] = []
+var _glow_mats: Array[StandardMaterial3D] = []
 var _lamp_pole_xfs: Array[Transform3D] = []
 var _lamp_head_xfs: Array[Transform3D] = []
 
@@ -514,6 +516,10 @@ func _build_city() -> void:
 				pass  # railway station district — built by RailwayScript below
 			elif (ix == 8 and iz == 2) or (ix == 2 and iz == 3):
 				_build_park(c.x, c.z)
+			elif ix == 9 and iz == 1:
+				_build_victory_gate(c.x, c.z)
+			elif ix == 1 and iz == 9:
+				_build_lotus_dome(c.x, c.z)
 			else:
 				var n := _rng.randi_range(2, 4)
 				for b in range(n):
@@ -899,6 +905,194 @@ func _build_india_gate(x: float, z: float) -> void:
 	_dist_box(Vector3(16.0, 4.0, 5.0), Vector3(x, 16.5, z), stone)
 	_tree(Vector3(x - 12, 0, z - 12))
 	_tree(Vector3(x + 12, 0, z + 12))
+
+
+func _monument_root(name: String) -> Node3D:
+	## Landmark-scale geometry rides an UNTIERED node: districts cull at
+	## 320 m (LodScript.BIG) but skyline monuments must read from across
+	## the 506 m map (issue #204), so they never take a visibility range.
+	var root := Node3D.new()
+	root.name = name
+	add_child(root)
+	return root
+
+
+func _floodlight(pos: Vector3, range_m: float) -> void:
+	## Warm ground uplight for the monuments — energy rides the same dusk
+	## curve as the street lamps (see _update_day), so night falls on the
+	## whole city at once.
+	var light := OmniLight3D.new()
+	light.position = pos
+	light.light_color = Color(1.0, 0.82, 0.55)
+	light.omni_range = range_m
+	light.light_energy = 0.0
+	add_child(light)
+	_flood_lights.append(light)
+
+
+func _glow_material(albedo: Color, emission: Color) -> StandardMaterial3D:
+	## Floodlit accent (crest lantern / lotus bud): emissive material whose
+	## energy follows the dusk curve via _glow_mats.
+	var m := StandardMaterial3D.new()
+	m.albedo_color = albedo
+	m.emission_enabled = true
+	m.emission = emission
+	m.emission_energy_multiplier = 0.0
+	_glow_mats.append(m)
+	return m
+
+
+func _build_victory_gate(x: float, z: float) -> void:
+	## Triumphal-arch roundabout (issue #204): a chamfered-plism victory
+	## gate on a planted traffic island — lathes, beveled prisms and a
+	## voussoil archivolt, no bare boxes (de-box directive). The arch
+	## opening stays collision-free so autos can drive through it.
+	_grass(Vector3(x, 0, z))
+	var b := MeshTools.new()
+	var pave := Color(0.58, 0.56, 0.50)
+	var stone := Color(0.82, 0.76, 0.62)
+	var trim := Color(0.66, 0.58, 0.44)
+	# Roundabout island: paved ring, planted crown, stepped plinth.
+	b.add_lathe(PackedVector2Array([Vector2(13.0, 0.05), Vector2(13.0, 0.28), Vector2(0.0, 0.28)]),
+			Vector3(x, 0, z), pave, MeshTools.FINISH_MATTE, 26)
+	b.add_lathe(PackedVector2Array([Vector2(9.5, 0.28), Vector2(9.5, 0.55), Vector2(0.0, 0.55)]),
+			Vector3(x, 0, z), Color(0.20, 0.48, 0.22), MeshTools.FINISH_MATTE, 22)
+	b.add_lathe(PackedVector2Array([Vector2(6.8, 0.55), Vector2(6.2, 1.05), Vector2(5.4, 1.05)]),
+			Vector3(x, 0, z), stone, MeshTools.FINISH_MATTE, 14)
+	# Piers: tapered octagonal lathes (chamfered columns, not boxes).
+	for side in [-1.0, 1.0]:
+		b.add_lathe(PackedVector2Array([Vector2(2.3, 0.0), Vector2(2.05, 9.0), Vector2(2.25, 12.6),
+					Vector2(2.75, 14.2)]), Vector3(x + side * 6.2, 1.05, z), stone,
+				MeshTools.FINISH_MATTE, 8)
+		b.add_lathe(PackedVector2Array([Vector2(2.9, 0.0), Vector2(2.9, 0.35), Vector2(2.3, 0.55)]),
+				Vector3(x + side * 6.2, 1.05, z), trim, MeshTools.FINISH_MATTE, 8)
+	# Voussoil archivolt: 9 beveled segments chained along the semicircle
+	# (radius 5.0, springing from the pier tops), crown touching the
+	# entablature. Faceted stone — the PS2-era arch read.
+	var segs := 9
+	for k in range(segs):
+		var ang := PI * float(k + 0.5) / float(segs)
+		var cx := x + cos(ang) * 5.0 * -1.0
+		var cy := 9.7 + sin(ang) * 5.0
+		b.add_bev_box(Vector3(2.35, 1.25, 4.6),
+				Vector3(cx, cy, z), 0.22, stone, ang)
+	# Entablature + stepped attic + inscription band.
+	b.add_bev_box(Vector3(16.6, 2.6, 5.2), Vector3(x, 15.6, z), 0.35, stone)
+	b.add_bev_box(Vector3(16.6, 0.55, 5.6), Vector3(x, 17.15, z), 0.2, trim)
+	b.add_bev_box(Vector3(11.5, 4.2, 4.4), Vector3(x, 19.5, z), 0.35, stone)
+	b.add_bev_box(Vector3(8.4, 1.5, 0.35), Vector3(x, 19.5, z + 2.2), 0.15, trim)
+	# Crest lantern: small ribbed lathe finial on the attic.
+	b.add_lathe(PackedVector2Array([Vector2(1.7, 0.0), Vector2(1.35, 1.1), Vector2(1.85, 1.8),
+				Vector2(1.25, 2.5), Vector2(0.45, 3.0)]), Vector3(x, 21.6, z), stone,
+			MeshTools.FINISH_MATTE, 8)
+	var root := _monument_root("VictoryGateMonument")
+	root.add_child(b.build_node())
+	# Emissive crown lantern — the night beacon you navigate by.
+	var orb := MeshInstance3D.new()
+	var orbm := SphereMesh.new()
+	orbm.radius = 0.62
+	orbm.height = 1.24
+	orbm.material = _glow_material(Color(1.0, 0.9, 0.7),
+			Color(1.0, 0.72, 0.38))
+	orb.mesh = orbm
+	orb.position = Vector3(x, 25.05, z)
+	root.add_child(orb)
+	# Collision: piers + entablature/attic mass. Arch opening stays clear.
+	var body := StaticBody3D.new()
+	for side in [-1.0, 1.0]:
+		var pier := CollisionShape3D.new()
+		var pbox := BoxShape3D.new()
+		pbox.size = Vector3(4.6, 14.2, 4.6)
+		pier.shape = pbox
+		pier.position = Vector3(x + side * 6.2, 8.15, z)
+		body.add_child(pier)
+	var cap := CollisionShape3D.new()
+	var cbox := BoxShape3D.new()
+	cbox.size = Vector3(16.6, 8.1, 5.2)
+	cap.shape = cbox
+	cap.position = Vector3(x, 17.7, z)
+	body.add_child(cap)
+	root.add_child(body)
+	# Floodlights at the four pier corners.
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			_floodlight(Vector3(x + sx * 8.6, 0.5, z + sz * 3.9), 34.0)
+	_tree(Vector3(x - 15, 0, z - 15))
+	_tree(Vector3(x + 15, 0, z + 15))
+	print("[landmarks] victory-gate tris=%d" % b.tris)
+
+
+func _build_lotus_dome(x: float, z: float) -> void:
+	## Lotus-inspired ribbed dome on a park plaza (issue #204): 14
+	## faceted petal chains rising from an octagonal drum to a glowing
+	## bud finial. Beveled slabs on a meridian curve — ribbed by
+	## construction, PS2-facet read, no bare boxes anywhere.
+	_grass(Vector3(x, 0, z))
+	var b := MeshTools.new()
+	var pave := Color(0.60, 0.57, 0.51)
+	var stone := Color(0.90, 0.84, 0.70)
+	var trim := Color(0.70, 0.62, 0.48)
+	# Plaza disk + ring band.
+	b.add_lathe(PackedVector2Array([Vector2(14.0, 0.05), Vector2(14.0, 0.26), Vector2(0.0, 0.26)]),
+			Vector3(x, 0, z), pave, MeshTools.FINISH_MATTE, 28)
+	b.add_lathe(PackedVector2Array([Vector2(14.0, 0.26), Vector2(12.0, 0.26), Vector2(12.0, 0.5),
+				Vector2(0.0, 0.5)]), Vector3(x, 0, z), trim, MeshTools.FINISH_MATTE, 28)
+	# Stepped pedestal + ribbed octagonal drum.
+	b.add_lathe(PackedVector2Array([Vector2(8.2, 0.5), Vector2(7.6, 1.1), Vector2(0.0, 1.1)]),
+			Vector3(x, 0, z), stone, MeshTools.FINISH_MATTE, 16)
+	b.add_lathe(PackedVector2Array([Vector2(6.4, 1.1), Vector2(6.1, 2.3), Vector2(6.5, 5.8),
+				Vector2(5.6, 7.0)]), Vector3(x, 0, z), stone, MeshTools.FINISH_MATTE, 8)
+	# Petal chains: 14 petals x 7 tapering beveled slabs along a meridian
+	# that lifts from the drum rim (r 5.9, y 7.2) to the crown (y 18.4).
+	var petals := 14
+	var steps := 7
+	for p in range(petals):
+		var yaw := TAU * float(p) / float(petals)
+		for k in range(steps):
+			var t := (float(k) + 0.5) / float(steps)
+			var elev := deg_to_rad(74.0 * t)
+			var rad := 5.9 * cos(elev) * (1.0 - 0.06 * t)
+			var py := 7.2 + 11.2 * sin(elev)
+			var wdt := 2.7 * (1.0 - 0.72 * t)
+			var pos := Vector3(x + cos(yaw) * rad, py, z + sin(yaw) * rad)
+			b.add_bev_box(Vector3(1.35, wdt, 1.35), pos,
+					clampf(0.16 * wdt, 0.06, 0.3),
+				stone if (p + k) % 2 == 0 else trim, yaw)
+	# Petal rim tips curling out at the drum line.
+	for p in range(petals):
+		var yaw := TAU * float(p) / float(petals)
+		b.add_lathe(PackedVector2Array([Vector2(0.55, 0.0), Vector2(0.4, 0.7), Vector2(0.0, 0.9)]),
+				Vector3(x + cos(yaw) * 6.35, 7.1, z + sin(yaw) * 6.35),
+				trim, MeshTools.FINISH_MATTE, 6)
+	var root := _monument_root("LotusCourtMonument")
+	root.add_child(b.build_node())
+	# Glowing bud finial at the crown.
+	var bud := MeshInstance3D.new()
+	var budm := SphereMesh.new()
+	budm.radius = 0.78
+	budm.height = 2.3
+	budm.material = _glow_material(Color(1.0, 0.92, 0.78),
+			Color(1.0, 0.66, 0.3))
+	bud.mesh = budm
+	bud.position = Vector3(x, 19.3, z)
+	root.add_child(bud)
+	# Collision: the drum blocks; petals overhang above reach height.
+	var body := StaticBody3D.new()
+	var col := CollisionShape3D.new()
+	var cyl := CylinderShape3D.new()
+	cyl.radius = 6.8
+	cyl.height = 7.0
+	col.shape = cyl
+	col.position = Vector3(x, 4.5, z)
+	body.add_child(col)
+	root.add_child(body)
+	# Floodlights ringing the drum.
+	for p in range(4):
+		var a := TAU * float(p) / 4.0 + PI * 0.25
+		_floodlight(Vector3(x + cos(a) * 8.0, 0.5, z + sin(a) * 8.0), 30.0)
+	_tree(Vector3(x - 16, 0, z + 12))
+	_tree(Vector3(x + 16, 0, z - 12))
+	print("[landmarks] lotus-court tris=%d" % b.tris)
 
 
 func _build_purani_dilli(x: float, z: float) -> void:
@@ -2013,6 +2207,13 @@ func _update_day(delta: float) -> void:
 	var lamp_glow := lerpf(2.1, 0.0, clampf(daylight * 1.4, 0.0, 1.0))
 	for l in _street_lights:
 		l.light_energy = lamp_glow
+	# Monument floodlights run hotter than the street lamps (issue #204):
+	# uplights and the crest/bud beacons light with the same dusk curve.
+	for l in _flood_lights:
+		l.light_energy = lamp_glow * 1.8
+	for m in _glow_mats:
+		m.emission_energy_multiplier = lerpf(2.6, 0.0,
+				clampf(daylight * 1.4, 0.0, 1.0))
 	# Life patterns (issue #185): shutters, street crowds and chai stalls
 	# all ride the same dusk curve so the city breathes as one motion.
 	if _daily_life != null:
@@ -2235,6 +2436,8 @@ func _build_landmarks() -> void:
 		{"name": "Hauz Khas", "center": _block_center(2, 8), "spawn": _block_center(2, 8) + Vector3(14.0, 1.0, 0.0)},
 		{"name": "Yamuna Ghats", "center": _block_center(9, 8), "spawn": _block_center(9, 8) + Vector3(-15.0, 1.0, 12.0)},
 		{"name": "Railway Station", "center": _block_center(5, 0), "spawn": _block_center(5, 0) + Vector3(-10.5, 1.0, 14.0)},
+		{"name": "Victory Gate", "center": _block_center(9, 1), "spawn": _block_center(9, 1) + Vector3(0.0, 1.0, 13.0), "icon": "arch"},
+		{"name": "Lotus Court", "center": _block_center(1, 9), "spawn": _block_center(1, 9) + Vector3(13.0, 1.0, 0.0), "icon": "lotus"},
 	]
 
 func _build_street_lights() -> void:

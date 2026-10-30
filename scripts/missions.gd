@@ -300,6 +300,40 @@ func _build_defs() -> void:
 			"repeatable": true,
 		},
 		{
+			"id": "skyline_ring",
+			"title": "Skyline ring: Gate to Lotus",
+			"lines": [
+				{
+					"speaker": "Photo-stringer Raju",
+					"text": "Two new postcard spots, beta — the Victory Gate roundabout and the Lotus Court dome. Two frames before the light goes, one loop across town. Rs 500.",
+					"color": Color(0.60, 0.85, 1.0),
+				},
+				{
+					"speaker": "Photo-stringer Raju",
+					"text": "Stand under the arch for frame one, then the dome steps for frame two. Walk it, sprint it, or grab an auto — the light waits for no one.",
+					"color": Color(0.60, 0.85, 1.0),
+					"choices": ["Take the job", "Not now"],
+				},
+			],
+			"giver": Vector3(-7.0, 0.0, -11.0),
+			"objectives": [
+				{
+					"kind": "reach",
+					"label": "Frame 1 — under the Victory Gate arch",
+					"pos": Vector3(167.0, 0.0, -201.0),
+					"radius": 7.0,
+				},
+				{
+					"kind": "reach",
+					"label": "Frame 2 — the Lotus Court dome steps",
+					"pos": Vector3(-201.0, 0.0, 167.0),
+					"radius": 7.0,
+				},
+			],
+			"reward": 500,
+			"repeatable": true,
+		},
+		{
 			"id": "cp_race",
 			"title": "CP ring race: rickshaw rally",
 			"lines": [
