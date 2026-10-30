@@ -155,6 +155,112 @@ func add_prism(profile: PackedVector2Array, center: Vector3, y0: float,
 	_add_arrays(verts, norms, idx, color, finish)
 
 
+## Beveled box (issue #236): a chamfered prism sized like a box, so
+## crates and counters stop reading as sharp-edged cubes. `bevel` is
+## the 45-degree cut depth, clamped to keep the profile valid.
+func add_bev_box(size: Vector3, center: Vector3, bevel: float,
+	color: Color, yaw := 0.0, finish := FINISH_MATTE) -> void:
+	var c := clampf(bevel, 0.02, minf(size.x, size.z) * 0.2)
+	var pts := chamfer_footprint(size.x * 0.5, size.z * 0.5, c)
+	if yaw != 0.0:
+		var ca := cos(yaw)
+		var sa := sin(yaw)
+		for i in pts.size():
+			pts[i] = Vector2(pts[i].x * ca - pts[i].y * sa,
+					pts[i].x * sa + pts[i].y * ca)
+	add_prism(pts,
+			Vector3(center.x, 0.0, center.z), center.y - size.y * 0.5,
+			center.y + size.y * 0.5, color, finish)
+
+
+## Lathe-revolved profile (issue #236): `profile` is Vector2(radius, y)
+## points revolved around the vertical axis through `center.x/z`.
+## Kettles, pots, planters and bins — the round-prop vocabulary the
+## de-box directive asks for. `segments` radial faces, flat normals.
+func add_lathe(profile: PackedVector2Array, center: Vector3,
+	color: Color, finish := FINISH_MATTE, segments := 10) -> void:
+	if profile.size() < 2 or segments < 3:
+		return
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var idx := PackedInt32Array()
+	for s in segments + 1:
+		var ang := TAU * float(s) / float(segments)
+		var dir := Vector3(cos(ang), 0.0, sin(ang))
+		for pt in profile:
+			verts.append(Vector3(center.x + dir.x * pt.x, center.y + pt.y,
+					center.z + dir.z * pt.x))
+			norms.append(dir)
+	var n := profile.size()
+	for s in segments:
+		for i in n - 1:
+			var a0 := s * n + i
+			var b0 := (s + 1) * n + i
+			idx.append_array(PackedInt32Array([
+					a0, b0 + 1, b0, a0, a0 + 1, b0 + 1]))
+	_add_arrays(verts, norms, idx, color, finish)
+
+
+## Curved canopy band (issue #236): a shallow arc shell — the
+## "cylinder shell segment" tarp vocabulary. Extruded `length` along
+## local X, arcing over `span` along local Z with the crown rising
+## `rise` above the edges. Double-skinned (outer + inner faces plus
+## end skirts) so cloth reads from above and below.
+func add_arc_shell(length: float, span: float, rise: float,
+		center: Vector3, color: Color, finish := FINISH_MATTE,
+		segs := 6) -> void:
+	if length <= 0.0 or span <= 0.0 or segs < 2:
+		return
+	var th := 0.04  ## shell thickness
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var idx := PackedInt32Array()
+	for i in segs:
+		var t0 := float(i) / float(segs)
+		var t1 := float(i + 1) / float(segs)
+		## Parabola crown: y = rise * (1 - (2t-1)^2).
+		var z0 := -span * 0.5 + t0 * span
+		var z1 := -span * 0.5 + t1 * span
+		var y0 := rise * (1.0 - pow(2.0 * t0 - 1.0, 2.0))
+		var y1 := rise * (1.0 - pow(2.0 * t1 - 1.0, 2.0))
+		var dy := y1 - y0
+		var dz := z1 - z0
+		var n := Vector3(0.0, dz, -dy).normalized()
+		var base := verts.size()
+		## Outer skin (crown side) then inner skin offset by thickness.
+		verts.append(Vector3(-length * 0.5, y0, z0))
+		verts.append(Vector3(length * 0.5, y0, z0))
+		verts.append(Vector3(length * 0.5, y1, z1))
+		verts.append(Vector3(-length * 0.5, y1, z1))
+		for _k in 4:
+			norms.append(n)
+		verts.append(Vector3(-length * 0.5, y0 - th * n.y, z0 - th * n.z))
+		verts.append(Vector3(length * 0.5, y0 - th * n.y, z0 - th * n.z))
+		verts.append(Vector3(length * 0.5, y1 - th * n.y, z1 - th * n.z))
+		verts.append(Vector3(-length * 0.5, y1 - th * n.y, z1 - th * n.z))
+		for _k in 4:
+			norms.append(-n)
+		idx.append_array(PackedInt32Array([
+				base, base + 2, base + 1, base, base + 3, base + 2,
+				base + 4, base + 5, base + 6, base + 4, base + 6, base + 7]))
+		## End skirts close the shell so edges never read paper-thin.
+		verts.append(Vector3(-length * 0.5, y0, z0))
+		verts.append(Vector3(-length * 0.5, y1, z1))
+		verts.append(Vector3(-length * 0.5, y1 - th * n.y, z1 - th * n.z))
+		verts.append(Vector3(-length * 0.5, y0 - th * n.y, z0 - th * n.z))
+		for _k in 4:
+			norms.append(Vector3.LEFT)
+		verts.append(Vector3(length * 0.5, y0, z0))
+		verts.append(Vector3(length * 0.5, y1, z1))
+		verts.append(Vector3(length * 0.5, y1 - th * n.y, z1 - th * n.z))
+		verts.append(Vector3(length * 0.5, y0 - th * n.y, z0 - th * n.z))
+		for _k in 4:
+			norms.append(Vector3.RIGHT)
+		idx.append_array(PackedInt32Array([
+				base + 8, base + 9, base + 10, base + 8, base + 10, base + 11,
+				base + 12, base + 14, base + 13, base + 12, base + 15, base + 14]))
+	for v in verts.size():
+		verts[v] += center
 ## Lofted hull between two convex CCW profiles (issue #237): the de-box
 ## vocabulary for vehicle hulls and greenhouses - beveled, tapered masses
 ## lofted from chamfered footprints. `p0`/`p1` need equal point counts

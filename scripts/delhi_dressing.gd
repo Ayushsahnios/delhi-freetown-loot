@@ -50,6 +50,13 @@ const PRODUCE := [
 	Color(0.22, 0.52, 0.18), Color(0.88, 0.44, 0.10),
 	Color(0.76, 0.16, 0.12), Color(0.94, 0.84, 0.22),
 ]
+const TERRACOTTA := Color(0.72, 0.38, 0.22)
+const TERRACOTTA_DK := Color(0.58, 0.30, 0.18)
+const LEAF := Color(0.16, 0.42, 0.14)
+const TRUNK := Color(0.30, 0.20, 0.12)
+const SOIL := Color(0.24, 0.17, 0.10)
+const BIN_GREEN := Color(0.20, 0.42, 0.30)
+const LITTER := Color(0.82, 0.80, 0.72)
 
 
 static func build(world: float, pitch: float, road_w: float) -> Node3D:
@@ -60,11 +67,16 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 	var b := MeshTools.new()
 	var cart_xfs: Array[Transform3D] = []
 	var stall_xfs: Array[Transform3D] = []
+	var planter_xfs: Array[Transform3D] = []
+	var planter_alt_xfs: Array[Transform3D] = []
+	var bin_xfs: Array[Transform3D] = []
 	for block: Vector2i in LANDMARKS:
 		var cx := -world / 2.0 + block.x * pitch + road_w / 2.0
 		var cz := -world / 2.0 + block.y * pitch + road_w / 2.0
 		for side: int in 4:
 			_dress_side(b, cx, cz, half_block, side, road_w)
+		_corner_props(cx, cz, half_block, block,
+				planter_xfs, planter_alt_xfs, bin_xfs)
 		if block == Vector2i(4, 7):
 			# Chandni Chowk market lane: carts + a chai stall mid-lane
 			_market_lane(cx + 6.0, cz, cart_xfs, stall_xfs)
@@ -79,6 +91,9 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 	root.add_child(mi)
 	_add_prop(root, _cart_mesh(), cart_xfs, Vector3(1.9, 2.0, 1.3))
 	_add_prop(root, _stall_mesh(), stall_xfs, Vector3(2.4, 2.4, 1.7))
+	_add_prop(root, _planter_mesh(0), planter_xfs, Vector3(0.8, 0.9, 0.8))
+	_add_prop(root, _planter_mesh(1), planter_alt_xfs, Vector3(0.8, 1.4, 0.8))
+	_add_prop(root, _bin_mesh(), bin_xfs, Vector3(0.6, 1.0, 0.6))
 	return root
 
 
@@ -178,11 +193,34 @@ static func _street_pt(fixed: float, line: float, along_x: float,
 static func _pole(b: MeshTools, base: Vector3, fwd: Vector3) -> void:
 	## Concrete pole with a cross-arm reaching over the road, drawn
 	## rotated so both arm ends stay visibly anchored (issue #78 rule).
-	b.add_box(Vector3(0.18, POLE_H, 0.18), base + Vector3(0, POLE_H / 2.0, 0), CONCRETE)
-	var bm := BoxMesh.new()
-	bm.size = Vector3(0.13, 0.13, 2.1)
-	b.add_mesh(bm, Transform3D(Basis.looking_at(fwd, Vector3.UP),
-			base + Vector3(0, POLE_H - 0.45, 0) + fwd * 0.55), CONCRETE)
+	## De-boxed (#236): round tapered shaft + tube cross-arm.
+	var shaft := CylinderMesh.new()
+	shaft.top_radius = 0.09
+	shaft.bottom_radius = 0.11
+	shaft.height = POLE_H
+	shaft.radial_segments = 8
+	b.add_mesh(shaft, Transform3D(Basis(),
+			base + Vector3(0, POLE_H / 2.0, 0)), CONCRETE)
+	var arm := CylinderMesh.new()
+	arm.top_radius = 0.055
+	arm.bottom_radius = 0.055
+	arm.height = 2.1
+	arm.radial_segments = 8
+	## Quarter turn about X lays the tube's Y axis into local Z, which
+	## the look-at basis then maps onto the road direction.
+	b.add_mesh(arm, Transform3D(Basis.looking_at(fwd, Vector3.UP),
+			base + Vector3(0, POLE_H - 0.45, 0) + fwd * 0.55)
+			* Transform3D(Basis(Vector3.RIGHT, PI / 2.0), Vector3.ZERO), CONCRETE)
+
+
+static func _stick(r: float, h: float) -> CylinderMesh:
+	## Low-poly round stick/leg/pole — the #236 de-box vocabulary.
+	var c := CylinderMesh.new()
+	c.top_radius = r
+	c.bottom_radius = r
+	c.height = h
+	c.radial_segments = 6
+	return c
 
 
 static func _span(b: MeshTools, p0: Vector3, p1: Vector3, sag: float) -> void:
@@ -238,71 +276,200 @@ static func _cp_carts(cx: float, cz: float, half_block: float,
 			Vector3(cx + half_block - 3.0, Roads.CURB_H, cz + 8.0)))
 
 
+static func _corner_props(cx: float, cz: float, half_block: float,
+		block: Vector2i, planter_xfs: Array[Transform3D],
+		planter_alt_xfs: Array[Transform3D],
+		bin_xfs: Array[Transform3D]) -> void:
+	## Round planters and a dustbin per landmark block (issue #236):
+	## deterministic sidewalk spots 1.0 m in from the block edge —
+	## outside the 0.38 m kerb paint band and clear of corner
+	## crossings. Shrub variant alternates by block parity so repeats
+	## never read cloned, no RNG needed.
+	var alt := (block.x + block.y) % 2 == 1
+	for e in [
+		[Vector3(cx - half_block * 0.30, Roads.CURB_H,
+				cz - half_block + 1.0), 0.35],
+		[Vector3(cx + half_block * 0.55, Roads.CURB_H,
+				cz + half_block - 1.0), -0.6],
+	]:
+		var xf := Transform3D(Basis(Vector3.UP, e[1]), e[0])
+		if alt:
+			planter_alt_xfs.append(xf)
+		else:
+			planter_xfs.append(xf)
+	bin_xfs.append(Transform3D(Basis(Vector3.UP, -0.4),
+			Vector3(cx + half_block - 1.0, Roads.CURB_H,
+				cz - half_block * 0.18)))
+
+
 # ------------------------------------------------------------ prop meshes
 
 static func _cart_mesh() -> ArrayMesh:
-	## Thela (hand cart): wooden platform on two fat wheels, legs at the
-	## handle end, a draw handle, produce crates piled two-deep, and a
-	## small tilted canopy on a stick. Local +X runs along the street.
+	## Thela (hand cart): beveled wooden platform on two fat wheels —
+	## axle set across the cart so the wheels roll along the street
+	## (the old wheels were spun 90 degrees edge-on) — stick legs at
+	## the handle end, a draw handle, beveled produce crates piled
+	## two-deep, and a small tilted canopy on a round mast. Local +X
+	## runs along the street. De-boxed geometry (#236).
 	var b := MeshTools.new()
-	b.add_box(Vector3(1.9, 0.10, 1.1), Vector3(0, 0.78, 0), CART_WOOD)
+	b.add_bev_box(Vector3(1.9, 0.10, 1.1), Vector3(0, 0.78, 0), 0.04, CART_WOOD)
 	for x in [0.7, -0.7]:
-		b.add_box(Vector3(0.08, 0.62, 0.08), Vector3(x, 0.34, 0.45), CART_WOOD)
-		b.add_box(Vector3(0.08, 0.62, 0.08), Vector3(x, 0.34, -0.45), CART_WOOD)
+		for z in [0.45, -0.45]:
+			b.add_mesh(_stick(0.045, 0.62), Transform3D(Basis(),
+					Vector3(x, 0.34, z)), CART_WOOD)
 	for z in [0.62, -0.62]:
 		var w := CylinderMesh.new()
 		w.top_radius = 0.38
 		w.bottom_radius = 0.38
 		w.height = 0.10
-		b.add_mesh(w, Transform3D(Basis(Vector3(0, 0, 1), PI / 2.0),
+		w.radial_segments = 12
+		b.add_mesh(w, Transform3D(Basis(Vector3.RIGHT, PI / 2.0),
 				Vector3(0.55, 0.38, z)), WHEEL)
-		b.add_box(Vector3(0.06, 0.76, 0.06), Vector3(0.55, 0.38, z), CART_RIM)
-	b.add_box(Vector3(0.7, 0.07, 0.07), Vector3(1.25, 0.95, 0.28), CART_WOOD)
-	b.add_box(Vector3(0.7, 0.07, 0.07), Vector3(1.25, 0.95, -0.28), CART_WOOD)
+		b.add_mesh(_stick(0.035, 0.76), Transform3D(Basis(),
+				Vector3(0.55, 0.38, z)), CART_RIM)
+	## One axle through both wheel brackets, ends captive in the hubs.
+	b.add_mesh(_stick(0.04, 1.34), Transform3D(
+			Basis(Vector3.RIGHT, -PI / 2.0), Vector3(0.55, 0.38, 0)), CART_RIM)
+	b.add_bev_box(Vector3(0.7, 0.07, 0.07), Vector3(1.25, 0.95, 0.28),
+			0.025, CART_WOOD)
+	b.add_bev_box(Vector3(0.7, 0.07, 0.07), Vector3(1.25, 0.95, -0.28),
+			0.025, CART_WOOD)
 	var crate_i := 0
 	for x in [-0.55, 0.15]:
 		for z in [0.27, -0.27]:
 			var c: Color = PRODUCE[crate_i % PRODUCE.size()]
-			b.add_box(Vector3(0.55, 0.24, 0.45), Vector3(x, 0.95, z), CRATE)
-			b.add_box(Vector3(0.44, 0.14, 0.34), Vector3(x, 1.10, z), c)
+			b.add_bev_box(Vector3(0.55, 0.24, 0.45), Vector3(x, 0.95, z),
+					0.05, CRATE)
+			b.add_bev_box(Vector3(0.44, 0.14, 0.34), Vector3(x, 1.10, z),
+					0.04, c)
 			crate_i += 1
-	b.add_box(Vector3(0.05, 1.15, 0.05), Vector3(-0.3, 1.35, 0), CART_WOOD)
+	b.add_mesh(_stick(0.03, 1.15), Transform3D(Basis(),
+			Vector3(-0.3, 1.35, 0)), CART_WOOD)
 	var cone := CylinderMesh.new()
 	cone.top_radius = 0.06
 	cone.bottom_radius = 1.05
 	cone.height = 0.42
+	cone.radial_segments = 12
 	b.add_mesh(cone, Transform3D(Basis(Vector3(1, 0, 0), 0.16),
 			Vector3(-0.3, 1.95, 0)), CANOPY)
 	return b.build_mesh()
 
 
 static func _stall_mesh() -> ArrayMesh:
-	## Chai stall: counter with kettle and glasses, back shelf with
-	## thermos jars, four poles under a striped tarp canopy.
+	## Chai stall: beveled counter with a lathe kettle and round chai
+	## glasses, back shelf with tapered lathe thermos jars, four round
+	## poles under a curved striped-tarp canopy (arc shells). De-boxed
+	## geometry (#236).
 	var b := MeshTools.new()
-	b.add_box(Vector3(2.2, 0.08, 0.9), Vector3(0, 0.95, 0), CART_WOOD)
-	b.add_box(Vector3(0.12, 0.9, 0.8), Vector3(-1.0, 0.48, 0), CART_WOOD)
-	b.add_box(Vector3(0.12, 0.9, 0.8), Vector3(1.0, 0.48, 0), CART_WOOD)
-	b.add_box(Vector3(0.12, 0.9, 0.8), Vector3(0.0, 0.48, 0.35), CART_WOOD)
-	var kettle := CylinderMesh.new()
-	kettle.top_radius = 0.16
-	kettle.bottom_radius = 0.20
-	kettle.height = 0.34
-	b.add_mesh(kettle, Transform3D(Basis(), Vector3(-0.6, 1.16, 0)), STEEL)
+	b.add_bev_box(Vector3(2.2, 0.10, 0.9), Vector3(0, 0.95, 0), 0.04, CART_WOOD)
+	b.add_bev_box(Vector3(0.12, 0.9, 0.8), Vector3(-1.0, 0.48, 0), 0.03, CART_WOOD)
+	b.add_bev_box(Vector3(0.12, 0.9, 0.8), Vector3(1.0, 0.48, 0), 0.03, CART_WOOD)
+	b.add_bev_box(Vector3(0.12, 0.9, 0.8), Vector3(0.0, 0.48, 0.35), 0.03, CART_WOOD)
+	## Lathe kettle: base, belly, shoulder, neck and lid in one revolve.
+	b.add_lathe(PackedVector2Array([
+		Vector2(0.03, -0.17), Vector2(0.16, -0.14), Vector2(0.20, -0.04),
+		Vector2(0.18, 0.06), Vector2(0.07, 0.11), Vector2(0.06, 0.15),
+		Vector2(0.09, 0.17),
+	]), Vector3(-0.6, 1.15, 0), STEEL, MeshTools.FINISH_SATIN, 10)
+	var glass := CylinderMesh.new()
+	glass.top_radius = 0.05
+	glass.bottom_radius = 0.038
+	glass.height = 0.16
+	glass.radial_segments = 8
 	for i in 3:
-		b.add_box(Vector3(0.10, 0.16, 0.10),
-				Vector3(0.1 + 0.24 * i, 1.07, 0.1), GLASS)
-	b.add_box(Vector3(1.9, 0.08, 0.35), Vector3(0, 1.45, -0.32), CART_WOOD)
-	b.add_box(Vector3(0.08, 1.0, 0.08), Vector3(-0.95, 1.2, -0.32), CART_WOOD)
-	b.add_box(Vector3(0.08, 1.0, 0.08), Vector3(0.95, 1.2, -0.32), CART_WOOD)
+		b.add_mesh(glass, Transform3D(Basis(),
+				Vector3(0.1 + 0.24 * i, 1.08, 0.1)), GLASS, MeshTools.FINISH_GLOSS)
+	b.add_bev_box(Vector3(1.9, 0.08, 0.35), Vector3(0, 1.45, -0.32),
+			0.025, CART_WOOD)
+	for x in [-0.95, 0.95]:
+		b.add_mesh(_stick(0.04, 1.0), Transform3D(Basis(),
+				Vector3(x, 1.2, -0.32)), CART_WOOD)
+	## Thermos jars: tapered lathe revolve profiles in painted steel.
 	for i in 4:
 		var jc := Color(0.85, 0.28, 0.2) if i % 2 == 0 else Color(0.2, 0.45, 0.75)
-		b.add_box(Vector3(0.18, 0.42, 0.18), Vector3(-0.6 + 0.4 * i, 1.7, -0.32), jc)
+		b.add_lathe(PackedVector2Array([
+			Vector2(0.05, -0.21), Vector2(0.085, -0.15), Vector2(0.08, 0.02),
+			Vector2(0.065, 0.10), Vector2(0.038, 0.16), Vector2(0.035, 0.21),
+		]), Vector3(-0.6 + 0.4 * i, 1.70, -0.32), jc, MeshTools.FINISH_GLOSS, 8)
+	## Matka water pots by the counter end (issue #236): clustered
+	## and stacked lathe clay pots.
+	b.add_lathe(PackedVector2Array([
+		Vector2(0.02, -0.13), Vector2(0.11, -0.10), Vector2(0.14, -0.02),
+		Vector2(0.10, 0.05), Vector2(0.12, 0.09), Vector2(0.14, 0.13),
+	]), Vector3(1.12, 0.14, 0.42), TERRACOTTA, MeshTools.FINISH_MATTE, 9)
+	b.add_lathe(PackedVector2Array([
+		Vector2(0.02, -0.10), Vector2(0.09, -0.08), Vector2(0.11, -0.01),
+		Vector2(0.08, 0.04), Vector2(0.10, 0.08), Vector2(0.11, 0.11),
+	]), Vector3(1.12, 0.40, 0.42), TERRACOTTA_DK, MeshTools.FINISH_MATTE, 8)
+	b.add_lathe(PackedVector2Array([
+		Vector2(0.02, -0.13), Vector2(0.11, -0.10), Vector2(0.14, -0.02),
+		Vector2(0.10, 0.05), Vector2(0.12, 0.09), Vector2(0.14, 0.13),
+	]), Vector3(0.84, 0.14, 0.50), TERRACOTTA, MeshTools.FINISH_MATTE, 9)
 	for x in [-1.05, 1.05]:
-		b.add_box(Vector3(0.07, 2.3, 0.07), Vector3(x, 1.15, -0.5), CART_WOOD)
-		b.add_box(Vector3(0.07, 2.3, 0.07), Vector3(x, 1.15, 0.5), CART_WOOD)
+		for z in [-0.5, 0.5]:
+			b.add_mesh(_stick(0.04, 2.3), Transform3D(Basis(),
+					Vector3(x, 1.15, z)), CART_WOOD)
+	## Curved striped tarp: six arc-shell bands sagging between poles.
 	for s in 6:
 		var c := TARP if s % 2 == 0 else Color(0.90, 0.88, 0.80)
-		b.add_box(Vector3(0.36, 0.05, 1.5),
-				Vector3(-0.95 + 0.38 * s, 2.34, 0.05), c)
+		b.add_arc_shell(0.34, 1.58, 0.26,
+				Vector3(-0.95 + 0.38 * s, 2.30, 0.05), c)
+	return b.build_mesh()
+
+
+static func _planter_mesh(variant: int) -> ArrayMesh:
+	## Round street planter (issue #236): lathe-revolved terracotta
+	## pot with a soil disc — variant 0 a clipped leafy mound, variant 1
+	## a taller sapling with a round trunk. All-cylindrical vocabulary.
+	var b := MeshTools.new()
+	b.add_lathe(PackedVector2Array([
+		Vector2(0.05, -0.30), Vector2(0.15, -0.27), Vector2(0.23, -0.13),
+		Vector2(0.25, 0.00), Vector2(0.21, 0.12), Vector2(0.24, 0.18),
+		Vector2(0.26, 0.24),
+	]), Vector3(0, 0.31, 0), TERRACOTTA, MeshTools.FINISH_MATTE, 10)
+	var soil := CylinderMesh.new()
+	soil.top_radius = 0.20
+	soil.bottom_radius = 0.20
+	soil.height = 0.03
+	soil.radial_segments = 10
+	b.add_mesh(soil, Transform3D(Basis(), Vector3(0, 0.55, 0)), SOIL)
+	if variant == 0:
+		var mound := SphereMesh.new()
+		mound.radius = 0.30
+		mound.height = 0.52
+		mound.radial_segments = 10
+		mound.rings = 5
+		b.add_mesh(mound, Transform3D(Basis(), Vector3(0, 0.76, 0)), LEAF)
+	else:
+		b.add_mesh(_stick(0.035, 0.44), Transform3D(Basis(),
+				Vector3(0, 0.74, 0)), TRUNK)
+		var crown := SphereMesh.new()
+		crown.radius = 0.26
+		crown.height = 0.60
+		crown.radial_segments = 9
+		crown.rings = 5
+		b.add_mesh(crown, Transform3D(
+				Basis().scaled(Vector3(1.0, 1.45, 1.0)),
+				Vector3(0, 1.06, 0)), LEAF)
+	return b.build_mesh()
+
+
+static func _bin_mesh() -> ArrayMesh:
+	## Round municipal dustbin (issue #236): lathe drum with a rib band
+	## and rolled lip, a crumpled litter crown peeking out — the
+	## sidewalk keeps no flat-faced props.
+	var b := MeshTools.new()
+	b.add_lathe(PackedVector2Array([
+		Vector2(0.15, -0.46), Vector2(0.24, -0.42), Vector2(0.26, -0.30),
+		Vector2(0.24, -0.05), Vector2(0.23, 0.32), Vector2(0.26, 0.38),
+		Vector2(0.24, 0.44),
+	]), Vector3(0, 0.47, 0), BIN_GREEN, MeshTools.FINISH_SATIN, 10)
+	var litter := SphereMesh.new()
+	litter.radius = 0.17
+	litter.height = 0.16
+	litter.radial_segments = 8
+	litter.rings = 4
+	b.add_mesh(litter, Transform3D(
+			Basis().scaled(Vector3(1.0, 0.9, 1.0)),
+			Vector3(0, 0.89, 0)), LITTER)
 	return b.build_mesh()
