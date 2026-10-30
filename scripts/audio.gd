@@ -66,6 +66,22 @@ const DOG_BARK_MAX_GAP := 65.0
 const LATE_NIGHT_THIN_DB := 3.5   # beds drop again through the small hours
 const LATE_HONK_WIDEN := 0.8      # extra distant-honk gap multiplier
 
+# Engine voice pack (issue #213): every drivable kind gets its own hum.
+const ENGINE_IDLE_DB := -17.0   # idling at a standstill, under every horn
+const ENGINE_FULL_DB := -11.0   # flat out on the open stretch
+const ENGINE_REV_BUMP := 0.16   # pitch overshoot while flooring it
+const ENGINE_PITCH := {         # per kind: idle -> flat-out pitch_scale
+	"van": [0.82, 1.5],
+	"car": [0.95, 1.75],
+	"auto": [1.05, 1.95],
+	"scooter": [1.4, 2.65],
+}
+const BRAKE_SQUEAL_DB := -18.0  # one-shot pad pinch, under the engine hum
+const BRAKE_SQUEAL_MIN_RATIO := 0.45  # only bites when braking from speed
+const INDICATOR_DB := -20.0     # tick-tock while leaned into a hard turn
+const INDICATOR_STEER := 0.5    # steering held at least this hard...
+const INDICATOR_RATIO := 0.4    # ...at this much of top speed
+
 var _horn_player: AudioStreamPlayer
 var _ambient_player: AudioStreamPlayer
 var _rain_player: AudioStreamPlayer
@@ -99,6 +115,13 @@ var _chime_player: AudioStreamPlayer
 var _blip_player: AudioStreamPlayer
 var _horn_voices := {}          # vehicle kind -> AudioStreamWAV (issue #187)
 var _step_voices := {}          # surface -> AudioStreamWAV (issue #187)
+var _engine_player: AudioStreamPlayer   # hum loop (issue #213)
+var _squeal_player: AudioStreamPlayer   # brake one-shot (issue #213)
+var _indicator_player: AudioStreamPlayer  # tick-tock loop (issue #213)
+var _engine_kind := "auto"
+var _engine_ratio := 0.0
+var _rev_bump := 0.0
+var _squeal_cd := 0.0
 var _step_dist := 0.0
 var _step_alt := 0
 var _rain_level := 0.0
@@ -162,6 +185,19 @@ func setup() -> void:
 	_bark_player = AudioStreamPlayer.new()
 	_bark_player.stream = _make_dog_bark()
 	add_child(_bark_player)
+	# Engine voice pack (issue #213): one hum loop pitched per vehicle
+	# kind at play time, a brake-squeal one-shot and the indicator
+	# tick-tock — the fleet's own voice, silent until a drive starts.
+	_engine_player = AudioStreamPlayer.new()
+	_engine_player.stream = _make_engine_voice()
+	_engine_player.volume_db = -60.0
+	add_child(_engine_player)
+	_squeal_player = AudioStreamPlayer.new()
+	_squeal_player.stream = _make_brake_squeal()
+	add_child(_squeal_player)
+	_indicator_player = AudioStreamPlayer.new()
+	_indicator_player.stream = _make_indicator()
+	add_child(_indicator_player)
 	# Interaction foley (issue #187): footsteps by surface and speed,
 	# shop-door chime, purchase pip, and one horn voice per vehicle kind.
 	for surface in ["pave", "dirt", "wet"]:
@@ -201,7 +237,8 @@ func setup() -> void:
 	for p in [_horn_player, _ambient_player, _rain_player, _thunder_player,
 			_thunk_player, _jingle_player, _murmur_player, _clatter_player,
 			_call_player, _chime_player, _blip_player, _cricket_player,
-			_bark_player] + _distant_players \
+			_bark_player, _engine_player, _squeal_player,
+			_indicator_player] + _distant_players \
 			+ _step_players:
 		p.bus = "Ambient"
 	_prepare_muffle()
@@ -217,6 +254,73 @@ func horn(kind := "auto") -> void:
 	_horn_player.pitch_scale = 0.85 if kind == "van" \
 			else _rng.randf_range(0.96, 1.04)
 	_horn_player.play()
+
+
+func engine_start(kind := "auto") -> void:
+	## Engine voice pack (issue #213): the hum starts with the take-a-
+	## vehicle beat — idling at a standstill in this kind's register,
+	## then pitch and level ride the speedometer every frame after.
+	if _engine_player == null:
+		return
+	_engine_kind = kind
+	_engine_ratio = 0.0
+	_rev_bump = 0.0
+	_squeal_cd = 0.0
+	_engine_player.pitch_scale = float(ENGINE_PITCH.get(kind,
+			ENGINE_PITCH["auto"])[0])
+	_engine_player.volume_db = ENGINE_IDLE_DB
+	_engine_player.play()
+
+
+func engine_stop() -> void:
+	## Key out: hum and indicator relay fall silent together.
+	if _engine_player != null:
+		_engine_player.stop()
+	if _indicator_player != null:
+		_indicator_player.stop()
+
+
+func engine_drive(telemetry: Dictionary, delta: float) -> void:
+	## Per-frame heartbeat from the driven vehicle (issue #213): hum
+	## pitch tracks the speed ratio in this kind's register — scooter
+	## buzzing well above the van — with a soft rev bump while the
+	## throttle is held. Braking from speed pinches one squeal; steering
+	## hard at speed starts the indicator tick-tock, mirroring the
+	## cornering-lean system (issue #154) — fully automatic.
+	if _engine_player == null or not _engine_player.playing:
+		return
+	var ratio: float = clampf(float(telemetry.get("ratio", 0.0)), 0.0, 1.0)
+	var accel: float = float(telemetry.get("accel", 0.0))
+	var steer: float = absf(float(telemetry.get("steer", 0.0)))
+	var braking: bool = bool(telemetry.get("braking", false))
+	var range: Array = ENGINE_PITCH.get(_engine_kind, ENGINE_PITCH["auto"])
+	var k := clampf(10.0 * delta, 0.0, 1.0)
+	_engine_ratio = lerpf(_engine_ratio, ratio, k)
+	# Rev bump: flooring it overshoots the pitch, easing off as speed builds.
+	_rev_bump = lerpf(_rev_bump,
+			ENGINE_REV_BUMP * maxf(accel, 0.0) * (1.0 - _engine_ratio * 0.7),
+			clampf(5.0 * delta, 0.0, 1.0))
+	_engine_player.pitch_scale = lerpf(float(range[0]), float(range[1]),
+			_engine_ratio) + _rev_bump
+	_engine_player.volume_db = lerpf(ENGINE_IDLE_DB, ENGINE_FULL_DB,
+			_engine_ratio) - _duck * DIALOGUE_DUCK_DB
+	# Brake squeal: one pinch per braking event from real speed.
+	_squeal_cd = maxf(_squeal_cd - delta, 0.0)
+	if braking and ratio > BRAKE_SQUEAL_MIN_RATIO and _squeal_cd <= 0.0 \
+			and not _squeal_player.playing:
+		_squeal_cd = 1.8
+		_squeal_player.volume_db = BRAKE_SQUEAL_DB - _duck * DIALOGUE_DUCK_DB
+		_squeal_player.pitch_scale = _rng.randf_range(0.92, 1.08)
+		_squeal_player.play()
+	# Indicator tick-tock: hard lock at open-road speed — the same state
+	# that rolls the chassis in auto.gd — releasing the wheel settles it.
+	if steer > INDICATOR_STEER and _engine_ratio > INDICATOR_RATIO:
+		if not _indicator_player.playing:
+			_indicator_player.volume_db = INDICATOR_DB \
+					- _duck * DIALOGUE_DUCK_DB
+			_indicator_player.play()
+	elif _indicator_player.playing and (steer < 0.35 or _engine_ratio < 0.3):
+		_indicator_player.stop()
 
 
 func start_ambient() -> void:
@@ -574,6 +678,9 @@ func loudness_profile() -> Array:
 		_measure("purchase_blip", _blip_player.stream, PURCHASE_BLIP_DB),
 		_measure("crickets", _cricket_player.stream, CRICKET_DB),
 		_measure("dog_bark", _bark_player.stream, DOG_BARK_MAX_DB),
+		_measure("engine", _engine_player.stream, ENGINE_FULL_DB),
+		_measure("brake_squeal", _squeal_player.stream, BRAKE_SQUEAL_DB),
+		_measure("indicator", _indicator_player.stream, INDICATOR_DB),
 	]
 
 
@@ -1010,6 +1117,81 @@ func _make_dog_bark() -> AudioStreamWAV:
 		var sample := int(clampf(lp * 0.5, -1.0, 1.0) * 32767.0)
 		bytes.encode_s16(i * 2, sample)
 	return _wav(bytes, false)
+
+func _make_engine_voice() -> AudioStreamWAV:
+	## Loopable engine hum (issue #213): a 55 Hz crank voice — sawtooth
+	## body, firing-pulse throb at twice the crank, a breath of
+	## combustion grit — loop-perfect over 2 s (integer cycles) with a
+	## crossfaded tail for the noise. Pitched per kind at play time, so
+	## the scooter buzzes high and the van drones low off one buffer.
+	var loop_len := int(MIX_RATE * 2.0)
+	var xfade := int(MIX_RATE * XFADE_SECONDS)
+	var raw := PackedFloat32Array()
+	raw.resize(loop_len + xfade)
+	var ph := 0.0
+	var lp := 0.0
+	for i in raw.size():
+		ph += TAU * 55.0 / MIX_RATE
+		var crank := 2.0 * fmod(ph / TAU, 1.0) - 1.0
+		var throb := 0.68 + 0.32 * sin(2.0 * ph + 0.6)
+		var n := _rng.randf_range(-1.0, 1.0)
+		lp += (n - lp) * 0.22
+		var grit := (n - lp) * 0.6  # highs left after the one-pole
+		raw[i] = tanh((crank * 0.8 + sin(ph * 3.0) * 0.18
+				+ grit * 0.22 * throb) * throb * 1.6)
+	var peak := 0.001
+	for v in raw:
+		peak = maxf(peak, absf(v))
+	var gain := 0.30 / peak
+	var bytes := PackedByteArray()
+	bytes.resize(loop_len * 2)
+	for i in loop_len:
+		var v: float = raw[i]
+		if i < xfade:
+			var w := float(i) / xfade
+			v = raw[i] * w + raw[i + loop_len] * (1.0 - w)
+		bytes.encode_s16(i * 2, int(clampf(v * gain, -1.0, 1.0) * 32767.0))
+	return _wav(bytes, true)
+
+func _make_brake_squeal() -> AudioStreamWAV:
+	## One-shot brake pinch (issue #213): the pads bite from speed — a
+	## 2.6-to-1.8 kHz slide with friction hiss, gone in 350 ms and
+	## pinned under the engine hum in the mix.
+	var dur := 0.35
+	var frames := int(MIX_RATE * dur)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var phase := 0.0
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		phase += TAU * lerpf(2600.0, 1800.0, t / dur) / MIX_RATE
+		var env := minf(t / 0.02, 1.0) * pow(maxf(1.0 - t / dur, 0.0), 1.8)
+		var squeal := sin(phase) * 0.8 + sin(phase * 2.01) * 0.2
+		squeal += _rng.randf_range(-1.0, 1.0) * 0.25
+		var sample := int(clampf(squeal * env * 0.30, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+func _make_indicator() -> AudioStreamWAV:
+	## Loopable indicator relay (issue #213): tick...tock at ~86 bpm —
+	## a bright click answered half a beat later by a duller one, the
+	## dashboard habit of hard cornering at speed. Bursts stay clear of
+	## the loop seam, so no crossfade is needed.
+	var period := 0.7
+	var frames := int(MIX_RATE * period)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		var s := 0.0
+		for k in 2:
+			var bt := t - (0.02 if k == 0 else 0.02 + period * 0.5)
+			var f := 2350.0 if k == 0 else 1750.0
+			if bt >= 0.0 and bt < 0.045:
+				s += sin(TAU * f * bt) * pow(maxf(1.0 - bt / 0.045, 0.0), 2.4)
+		var sample := int(clampf(s * 0.45, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, true)
 
 static func make_siren() -> AudioStreamWAV:
 	## Ambulance two-tone loop (issue #215): 0.42 s at 700 Hz then

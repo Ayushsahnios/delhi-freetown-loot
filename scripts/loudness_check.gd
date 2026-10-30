@@ -22,6 +22,8 @@ const BED_SPREAD_DB := 8.0
 const HORN_FLOOR_OVER_BED_DB := 6.0
 const HORN_CEIL_OVER_BED_DB := 20.0
 const THUNDER_OVER_HORN_DB := 3.0
+const ENGINE_UNDER_HORN_DB := 2.0   # engine hum never crowds the horn (#213)
+const SQUEAL_UNDER_ENGINE_DB := 2.0  # brake squeal sits under the hum (#213)
 
 
 func _ready() -> void:
@@ -73,6 +75,18 @@ func _ready() -> void:
 	if float(by["thunder"]["peak_db"]) > float(by["horn"]["peak_db"]) + THUNDER_OVER_HORN_DB:
 		problems.append("thunder peak %.1f dBFS dominates horn %.1f dBFS by more than %.1f dB" % [
 			by["thunder"]["peak_db"], by["horn"]["peak_db"], THUNDER_OVER_HORN_DB])
+
+	# Engine voice pack (issue #213): the hum sits under the horn and the
+	# brake squeal under the hum, so the mix pass pins the pairing.
+	if by.has("engine") and float(by["engine"]["peak_db"]) \
+				> float(by["horn"]["peak_db"]) - ENGINE_UNDER_HORN_DB:
+		problems.append("engine peak %.1f dBFS crowds the horn %.1f dBFS — needs ≥ %.1f dB below" % [
+			by["engine"]["peak_db"], by["horn"]["peak_db"], ENGINE_UNDER_HORN_DB])
+	if by.has("squeal") and by.has("engine") \
+			and float(by["squeal"]["peak_db"]) \
+				> float(by["engine"]["peak_db"]) - SQUEAL_UNDER_ENGINE_DB:
+		problems.append("brake squeal peak %.1f dBFS crowds the engine %.1f dBFS — needs ≥ %.1f dB below" % [
+			by["squeal"]["peak_db"], by["engine"]["peak_db"], SQUEAL_UNDER_ENGINE_DB])
 
 	if not _master_has_limiter():
 		problems.append("Master bus has no AudioEffectLimiter with ceiling ≤ -0.1 dB")

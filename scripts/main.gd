@@ -1662,6 +1662,7 @@ func _process(delta: float) -> void:
 	if current_auto != null:
 		_stat_m += current_auto.current_speed() * delta
 		current_auto.drive(delta)
+		_audio.engine_drive(current_auto.engine_telemetry(), delta)
 		player.global_position = current_auto.global_position
 		if _chaos_cd <= 0.0 and current_auto.current_speed() > 3.0:
 			var struck: int = _peds.vehicle_strike(current_auto.global_position, 2.4)
@@ -1726,6 +1727,7 @@ func _toggle_vehicle() -> void:
 		current_auto.driver_inside = false
 		current_auto = null
 		_radio_off()
+		_audio.engine_stop()
 		_audio.door_chime()
 		return
 	var best: CharacterBody3D = null
@@ -1740,6 +1742,7 @@ func _toggle_vehicle() -> void:
 		current_auto.driver_inside = true
 		player.visible = false
 		_audio.door_chime()
+		_audio.engine_start(current_auto.kind)
 		_radio_on()
 		return
 	# Metro gate (issue #98 part 2): board the elevated shuttle before
@@ -1765,6 +1768,7 @@ func _toggle_vehicle() -> void:
 		current_auto.driver_inside = true
 		player.visible = false
 		_audio.door_chime()
+		_audio.engine_start(current_auto.kind)
 		_radio_on()
 
 
@@ -2349,6 +2353,7 @@ func _on_died() -> void:
 		current_auto = null
 		player.visible = true
 		_radio_off()
+		_audio.engine_stop()
 	if _metro_riding or _metro_wait >= 0:
 		_metro_clear_ride()
 	player.controls_enabled = false
@@ -2416,6 +2421,7 @@ func _start_busted_flow() -> void:
 		current_auto = null
 		player.visible = true
 		_radio_off()
+		_audio.engine_stop()
 	if _metro_riding or _metro_wait >= 0:
 		_metro_clear_ride()
 	player.controls_enabled = false

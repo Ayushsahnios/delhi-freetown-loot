@@ -47,6 +47,9 @@ var _wheels: Array[MeshInstance3D] = []
 var _steer_pivots: Array[Node3D] = []
 var _steer_vis := 0.0
 var _speed := 0.0
+var _telem_accel := 0.0   # last pedal input, for the audio heartbeats (#213)
+var _telem_steer := 0.0
+var _telem_braking := false
 var _pitch_vis := 0.0
 var _roll_vis := 0.0
 var _tyre_t := 0.0
@@ -177,6 +180,19 @@ func current_speed() -> float:
 	return absf(_speed)
 
 
+func engine_telemetry() -> Dictionary:
+	## Engine voice pack (issue #213): one call hands the audio system
+	## everything the hum, brake squeal and indicator tick need — speed
+	## as a ratio of THIS kind's top speed, pedal state, the brake event
+	## and steering input.
+	return {
+		"ratio": clampf(absf(_speed) / float(_spec["max_speed"]), 0.0, 1.0),
+		"accel": _telem_accel,
+		"steer": _telem_steer,
+		"braking": _telem_braking,
+	}
+
+
 func crash_count() -> int:
 	## Public snapshot for systems grading a ride (taxi tip tiers).
 	return _crashes
@@ -216,6 +232,9 @@ func drive(delta: float) -> void:
 		max_speed *= 0.45
 		accel_rate *= 0.6
 	var braking := accel != 0.0 and absf(_speed) > 0.5 and signf(accel) != signf(_speed)
+	_telem_accel = accel
+	_telem_steer = steer
+	_telem_braking = braking
 	if braking:
 		_speed += accel * accel_rate * BRAKE_FACTOR * delta
 	elif not is_zero_approx(accel):
