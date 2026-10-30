@@ -38,6 +38,7 @@ const FoodScript := preload("res://scripts/food.gd")
 const InteriorsScript := preload("res://scripts/interiors.gd")
 const WeatherScript := preload("res://scripts/weather.gd")
 const MonsoonScript := preload("res://scripts/monsoon.gd")
+const RainGearScript := preload("res://scripts/raingear.gd")
 const TouchControlsScript := preload("res://scripts/touch_controls.gd")
 const PauseScript := preload("res://scripts/pause.gd")
 const CreditsScript := preload("res://scripts/credits.gd")
@@ -169,6 +170,7 @@ var _switch_pending_release := false
 var _chandni_seen := false
 var _weather: WeatherScript
 var _monsoon: MonsoonScript
+var _raingear: RainGearScript
 var _road_mat: StandardMaterial3D
 var _applied_wet := -1.0
 var _touch: CanvasLayer
@@ -247,6 +249,12 @@ func _ready() -> void:
 	_peds = PedestrianScript.new()
 	add_child(_peds)
 	_peds.setup(WORLD, PITCH, ROAD, GRID + 1)
+	# Monsoon crowd gear (issue #221): near walkers carry umbrellas
+	# and rain jackets while it pours, and every fabric soaks dark
+	# then dries back out — driven straight off the weather state.
+	_raingear = RainGearScript.new()
+	add_child(_raingear)
+	_raingear.setup(_peds)
 	# Gameplay-critical strips (issue #181): the bazaar, Connaught Place
 	# and Purani Dilli all carry crowd zones, plus the two social
 	# districts from issue #97. Zones within ZONE_WAKE of each other share
@@ -1602,6 +1610,7 @@ func _process(delta: float) -> void:
 	_audio.set_wetness(_weather.wetness)
 	_monsoon.tick(delta, _weather.intensity, _weather.wetness,
 			camera, current_auto)
+	_raingear.tick(delta, _weather.intensity, _weather.wetness, camera)
 	if _food != null:
 		_food.set_rain_demand(_weather.intensity)
 	if not _playing:
