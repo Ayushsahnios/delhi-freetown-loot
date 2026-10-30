@@ -1011,7 +1011,33 @@ func _make_dog_bark() -> AudioStreamWAV:
 		bytes.encode_s16(i * 2, sample)
 	return _wav(bytes, false)
 
-func _wav(bytes: PackedByteArray, loop: bool) -> AudioStreamWAV:
+static func make_siren() -> AudioStreamWAV:
+	## Ambulance two-tone loop (issue #215): 0.42 s at 700 Hz then
+	## 0.42 s at 935 Hz — the street siren — rounder than the rickshaw
+	## horn and pinned under it (peak 0.38 vs 0.45-0.50). Loops for the
+	## whole run; the ambulance node plays it spatially at SIREN_DB.
+	var half := int(MIX_RATE * 0.42)
+	var bytes := PackedByteArray()
+	bytes.resize(half * 4)
+	var phase := 0.0
+	for i in half * 2:
+		phase += TAU * (700.0 if i < half else 935.0) / MIX_RATE
+		# Sine body with a thin square edge: a siren speaker, not a buzz.
+		var wave := sin(phase) * 0.6 + signf(sin(phase)) * 0.18
+		var half_i: int = i % half
+		var env := 1.0
+		var attack: float = MIX_RATE * 0.01
+		var release: float = MIX_RATE * 0.03
+		if half_i < attack:
+			env = half_i / attack
+		elif half_i > half - release:
+			env = (half - half_i) / release
+		var sample := int(clampf(wave * env * 0.38, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, true)
+
+
+static func _wav(bytes: PackedByteArray, loop: bool) -> AudioStreamWAV:
 	var wav := AudioStreamWAV.new()
 	wav.format = AudioStreamWAV.FORMAT_16_BITS
 	wav.mix_rate = MIX_RATE
