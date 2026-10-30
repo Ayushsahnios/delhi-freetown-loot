@@ -60,6 +60,11 @@ static func make_multimesh(mesh: PrimitiveMesh, xfs: Array) -> MultiMeshInstance
 
 var _buckets := {}
 
+## Running triangle count for everything added to this builder — the
+## build log prints it so geometry PRs can cite real numbers (de-box
+## directive: always publish triangle counts).
+var tris := 0
+
 
 func add_box(size: Vector3, center: Vector3, color: Color, finish := FINISH_MATTE) -> void:
 	var bm := BoxMesh.new()
@@ -384,6 +389,7 @@ func add_shell(pts: PackedVector2Array, s0: float, s1: float,
 ## primitive path and the prism extruder above.
 func _add_arrays(pos: PackedVector3Array, nrm: PackedVector3Array,
 		idx: PackedInt32Array, color: Color, finish := FINISH_MATTE) -> void:
+	tris += idx.size() / 3
 	var key := "%s|%d" % [color.to_html(), finish]
 	var b: Dictionary = _buckets.get(key, {})
 	if b.is_empty():

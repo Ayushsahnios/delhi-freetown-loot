@@ -103,7 +103,12 @@ func _draw() -> void:
 					Vector2(x_off, _world / 2.0 - _pos.z))
 	for i in range(_landmarks.size()):
 		var lm: Dictionary = _landmarks[i]
-		_blip(lm["center"], LM_COLORS[i % LM_COLORS.size()], 4.0, true,
+		var col := LM_COLORS[i % LM_COLORS.size()]
+		var icon := String(lm.get("icon", ""))
+		if icon == "arch" or icon == "lotus":
+			_monument(lm["center"], col, icon)
+			continue
+		_blip(lm["center"], col, 4.0, true,
 				_initials(String(lm["name"])))
 	if _target.is_finite():
 		_blip(_target, MISSION_COLOR, 4.0 + sin(_t * 5.0) * 1.5, true)
@@ -218,6 +223,30 @@ func _blip(world_pos: Vector3, color: Color, radius: float, clamp_edge: bool,
 		draw_string(ThemeDB.fallback_font, lp, letter, align, -1.0, 9,
 				Color(1.0, 1.0, 1.0, 0.9))
 
+
+func _monument(world_pos: Vector3, color: Color, kind: String) -> void:
+	## Skyline monuments (issue #204) draw silhouette glyphs — a gate arch
+	## or a lotus bloom — instead of the plain initial dot, so the two new
+	## destinations read at a glance on the minimap.
+	var m: Vector2 = Vector2(world_pos.x - _pos.x, world_pos.z - _pos.z) \
+			.rotated(_heading) * _scale
+	var lim := SIZE / 2.0 - 10.0
+	if m.length() > lim:
+		m = m.normalized() * lim
+	var pt := _center + m
+	var col := Color(color.r, color.g, color.b, 0.85)
+	if kind == "arch":
+		var tri := PackedVector2Array([pt + Vector2(0.0, -6.5),
+				pt + Vector2(6.0, 5.0), pt + Vector2(-6.0, 5.0)])
+		draw_colored_polygon(tri, col)
+		draw_arc(pt + Vector2(0.0, 2.5), 2.6, PI, TAU, 12,
+				Color(0.05, 0.05, 0.08, 0.9), 2.2, true)
+	else:
+		for p in range(5):
+			var a := TAU * float(p) / 5.0 - PI * 0.5
+			draw_circle(pt + Vector2(cos(a), sin(a)) * 3.2, 2.2, col)
+		draw_circle(pt, 1.8, Color(1.0, 0.95, 0.7))
+	draw_arc(pt, 9.5, 0.0, TAU, 20, Color(0.0, 0.0, 0.0, 0.5), 1.5, true)
 
 func _initials(name: String) -> String:
 	var out := ""
