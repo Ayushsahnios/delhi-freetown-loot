@@ -147,6 +147,7 @@ var _hud_hp_text: Label
 var _hud_stars: Label
 var _hud_paan: Label
 var _paan_shops: Array[Vector3] = []
+var _hawker_spots: Array[Dictionary] = []
 var _hud_stam_bg: ColorRect
 var _hud_stam_fill: ColorRect
 var _last_stars := 0
@@ -284,6 +285,8 @@ func _ready() -> void:
 	_peds.set_crowd_zone(_block_center(3, 7) + Vector3(0.0, 0.0, 6.0), 36.0)
 	_peds.set_crowd_zone(_block_center(2, 8) + Vector3(0.0, 0.0, -8.0), 40.0)
 	_peds.set_crowd_zone(_block_center(9, 8) + Vector3(-11.0, 0.0, 0.0), 40.0)
+	# Street behaviors (issue #207): paan-eater pauses at the counters.
+	_peds.register_paan_counters(_paan_shops)
 	_daily_life = DailyLifeScript.new()
 	add_child(_daily_life)
 	_daily_life.setup_shutters(_anim_shutter_mm, _anim_shutter_xfs)
@@ -1169,12 +1172,17 @@ func _build_chandni_chowk(x: float, z: float) -> void:
 	_dist_box(Vector3(16.4, 0.6, 5.4), Vector3(x - 9.0, 4.4, z + 14.5), cream)
 	for bz in [z - 11.5, z - 4.0]:
 		_bunting(street, bz)
+	# Street behaviors (issue #207): stall vendors join the market lane —
+	# zone walkers converted to stationary hawkers with hawking accents.
+	if _peds != null:
+		_peds.station_hawkers(_hawker_spots)
 
 
 func _stall(pos: Vector3, face: float, idx: int) -> void:
 	## One bazaar stall: solid counter, striped awning on poles, crates of
 	## goods. `face` is +1/-1 — the direction the stall faces (toward the
 	## market street).
+	_hawker_spots.append({"pos": pos, "face": face})
 	var woods := [Color(0.55, 0.40, 0.26), Color(0.48, 0.34, 0.22), Color(0.60, 0.44, 0.28)]
 	_add_building(pos, Vector3(2.6, 2.2, 4.2), woods[idx % 3])
 	var ax := pos.x + 0.6 * face
