@@ -50,6 +50,7 @@ const DressingScript := preload("res://scripts/delhi_dressing.gd")
 const CityDressingScript := preload("res://scripts/city_dressing.gd")
 const SignageScript := preload("res://scripts/signage.gd")
 const DelhiDressing3Script := preload("res://scripts/delhi_dressing3.gd")
+const Interiors3Script := preload("res://scripts/interiors3.gd")
 const ClutterScript := preload("res://scripts/world_clutter.gd")
 const MetroScript := preload("res://scripts/metro.gd")
 const RailwayScript := preload("res://scripts/railway.gd")
@@ -134,6 +135,7 @@ var _route_arrow: Control
 var _waypoint := Vector3.INF
 var _food: Node
 var _interiors: Node
+var _interiors3: Node
 var _taxi: Node
 var _courier: Node
 var _photo: Node
@@ -230,6 +232,12 @@ func _ready() -> void:
 	_interiors = InteriorsScript.new()
 	add_child(_interiors)
 	_interiors.setup(WORLD, PITCH, ROAD, _food)
+	# Walk-in interiors slice 3 (issue #224): the chemist counter on the
+	# India Gate lawns and the second dhaba seating nook on the thana
+	# plaza — MEDS first-aid service, chai/paratha, door chime.
+	_interiors3 = Interiors3Script.new()
+	add_child(_interiors3)
+	_interiors3.setup(WORLD, PITCH, ROAD, _food)
 	_taxi = TaxiScript.new()
 	add_child(_taxi)
 	_taxi.setup(_landmarks)
@@ -484,6 +492,9 @@ func _build_city() -> void:
 	# Delhi green + food layer (issue #129 slice 3): peepal/banyan avenue
 	# trees, a halwai sweet-shop front, a dhaba corner and a temple gate.
 	_add_static(DelhiDressing3Script.build(WORLD, PITCH, ROAD), LodScript.MID)
+	# Interiors slice 3 geometry (issue #224): chemist shop + dhaba nook,
+	# de-boxed vocabulary (chamfered prisms, lathe props, arc-shell roof).
+	_add_static(Interiors3Script.build(WORLD, PITCH, ROAD), LodScript.MID)
 	# Bilingual signage (issue #131): Devanagari + English boards at
 	# the bazaar, Purani Dilli, the thana and landmark approaches.
 	_add_static(SignageScript.build(WORLD, PITCH, ROAD), LodScript.SMALL)
@@ -1486,6 +1497,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_missions.mission_failed.connect(_on_mission_failed)
 	_food.register(player, _health, _missions, _audio)
 	_interiors.register(player, _audio)
+	_interiors3.register(player, _audio)
 	_taxi.register(player, _missions)
 	_courier.register(player, _missions)
 	_photo = PhotoScript.new()
