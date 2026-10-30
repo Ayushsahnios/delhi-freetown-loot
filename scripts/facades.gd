@@ -47,6 +47,7 @@ static func dress_building(pos: Vector3, size: Vector3, outward: Vector3,
 	var anim: Array[Transform3D] = []
 	var interiors: Array[Transform3D] = []
 	var trim: Array[Transform3D] = []
+	var arches: Array[Transform3D] = []
 
 	if size.y < 9.0:
 		# Huts read as shops: no upper glazing, street-facing shutters
@@ -72,6 +73,11 @@ static func dress_building(pos: Vector3, size: Vector3, outward: Vector3,
 			# day (daily_life.gd squashes it up to a lintel slat after
 			# dawn) or is boarded around the clock for variety.
 			interiors.append(xf)
+			# De-box directive (issue #235): a deterministic subset of hut
+			# shopfronts gets an arched head over the trim — recessed
+			# reveals read as carved openings, not pasted-on boxes.
+			if rng.randf() < 0.4:
+				arches.append(xf)
 			if rng.randf() < 0.18:
 				shutters.append(xf)
 			else:
@@ -80,6 +86,7 @@ static func dress_building(pos: Vector3, size: Vector3, outward: Vector3,
 			"plaster": plaster, "skirt": false, "panes": panes, "lit": lit,
 			"frames": frames, "balconies": balconies, "shutters": shutters,
 			"anim": anim, "interiors": interiors, "trim": trim,
+			"arches": arches,
 		}
 
 	# Towers: keep the glazing grid, add a frame unit per pane.
@@ -133,7 +140,7 @@ static func dress_building(pos: Vector3, size: Vector3, outward: Vector3,
 		"plaster": plaster, "skirt": rng.randf() < 0.65, "panes": panes,
 		"lit": lit, "frames": frames, "balconies": balconies,
 		"shutters": shutters, "anim": anim, "interiors": interiors,
-		"trim": trim,
+		"trim": trim, "arches": arches,
 	}
 
 
@@ -177,6 +184,34 @@ static func shopfront_trim_mesh() -> ArrayMesh:
 	b.add_box(Vector3(0.18, 2.60, 0.40), Vector3(1.68, 0.0, 0.10), tone)
 	b.add_box(Vector3(3.72, 0.38, 0.34), Vector3(0.0, 1.42, 0.10), tone)
 	return b.build_mesh()
+
+
+static func shopfront_arch_mesh() -> ArrayMesh:
+	## Arched head over a hut shopfront (issue #235): six voussoirs and a
+	## keystone trace a semicircle above the trim lintel, so street-level
+	## openings read as carved arched reveals instead of square cutouts.
+	## Local frame matches the trim: origin at the opening centre on the
+	## wall plane, +Z outward.
+	var b := MeshTools.new()
+	var tone := Color(0.82, 0.78, 0.70)
+	var key := Color(0.70, 0.65, 0.56)
+	var centre_y := 1.30
+	var radius := 1.72
+	var angles := PackedFloat32Array([0.262, 0.698, 1.15, 2.0, 2.45, 2.88])
+	for a in angles:
+		var at := Vector3(cos(a) * radius, centre_y + sin(a) * radius, 0.10)
+		var xf := Transform3D(Basis(Vector3(0.0, 0.0, 1.0), a + PI * 0.5), at)
+		b.add_mesh(_voussoir(0.66, 0.52), xf, tone)
+	# Keystone at the crown, slightly proud and larger.
+	var kx := Transform3D(Basis(), Vector3(0.0, centre_y + radius, 0.12))
+	b.add_mesh(_voussoir(0.52, 0.68), kx, key)
+	return b.build_mesh()
+
+
+static func _voussoir(w: float, h: float) -> BoxMesh:
+	var m := BoxMesh.new()
+	m.size = Vector3(w, h, 0.36)
+	return m
 
 
 static func shutter_mesh() -> BoxMesh:
