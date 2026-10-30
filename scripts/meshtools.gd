@@ -67,35 +67,137 @@ func add_box(size: Vector3, center: Vector3, color: Color, finish := FINISH_MATT
 	add_mesh(bm, Transform3D(Basis(), center), color, finish)
 
 
-## Appends one transformed primitive into this builder's color bucket.
-func add_mesh(mesh: PrimitiveMesh, xf: Transform3D, color: Color, finish := FINISH_MATTE) -> void:
+## Chamfered (octagonal) rectangle footprint for de-boxed building masses
+## (issue #235): every 90-degree corner becomes a 45-degree cut of depth
+## `c`, so towers stop reading as pure boxes. Points come out
+## counter-clockwise, ready for add_prism().
+static func chamfer_footprint(half_w: float, half_d: float,
+		c: float) -> PackedVector2Array:
+	var cx: float = minf(c, half_w * 0.45)
+	var cz: float = minf(c, half_d * 0.45)
+	var pts := PackedVector2Array([
+		Vector2(-half_w + cx, -half_d),
+		Vector2(half_w - cx, -half_d),
+		Vector2(half_w, -half_d + cz),
+		Vector2(half_w, half_d - cz),
+		Vector2(half_w - cx, half_d),
+		Vector2(-half_w + cx, half_d),
+		Vector2(-half_w, half_d - cz),
+		Vector2(-half_w, -half_d + cz),
+	])
+	var area := 0.0
+	for i in pts.size():
+		var a := pts[i]
+		var b2 := pts[(i + 1) % pts.size()]
+		area += a.x * b2.y - b2.x * a.y
+	if area < 0.0:
+		pts.reverse()
+	return pts
+
+
+## Extruded convex profile (issue #235): sides with flat outward normals
+## plus a top cap, no bottom cap (prisms sit on the ground). `profile` is
+## centred on the origin in the XZ plane and gets offset by `center.x/z`;
+## `y0`/`y1` are absolute world heights. Folds into the color bucket like
+## any other primitive.
+func add_prism(profile: PackedVector2Array, center: Vector3, y0: float,
+		y1: float, color: Color, finish := FINISH_MATTE) -> void:
+	if profile.size() < 3 or y1 <= y0:
+		return
+	var pts := profile.duplicate()
+	var area := 0.0
+	for i in pts.size():
+		var pa := pts[i]
+		var pb := pts[(i + 1) % pts.size()]
+		area += pa.x * pb.y - pb.x * pa.y
+	if area < 0.0:
+		pts.reverse()
+	var cx := 0.0
+	var cz := 0.0
+	for p in pts:
+		cx += p.x
+		cz += p.y
+	cx /= float(pts.size())
+	cz /= float(pts.size())
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var idx := PackedInt32Array()
+	for i in pts.size():
+		var a := Vector3(pts[i].x + center.x, 0.0, pts[i].y + center.z)
+		var b := Vector3(pts[(i + 1) % pts.size()].x + center.x, 0.0,
+				pts[(i + 1) % pts.size()].y + center.z)
+		var dir := b - a
+		var n := Vector3(dir.z, 0.0, -dir.x).normalized()
+		# Convex CCW profile: interior sits opposite this outward edge normal.
+		var mid := (a + b) * 0.5
+		if (mid - Vector3(center.x, 0.0, center.z)).dot(n) < 0.0:
+			continue
+		var base := verts.size()
+		verts.append(Vector3(a.x, y1, a.z))
+		verts.append(Vector3(b.x, y1, b.z))
+		verts.append(Vector3(b.x, y0, b.z))
+		verts.append(Vector3(a.x, y0, a.z))
+		for _k in 4:
+			norms.append(n)
+		idx.append_array(PackedInt32Array([base, base + 1, base + 2,
+				base, base + 2, base + 3]))
+	# Top cap: fan around the profile centroid, wound for +Y.
+	var cbase := verts.size()
+	verts.append(Vector3(cx + center.x, y1, cz + center.z))
+	norms.append(Vector3.UP)
+	for p in pts:
+		verts.append(Vector3(p.x + center.x, y1, p.y + center.z))
+		norms.append(Vector3.UP)
+	for i in pts.size():
+		var i0 := cbase + 1 + i
+		var i1 := cbase + 1 + (i + 1) % pts.size()
+		idx.append_array(PackedInt32Array([cbase, i1, i0]))
+	_add_arrays(verts, norms, idx, color, finish)
+
+
+## Raw triangle soup into this builder's color bucket — shared by the
+## primitive path and the prism extruder above.
+func _add_arrays(pos: PackedVector3Array, nrm: PackedVector3Array,
+		idx: PackedInt32Array, color: Color, finish := FINISH_MATTE) -> void:
 	var key := "%s|%d" % [color.to_html(), finish]
 	var b: Dictionary = _buckets.get(key, {})
 	if b.is_empty():
 		b = {"color": color, "finish": finish, "pos": PackedVector3Array(),
 			"nrm": PackedVector3Array(), "idx": PackedInt32Array()}
 		_buckets[key] = b
+	var bucket_pos: PackedVector3Array = b["pos"]
+	var bucket_nrm: PackedVector3Array = b["nrm"]
+	var bucket_idx: PackedInt32Array = b["idx"]
+	var base := bucket_pos.size()
+	bucket_pos.append_array(pos)
+	bucket_nrm.append_array(nrm)
+	for i in idx:
+		bucket_idx.append(base + i)
+	b["pos"] = bucket_pos
+	b["nrm"] = bucket_nrm
+	b["idx"] = bucket_idx
+
+
+## Appends one transformed primitive into this builder's color bucket.
+func add_mesh(mesh: PrimitiveMesh, xf: Transform3D, color: Color, finish := FINISH_MATTE) -> void:
 	var arrays := mesh.surface_get_arrays(0)
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var norms: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
 	var src_idx = arrays[Mesh.ARRAY_INDEX]
-	var pos: PackedVector3Array = b["pos"]
-	var nrm: PackedVector3Array = b["nrm"]
-	var idx: PackedInt32Array = b["idx"]
-	var base := pos.size()
+	var pos := PackedVector3Array()
+	var nrm := PackedVector3Array()
+	var idx := PackedInt32Array()
 	for v in verts:
 		pos.append(xf.basis * v + xf.origin)
 	for n in norms:
 		nrm.append((xf.basis * n).normalized())
 	if src_idx == null or src_idx.is_empty():
 		for i in verts.size():
-			idx.append(base + i)
+			idx.append(i)
 	else:
 		for i in src_idx:
-			idx.append(base + int(i))
-	b["pos"] = pos
-	b["nrm"] = nrm
-	b["idx"] = idx
+			idx.append(int(i))
+	_add_arrays(pos, nrm, idx, color, finish)
 
 
 ## Every accumulated surface (one per color) packed into a single ArrayMesh.
