@@ -155,6 +155,125 @@ func add_prism(profile: PackedVector2Array, center: Vector3, y0: float,
 	_add_arrays(verts, norms, idx, color, finish)
 
 
+## Lofted hull between two convex CCW profiles (issue #237): the de-box
+## vocabulary for vehicle hulls and greenhouses - beveled, tapered masses
+## lofted from chamfered footprints. `p0`/`p1` need equal point counts
+## (chamfer_footprint guarantees this); y0/y1 are absolute heights, top
+## cap fans at y1 exactly like add_prism.
+func add_loft(p0: PackedVector2Array, p1: PackedVector2Array,
+		center: Vector3, y0: float, y1: float, color: Color,
+		finish := FINISH_MATTE) -> void:
+	if p0.size() < 3 or p0.size() != p1.size() or y1 <= y0:
+		return
+	var btm := p0.duplicate()
+	var top := p1.duplicate()
+	var area := 0.0
+	for i in btm.size():
+		var pa := btm[i]
+		var pb := btm[(i + 1) % btm.size()]
+		area += pa.x * pb.y - pb.x * pa.y
+	if area < 0.0:
+		btm.reverse()
+		top.reverse()
+	var cx := 0.0
+	var cz := 0.0
+	for p in btm:
+		cx += p.x
+		cz += p.y
+	cx /= float(btm.size())
+	cz /= float(btm.size())
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var idx := PackedInt32Array()
+	for i in btm.size():
+		var j := (i + 1) % btm.size()
+		var a0 := Vector3(btm[i].x + center.x, y0, btm[i].y + center.z)
+		var b0 := Vector3(btm[j].x + center.x, y0, btm[j].y + center.z)
+		var a1 := Vector3(top[i].x + center.x, y1, top[i].y + center.z)
+		var b1 := Vector3(top[j].x + center.x, y1, top[j].y + center.z)
+		# True quad-plane normal (taper-aware), flipped outward against
+		# the profile centroid like add_prism does.
+		var n := (b0 - a0).cross(b1 - a0).normalized()
+		var flipped := n.dot(Vector3((a0.x + b0.x) * 0.5 - (cx + center.x),
+				0.0, (a0.z + b0.z) * 0.5 - (cz + center.z))) < 0.0
+		var base := verts.size()
+		for v in [a0, b0, b1, a1]:
+			verts.append(v)
+			norms.append(-n if flipped else n)
+		if flipped:
+			idx.append_array(PackedInt32Array([base, base + 2, base + 1,
+					base, base + 3, base + 2]))
+		else:
+			idx.append_array(PackedInt32Array([base, base + 1, base + 2,
+					base, base + 2, base + 3]))
+	# Top cap: fan around the top profile centroid, wound for +Y.
+	var cbase := verts.size()
+	var tx := 0.0
+	var tz := 0.0
+	for p in top:
+		tx += p.x
+		tz += p.y
+	tx /= float(top.size())
+	tz /= float(top.size())
+	verts.append(Vector3(tx + center.x, y1, tz + center.z))
+	norms.append(Vector3.UP)
+	for p in top:
+		verts.append(Vector3(p.x + center.x, y1, p.y + center.z))
+		norms.append(Vector3.UP)
+	for i in top.size():
+		var i0 := cbase + 1 + i
+		var i1 := cbase + 1 + (i + 1) % top.size()
+		idx.append_array(PackedInt32Array([cbase, i1, i0]))
+	_add_arrays(verts, norms, idx, color, finish)
+
+
+## Curved shell (issue #237): sweeps a 2D polyline once along an axis and
+## emits every segment twice with opposite normals - an open double-sided
+## surface for rickshaw canopies, wheel-arch bands, fender lips and the
+## scooter leg shield. `along_z` sweeps an XY profile along +Z (profile
+## x/y offset by center.x/y, sweep offset by center.z); otherwise a ZY
+## profile sweeps along +X.
+func add_shell(pts: PackedVector2Array, s0: float, s1: float,
+		center: Vector3, along_z := true, color := Color.WHITE,
+		finish := FINISH_MATTE) -> void:
+	if pts.size() < 2 or s1 <= s0:
+		return
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var idx := PackedInt32Array()
+	for i in pts.size() - 1:
+		var a := pts[i]
+		var b := pts[i + 1]
+		var t := b - a
+		var n2 := Vector2(t.y, -t.x).normalized()
+		var nrm := Vector3(n2.x, n2.y, 0.0) if along_z \
+				else Vector3(0.0, n2.y, n2.x)
+		var quad: Array[Vector3]
+		if along_z:
+			quad = [Vector3(a.x + center.x, a.y + center.y, s0 + center.z),
+					Vector3(b.x + center.x, b.y + center.y, s0 + center.z),
+					Vector3(b.x + center.x, b.y + center.y, s1 + center.z),
+					Vector3(a.x + center.x, a.y + center.y, s1 + center.z)]
+		else:
+			quad = [Vector3(s0 + center.x, a.y + center.y, a.x + center.z),
+					Vector3(s0 + center.x, b.y + center.y, b.x + center.z),
+					Vector3(s1 + center.x, b.y + center.y, b.x + center.z),
+					Vector3(s1 + center.x, a.y + center.y, a.x + center.z)]
+		var base := verts.size()
+		for v in quad:
+			verts.append(v)
+			norms.append(nrm)
+		idx.append_array(PackedInt32Array([base, base + 1, base + 2,
+				base, base + 2, base + 3]))
+		base = verts.size()
+		for v in quad:
+			verts.append(v)
+			norms.append(-nrm)
+		idx.append_array(PackedInt32Array([base, base + 2, base + 1,
+				base, base + 3, base + 2]))
+	_add_arrays(verts, norms, idx, color, finish)
+
+
 ## Raw triangle soup into this builder's color bucket — shared by the
 ## primitive path and the prism extruder above.
 func _add_arrays(pos: PackedVector3Array, nrm: PackedVector3Array,
