@@ -9,12 +9,22 @@ extends Node
 const MeshTools := preload("res://scripts/meshtools.gd")
 const Vehicles := preload("res://scripts/vehicles.gd")
 const Exhaust := preload("res://scripts/exhaust.gd")
+const Ambulance := preload("res://scripts/ambulance.gd")
 
 const COUNT := 22
 const LANE := 2.8
 const WRAP_MARGIN := 24.0
 const ACCEL := 9.0
 const BRAKE := 22.0
+
+# Ambulance street event (issue #215): one van sweeps a lane every
+# 2-4 min, faster than the flow; nearby AI eases aside until it passes.
+const AMB_FIRST_GAP := Vector2(35.0, 80.0)
+const AMB_GAP := Vector2(120.0, 240.0)
+const AMB_YIELD_M := 16.0   # AI within this radius pulls toward the kerb
+const AMB_KERB := 1.3       # metres of pull-in while yielding
+const AMB_EASE := 2.2       # ease-in / merge-back rate (m/s)
+const AMB_SLOW := 0.65      # yielders also lift off the throttle
 
 var _vehicles: Array[Dictionary] = []
 var _player: Node3D = null
@@ -32,6 +42,8 @@ var _mm_free := {}
 var _bumps: Array = []
 var _puffs: Node3D = null
 var _puff_t := 0.0
+var _amb = null
+var _amb_timer := 60.0
 
 
 func setup(world_size: float, pitch: float, road_width: float, road_count: int) -> void:
@@ -51,6 +63,11 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 	# traffic node sits at the origin, so pool space is world space.
 	_puffs = Exhaust.new()
 	add_child(_puffs)
+	_amb_timer = _rng.randf_range(AMB_FIRST_GAP.x, AMB_FIRST_GAP.y)
+	# Test hook: `godot . -- --amb-now` forces the first run almost
+	# immediately so headless checks can exercise spawn/yield/despawn.
+	if "amb-now" in OS.get_cmdline_user_args():
+		_amb_timer = 0.5
 
 
 func register_player(p: Node3D) -> void:
@@ -90,6 +107,7 @@ func _spawn() -> Dictionary:
 		"kind": kind,
 		"t": _rng.randf_range(-_world / 2.0, _world / 2.0),
 		"speed": cruise, "cruise": cruise, "bob": 0.0,
+		"kerb_n": 0.0, "amb_yield": false,
 	}
 	_apply_transform(v)
 	return v
@@ -100,6 +118,8 @@ func _physics_process(delta: float) -> void:
 		var target: float = minf(v.cruise, _player_limit(v))
 		target = minf(target, _traffic_limit(v))
 		target = minf(target, _bump_limit(v))
+		if v.amb_yield:
+			target = minf(target, v.cruise * AMB_SLOW)
 		v.bob = maxf(v.bob - delta / 0.5, 0.0)
 		var rate := BRAKE if target < v.speed else ACCEL
 		v.speed = move_toward(v.speed, target, rate * delta)
@@ -111,6 +131,7 @@ func _physics_process(delta: float) -> void:
 			v.t = edge
 		_apply_transform(v)
 	_idle_exhaust(delta)
+	_tick_ambulance(delta)
 
 
 func _idle_exhaust(delta: float) -> void:
@@ -136,11 +157,14 @@ func _idle_exhaust(delta: float) -> void:
 func _apply_transform(v: Dictionary) -> void:
 	var bob: float = v.get("bob", 0.0)
 	var y := 0.09 * sin((1.0 - bob) * PI) if bob > 0.0 else 0.0
+	# kerb_n grows while yielding to the ambulance (issue #215): the
+	# lane offset eases outward from the road centre, never inward.
+	var lane: float = (LANE + float(v.kerb_n)) * v.dir
 	if v.along_z:
-		v.pos = Vector3(v.road + LANE * v.dir, y, v.t)
+		v.pos = Vector3(v.road + lane, y, v.t)
 		v.heading = PI if v.dir > 0 else 0.0
 	else:
-		v.pos = Vector3(v.t, y, v.road - LANE * v.dir)
+		v.pos = Vector3(v.t, y, v.road - lane)
 		v.heading = -PI / 2.0 * v.dir
 	v.mm.set_instance_transform(v.idx,
 			Transform3D(Basis(Vector3.UP, v.heading), v.pos))
@@ -196,6 +220,52 @@ func _bump_limit(v: Dictionary) -> float:
 			if absf(s) < 1.3:
 				v.bob = 1.0
 	return limit
+
+
+func _tick_ambulance(delta: float) -> void:
+	## Issue #215 lifecycle: spawn after the gap, let it run, free it
+	## past the city edge, re-arm the timer. One ambulance at a time.
+	if _amb != null and not is_instance_valid(_amb):
+		_amb = null
+	if _amb == null:
+		_amb_timer -= delta
+		if _amb_timer <= 0.0:
+			_spawn_ambulance()
+	elif absf(_amb.t) > _world / 2.0 + WRAP_MARGIN:
+		_amb.queue_free()
+		_amb = null
+		_amb_timer = _rng.randf_range(AMB_GAP.x, AMB_GAP.y)
+	_amb_yield(delta)
+
+
+func _spawn_ambulance() -> void:
+	var along_z := _rng.randf() < 0.5
+	var road_i := _rng.randi_range(0, _roads - 1)
+	var road := -_world / 2.0 + road_i * _pitch - (_pitch - _road_w) / 2.0
+	var dir := 1 if _rng.randf() < 0.5 else -1
+	var edge := _world / 2.0 + WRAP_MARGIN
+	_amb = Ambulance.new()
+	add_child(_amb)
+	_amb.setup(along_z, road, dir, -float(dir) * (edge + 2.0))
+
+
+func _amb_yield(delta: float) -> void:
+	## Nearby AI eases toward the kerb until the ambulance passes
+	## (issue #215), then merges back. Only vehicles on the same road
+	## strip pull in; everyone else holds their lane.
+	var amb_pos := Vector3(0.0, -9000.0, 0.0)
+	if _amb != null:
+		amb_pos = _amb.global_position
+	for v in _vehicles:
+		var target := 0.0
+		if _amb != null:
+			var d: float = v.pos.distance_to(amb_pos)
+			if d < AMB_YIELD_M:
+				var amb_c: float = amb_pos.x if v.along_z else amb_pos.z
+				if absf(amb_c - v.road) < _road_w * 0.5 + 0.6:
+						target = AMB_KERB
+		v.kerb_n = move_toward(float(v.kerb_n), target, AMB_EASE * delta)
+		v.amb_yield = target > 0.0 or float(v.kerb_n) > 0.05
 
 
 func near_horns(pos: Vector3, radius: float, max_n: int = 4) -> Array[Dictionary]:
@@ -295,6 +365,7 @@ func worst_hazard_speed(pos: Vector3) -> float:
 		var dz: float = v.pos.z - pos.z
 		if dx * dx + dz * dz < 5.29:
 			worst = maxf(worst, v.speed)
+	worst = maxf(worst, _amb_hazard_speed(pos, 2.3))
 	return worst
 
 
@@ -307,7 +378,20 @@ func ram_speed_at(pos: Vector3) -> float:
 		var dz: float = v.pos.z - pos.z
 		if dx * dx + dz * dz < 8.4:
 			worst = maxf(worst, absf(v.speed))
+	worst = maxf(worst, _amb_hazard_speed(pos, 2.9))
 	return worst
+
+
+func _amb_hazard_speed(pos: Vector3, radius: float) -> float:
+	## The ambulance never brakes for anyone (issue #215): if it is
+	## overlapping pos, its full run speed counts as the hazard.
+	if _amb == null:
+		return 0.0
+	var dx: float = _amb.global_position.x - pos.x
+	var dz: float = _amb.global_position.z - pos.z
+	if dx * dx + dz * dz < radius * radius:
+		return Ambulance.SPEED
+	return 0.0
 
 
 # ---------------------------------------------------------------- instancing
