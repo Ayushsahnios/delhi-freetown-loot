@@ -195,6 +195,7 @@ var _anim_shutter_mm: MultiMeshInstance3D = null
 var _daily_life: Node = null
 var _interior_xfs: Array[Transform3D] = []
 var _shoptrim_xfs: Array[Transform3D] = []
+var _arch_xfs: Array[Transform3D] = []
 var _win_lit_mat: StandardMaterial3D = null
 var _street_lights: Array[OmniLight3D] = []
 var _lamp_pole_xfs: Array[Transform3D] = []
@@ -527,6 +528,8 @@ func _build_city() -> void:
 					var balconies: Array[Transform3D] = fac["balconies"]
 					_balcony_xfs.append_array(balconies)
 					var shutters: Array[Transform3D] = fac["shutters"]
+					var arches: Array[Transform3D] = fac["arches"]
+					_arch_xfs.append_array(arches)
 					_shutter_xfs.append_array(shutters)
 					var anim: Array[Transform3D] = fac["anim"]
 					_anim_shutter_xfs.append_array(anim)
@@ -704,6 +707,7 @@ func _commit_props() -> void:
 	_add_prop_mm(FacadesScript.window_frame_mesh(), _frame_xfs)
 	_add_prop_mm(FacadesScript.balcony_mesh(), _balcony_xfs)
 	_add_prop_mm(FacadesScript.shopfront_trim_mesh(), _shoptrim_xfs)
+	_add_prop_mm(FacadesScript.shopfront_arch_mesh(), _arch_xfs)
 	var shutter_mm := MeshTools.make_multimesh(
 			FacadesScript.shutter_mesh(), _shutter_xfs)
 	if shutter_mm != null:
@@ -758,6 +762,10 @@ func _coll_box(size: Vector3, xf: Transform3D) -> CollisionShape3D:
 
 
 func _add_building(pos: Vector3, size: Vector3, color: Color) -> void:
+	## Issue #235 de-box: block-scale masses become chamfered prisms with
+	## cornice ledges, roof parapets and stepped setbacks — never a bare
+	## 90-degree box. Collision stays a plain box (chamfers stay under
+	## 1 m, far below gameplay tolerances).
 	var body := StaticBody3D.new()
 	body.position = pos
 	var shape := CollisionShape3D.new()
@@ -767,7 +775,62 @@ func _add_building(pos: Vector3, size: Vector3, color: Color) -> void:
 	shape.position.y = size.y / 2.0
 	body.add_child(shape)
 	add_child(body)
-	_dist_box(size, pos + Vector3(0, size.y / 2.0, 0), color)
+	_debox_mass(pos, size, color)
+
+
+func _debox_mass(pos: Vector3, size: Vector3, color: Color) -> void:
+	## Chamfered-prism mass vocabulary (issue #235). Small props (huts,
+	## gate posts) stay plain boxes — the street-furniture vocabulary
+	## wave owns those (#236). Everything block-scale climbs in chamfered
+	## steps: tall towers (>= 21 m) break into shrinking setback prisms,
+	## every tower roofline wears a parapet band, and towers >= 12 m get
+	## a ground-floor cornice ledge over the shopfront line.
+	if size.y < 9.0 and (size.x < 6.0 or size.z < 6.0):
+		_dist_box(size, pos + Vector3(0.0, size.y * 0.5, 0.0), color)
+		return
+	var b := _cur_district if _cur_district != null else _builder_at(pos)
+	var band := color.darkened(0.12)
+	var chamfer := minf(0.9, minf(size.x, size.z) * 0.22)
+	# Stepped setbacks: >= 30 m climbs in three prisms, >= 21 m in two;
+	# each step pulls the footprint in 18% so silhouettes taper.
+	var cuts := PackedFloat32Array()
+	if size.y >= 30.0:
+		cuts = PackedFloat32Array([0.45, 0.78])
+	elif size.y >= 21.0:
+		cuts = PackedFloat32Array([0.62])
+	var y := 0.0
+	var step := 0
+	while true:
+		var seg_top := size.y if step >= cuts.size() else size.y * cuts[step]
+		var shrink := 1.0 - 0.18 * float(step)
+		var hw := size.x * 0.5 * shrink
+		var hd := size.z * 0.5 * shrink
+		var c := minf(chamfer, minf(hw, hd) * 0.45)
+		b.add_prism(MeshTools.chamfer_footprint(hw, hd, c),
+				Vector3(pos.x, 0.0, pos.z), y, seg_top, color)
+		if step > 0:
+			# Setback shoulder: a wide shallow ledge where the mass
+			# steps in — the classic terrace cornice.
+			var pw := size.x * 0.5 * (shrink + 0.18) + 0.30
+			var pd := size.z * 0.5 * (shrink + 0.18) + 0.30
+			b.add_prism(MeshTools.chamfer_footprint(pw, pd, chamfer),
+					Vector3(pos.x, 0.0, pos.z), y - 0.42, y + 0.08, band)
+		y = seg_top
+		step += 1
+		if y >= size.y - 0.01:
+			break
+	# Roofline parapet: a slightly wider band just under the roof hides
+	# the flat cap edge and reads as a raised parapet wall.
+	var top_shrink := 1.0 - 0.18 * float(step - 1)
+	b.add_prism(MeshTools.chamfer_footprint(
+			size.x * 0.5 * top_shrink + 0.42,
+			size.z * 0.5 * top_shrink + 0.42, chamfer),
+			Vector3(pos.x, 0.0, pos.z), size.y - 0.75, size.y + 0.15, band)
+	# Ground-floor cornice ledge over the shopfront line.
+	if size.y >= 12.0:
+		b.add_prism(MeshTools.chamfer_footprint(
+				size.x * 0.5 + 0.34, size.z * 0.5 + 0.34, chamfer),
+				Vector3(pos.x, 0.0, pos.z), 4.35, 4.85, band)
 
 
 func _mesh_box(size: Vector3, color: Color, offset := Vector3.ZERO) -> MeshInstance3D:
