@@ -53,6 +53,18 @@ const DOOR_CHIME_DB := -15.0     # shop-door ding-dong on entry/exit beats
 const PURCHASE_BLIP_DB := -16.0  # cash pip under the food toast
 const CAR_HORN_DB := -6.0        # fuller twin-tone against the bed
 const SCOOTER_HORN_DB := -8.0    # thin city meep, present not piercing
+# Night palette (issue #214): dusk-to-dawn the street changes character —
+# crickets own the quiet, a distant stray answers, and every bed thins
+# a few dB more while the city sleeps.
+const CRICKET_DB := -19.0         # pulsing high-chirp bed, on after dusk
+const CRICKET_RAIN_DUCK_DB := 8.0 # the chorus hushes under a downpour
+const CRICKET_SECONDS := 5.5
+const DOG_BARK_MIN_DB := -26.0    # distant one-shot woof, late night only
+const DOG_BARK_MAX_DB := -19.0
+const DOG_BARK_MIN_GAP := 22.0    # a stray barks, then the street settles
+const DOG_BARK_MAX_GAP := 65.0
+const LATE_NIGHT_THIN_DB := 3.5   # beds drop again through the small hours
+const LATE_HONK_WIDEN := 0.8      # extra distant-honk gap multiplier
 
 var _horn_player: AudioStreamPlayer
 var _ambient_player: AudioStreamPlayer
@@ -93,6 +105,11 @@ var _rain_level := 0.0
 var _indoors := false
 var _muffle: AudioEffectLowPassFilter = null
 var _wetness := 0.0   # road wetness — squelch follows this, not the rain
+var _cricket_player: AudioStreamPlayer
+var _bark_player: AudioStreamPlayer
+var _bark_cd := 45.0
+var _cricket_f := 0.0   # chirp bed gate: in after dusk, out before dawn
+var _late_f := 0.0      # deep-night gate: barks + the extra bed thinning
 
 
 func setup() -> void:
@@ -136,6 +153,15 @@ func setup() -> void:
 	_call_player = AudioStreamPlayer.new()
 	_call_player.stream = _make_call()
 	add_child(_call_player)
+	# Night palette (issue #214): the cricket bed loops silent until dusk;
+	# dog barks are one-shots gated by the late-night window.
+	_cricket_player = AudioStreamPlayer.new()
+	_cricket_player.stream = _make_crickets()
+	_cricket_player.volume_db = -60.0
+	add_child(_cricket_player)
+	_bark_player = AudioStreamPlayer.new()
+	_bark_player.stream = _make_dog_bark()
+	add_child(_bark_player)
 	# Interaction foley (issue #187): footsteps by surface and speed,
 	# shop-door chime, purchase pip, and one horn voice per vehicle kind.
 	for surface in ["pave", "dirt", "wet"]:
@@ -174,7 +200,8 @@ func setup() -> void:
 	# Settings sliders scale the Ambient bus, never these players directly.
 	for p in [_horn_player, _ambient_player, _rain_player, _thunder_player,
 			_thunk_player, _jingle_player, _murmur_player, _clatter_player,
-			_call_player, _chime_player, _blip_player] + _distant_players \
+			_call_player, _chime_player, _blip_player, _cricket_player,
+			_bark_player] + _distant_players \
 			+ _step_players:
 		p.bus = "Ambient"
 	_prepare_muffle()
@@ -200,6 +227,8 @@ func start_ambient() -> void:
 		_rain_player.play()
 	if _murmur_player != null and not _murmur_player.playing:
 		_murmur_player.play()
+	if _cricket_player != null and not _cricket_player.playing:
+		_cricket_player.play()
 
 
 func set_rain(level: float) -> void:
@@ -286,12 +315,29 @@ func _process(delta: float) -> void:
 		_muffle.cutoff_hz = move_toward(_muffle.cutoff_hz, target_hz,
 				delta * MUFFLE_RAMP_HZ_S)
 	if _murmur_player != null:
-		_murmur_player.volume_db = _murmur_target_db - _duck * DIALOGUE_DUCK_DB
+		_murmur_player.volume_db = _murmur_target_db - _duck * DIALOGUE_DUCK_DB \
+				- LATE_NIGHT_THIN_DB * _late_f
+	if _cricket_player != null:
+		# Crickets fade with their window and hush under rain (issue #214);
+		# the Ambient-bus muffle keeps them outside when a door closes.
+		_cricket_player.volume_db = CRICKET_DB \
+				+ linear_to_db(maxf(_cricket_f, 0.001)) \
+				- _rain_level * CRICKET_RAIN_DUCK_DB \
+				- _duck * DIALOGUE_DUCK_DB
+	_bark_cd -= delta
+	if _bark_cd <= 0.0:
+		_bark_cd = _rng.randf_range(DOG_BARK_MIN_GAP, DOG_BARK_MAX_GAP)
+		# A distant stray answers the quiet — late-night window only.
+		if _late_f > 0.5 and _bark_player != null and not _bark_player.playing:
+			_bark_player.volume_db = _rng.randf_range(DOG_BARK_MIN_DB, DOG_BARK_MAX_DB) \
+					- _duck * DIALOGUE_DUCK_DB
+			_bark_player.pitch_scale = _rng.randf_range(0.88, 1.12)
+			_bark_player.play()
 	_distant_cd -= delta
 	if _distant_cd > 0.0:
 		return
 	_distant_cd = _rng.randf_range(DISTANT_MIN_GAP, DISTANT_MAX_GAP) \
-			* (1.0 + _night_f * 1.2)
+			* (1.0 + _night_f * 1.2 + _late_f * LATE_HONK_WIDEN)
 	for p in _distant_players:
 		if p.playing:
 			continue
@@ -350,9 +396,27 @@ func set_player(p: Node3D) -> void:
 func set_day(t: float) -> void:
 	## Day/night mix (issue #165): the street quiets through the evening —
 	## beds drop, distant honks space out, the bazaar hushes to a murmur.
-	var hours := fmod(t * 24.0 + 6.0, 24.0)
+	## Night palette (issue #214) rides the same clock, which is
+	## sun-aligned since issue #185: day_t 0 = midnight, 0.5 = noon (the
+	## old +6 h offset is gone — it had the beds quieting six hours early).
+	var hours := fmod(t * 24.0, 24.0)
 	_night_f = _night_factor(hours)
-	_day_gain_db = -EVENING_DROP_DB * _night_f
+	_cricket_f = _night_window(hours, 19.5, 21.25, 4.75, 6.25)
+	_late_f = _night_window(hours, 21.5, 23.0, 4.5, 6.5)
+	_day_gain_db = -EVENING_DROP_DB * _night_f - LATE_NIGHT_THIN_DB * _late_f
+
+func _night_window(hours: float, dusk_start: float, dusk_end: float,
+		dawn_start: float, dawn_end: float) -> float:
+	## Night palette gate (issue #214): 0 by day, 1 through the wrapped
+	## night span [dusk_end, dawn_start), linear shoulders on the way in
+	## from dusk_start and out again to dawn_end.
+	if hours >= dusk_end or hours < dawn_start:
+		return 1.0
+	if hours >= dusk_start:
+		return (hours - dusk_start) / (dusk_end - dusk_start)
+	if hours < dawn_end:
+		return 1.0 - (hours - dawn_start) / (dawn_end - dawn_start)
+	return 0.0
 
 
 func _night_factor(hours: float) -> float:
@@ -508,6 +572,8 @@ func loudness_profile() -> Array:
 		_measure("footstep_wet", _step_voices["wet"], FOOTSTEP_RUN_DB),
 		_measure("door_chime", _chime_player.stream, DOOR_CHIME_DB),
 		_measure("purchase_blip", _blip_player.stream, PURCHASE_BLIP_DB),
+		_measure("crickets", _cricket_player.stream, CRICKET_DB),
+		_measure("dog_bark", _bark_player.stream, DOG_BARK_MAX_DB),
 	]
 
 
@@ -879,6 +945,71 @@ func _make_call() -> AudioStreamWAV:
 		bytes.encode_s16(i * 2, sample)
 	return _wav(bytes, false)
 
+
+func _make_crickets() -> AudioStreamWAV:
+	## Loopable night cricket bed (issue #214): two stridulating voices —
+	## pulsed ~4.1/4.5 kHz sine trills, three pulses per chirp on slightly
+	## different periods, so the chorus breathes and never machine-guns.
+	## Head crossfades with tail material for a seamless loop.
+	var loop_len := int(MIX_RATE * CRICKET_SECONDS)
+	var xfade := int(MIX_RATE * XFADE_SECONDS)
+	var raw := PackedFloat32Array()
+	raw.resize(loop_len + xfade)
+	var periods := [0.58, 0.83]
+	var carriers := [4120.0, 4540.0]
+	var offsets := [0.11, 0.37]
+	for i in raw.size():
+		var t := float(i) / MIX_RATE
+		var s := 0.0
+		for voice in 2:
+			var chirp_t := fmod(t + offsets[voice], periods[voice])
+			var pulse := 0.0
+			for p in 3:
+				var pt := chirp_t - float(p) * 0.032
+				if pt >= 0.0 and pt < 0.021:
+					pulse = maxf(pulse, pow(sin(PI * pt / 0.021), 2.0))
+			s += sin(TAU * carriers[voice] * t) * pulse
+		raw[i] = s
+	var peak := 0.001
+	for v in raw:
+		peak = maxf(peak, absf(v))
+	var gain := 0.22 / peak
+	var bytes := PackedByteArray()
+	bytes.resize(loop_len * 2)
+	for i in loop_len:
+		var v: float = raw[i]
+		if i < xfade:
+			var w := float(i) / xfade
+			v = raw[i] * w + raw[i + loop_len] * (1.0 - w)
+		bytes.encode_s16(i * 2, int(clampf(v * gain, -1.0, 1.0) * 32767.0))
+	return _wav(bytes, true)
+
+func _make_dog_bark() -> AudioStreamWAV:
+	## One-shot distant dog bark (issue #214): two muffled descending
+	## woofs — sawtooth body with noise grit, then one-pole low-passed so
+	## it reads as a stray down the block, not a dog in the room.
+	var frames := int(MIX_RATE * 0.78)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var lp := 0.0
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		var s := 0.0
+		for b in 2:
+			var bt := t - (0.05 if b == 0 else 0.34)
+			var loud := 1.0 if b == 0 else 0.6
+			if bt >= 0.0 and bt < 0.16:
+				# Descending woof, 330 -> 190 Hz — phase integrated by hand.
+				var k := (330.0 - 190.0) / 0.16
+				var ph := TAU * (330.0 * bt - k * bt * bt * 0.5)
+				var env := minf(bt / 0.009, 1.0) \
+						* pow(maxf(1.0 - bt / 0.16, 0.0), 1.7)
+				s += (signf(sin(ph)) * 0.7 + sin(ph) * 0.3 \
+						+ _rng.randf_range(-1.0, 1.0) * 0.18) * env * loud
+		lp += (s - lp) * 0.14
+		var sample := int(clampf(lp * 0.5, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
 
 func _wav(bytes: PackedByteArray, loop: bool) -> AudioStreamWAV:
 	var wav := AudioStreamWAV.new()
