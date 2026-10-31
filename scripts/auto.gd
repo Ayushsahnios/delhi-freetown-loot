@@ -1,5 +1,6 @@
 extends CharacterBody3D
-## Arcade drivable vehicle: auto-rickshaw, hatchback, or delivery van.
+## Arcade drivable vehicle: auto-rickshaw, hatchback, delivery van,
+## scooter — and (issue #269) the heavy three: tempo, truck, tanker.
 ## Front points toward -Z (Godot convention).
 
 const KINDS := {
@@ -7,6 +8,11 @@ const KINDS := {
 	"car": {"max_speed": 34.0, "accel": 16.0, "turn": 1.55},
 	"van": {"max_speed": 21.0, "accel": 9.0, "turn": 1.3},
 	"scooter": {"max_speed": 38.0, "accel": 18.0, "turn": 2.7},
+	# Issue #269: the heavy three drive heavy — slow to wind up, wide to
+	# turn, the tanker the lumbering whale of the fleet.
+	"tempo": {"max_speed": 19.0, "accel": 8.0, "turn": 1.25},
+	"truck": {"max_speed": 17.0, "accel": 7.0, "turn": 1.05},
+	"tanker": {"max_speed": 16.0, "accel": 6.5, "turn": 1.0},
 }
 ## Cornering lean per kind (issue #154, free-roam feel): two- and
 ## three-wheelers tip INTO the turn, cars and vans roll to the outside.
@@ -16,6 +22,9 @@ const ROLL_LEAN := {
 	"auto": 0.05,
 	"car": -0.055,
 	"van": -0.07,
+	"tempo": -0.075,
+	"truck": -0.09,
+	"tanker": -0.095,
 }
 const BRAKE_FACTOR := 2.4
 const MeshTools := preload("res://scripts/meshtools.gd")
@@ -58,7 +67,7 @@ var _exhaust: Node3D = null
 var _puff_t := 0.6
 
 
-## Body kind ("auto"/"car"/"van"/"scooter") — public so systems like
+## Body kind ("auto"/"car"/"van"/"scooter"/"tempo"/"truck"/"tanker") — public so systems like
 ## the taxi hustle can gate on riding the rickshaw.
 var kind := "auto"
 
@@ -76,6 +85,12 @@ func setup(pos: Vector3, heading: float, kind := "auto") -> void:
 			_build_van()
 		"scooter":
 			_build_scooter()
+		"tempo":
+			_build_tempo()
+		"truck":
+			_build_truck()
+		"tanker":
+			_build_tanker()
 		_:
 			_build_auto()
 	ShadowBlob.attach(self, 1.6, 0.07)
@@ -126,6 +141,41 @@ func _build_scooter() -> void:
 	for spec in Vehicles.SCOOTER_WHEELS:
 		_add_wheel(spec)
 	_add_collision(Vector3(1.2, 1.6, 2.7), Vector3(0, 0.8, 0))
+
+
+func _build_tempo() -> void:
+	## Issue #269: taking a passenger tempo over — tall, laden, every
+	## bench and roof bundle riding along.
+	var b := MeshTools.new()
+	Vehicles.build_tempo_body(b, _random_paint())
+	_body_mesh = _body_node(b)
+	add_child(_body_mesh)
+	for spec in Vehicles.TEMPO_WHEELS:
+		_add_wheel(spec)
+	_add_collision(Vector3(2.3, 2.45, 4.7), Vector3(0, 1.2, 0.1))
+
+
+func _build_truck() -> void:
+	## Issue #269: flatbed truck takeover — long wheelbase, pipes and
+	## tarp strapped on, lumbering off the mark.
+	var b := MeshTools.new()
+	Vehicles.build_truck_body(b, _random_paint())
+	_body_mesh = _body_node(b)
+	add_child(_body_mesh)
+	for spec in Vehicles.TRUCK_WHEELS:
+		_add_wheel(spec)
+	_add_collision(Vector3(2.35, 2.9, 6.5), Vector3(0, 1.45, -0.3))
+
+
+func _build_tanker() -> void:
+	## Issue #269: the water tanker is the heaviest steer in the fleet.
+	var b := MeshTools.new()
+	Vehicles.build_tanker_body(b, _random_paint())
+	_body_mesh = _body_node(b)
+	add_child(_body_mesh)
+	for spec in Vehicles.TANKER_WHEELS:
+		_add_wheel(spec)
+	_add_collision(Vector3(2.35, 3.1, 6.9), Vector3(0, 1.55, 0))
 
 
 func _random_paint() -> Color:

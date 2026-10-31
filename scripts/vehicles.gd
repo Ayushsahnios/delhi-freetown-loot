@@ -63,6 +63,30 @@ const SCOOTER_WHEELS := [
 	{"pos": Vector3(0, 0.30, 0.95), "r": 0.30, "w": 0.16, "steer": false},
 ]
 
+## Fleet variety (issue #269): the heavy three — shared wheel layouts.
+## Tempo rides on van-sized rubber; the truck and tanker roll bigger,
+## wider drums and expose them proud of the body sides.
+const TEMPO_WHEELS := [
+	{"pos": Vector3(-1.0, 0.52, -1.85), "r": 0.52, "w": 0.34, "steer": true},
+	{"pos": Vector3(1.0, 0.52, -1.85), "r": 0.52, "w": 0.34, "steer": true},
+	{"pos": Vector3(-1.0, 0.58, 1.95), "r": 0.58, "w": 0.40, "steer": false},
+	{"pos": Vector3(1.0, 0.58, 1.95), "r": 0.58, "w": 0.40, "steer": false},
+]
+const TRUCK_WHEELS := [
+	{"pos": Vector3(-1.08, 0.62, -2.15), "r": 0.62, "w": 0.44, "steer": true},
+	{"pos": Vector3(1.08, 0.62, -2.15), "r": 0.62, "w": 0.44, "steer": true},
+	{"pos": Vector3(-1.1, 0.62, 2.35), "r": 0.62, "w": 0.48, "steer": false},
+	{"pos": Vector3(1.1, 0.62, 2.35), "r": 0.62, "w": 0.48, "steer": false},
+]
+const TANKER_WHEELS := [
+	{"pos": Vector3(-1.08, 0.62, -2.15), "r": 0.62, "w": 0.44, "steer": true},
+	{"pos": Vector3(1.08, 0.62, -2.15), "r": 0.62, "w": 0.44, "steer": true},
+	{"pos": Vector3(-1.1, 0.62, 1.35), "r": 0.62, "w": 0.48, "steer": false},
+	{"pos": Vector3(1.1, 0.62, 1.35), "r": 0.62, "w": 0.48, "steer": false},
+	{"pos": Vector3(-1.1, 0.62, 3.05), "r": 0.62, "w": 0.48, "steer": false},
+	{"pos": Vector3(1.1, 0.62, 3.05), "r": 0.62, "w": 0.48, "steer": false},
+]
+
 ## Tailpipe tip offsets per kind (issue #166): where idle exhaust puffs
 ## are born, in vehicle-local space (front = -Z).
 const EXHAUST_POS := {
@@ -70,6 +94,12 @@ const EXHAUST_POS := {
 	"car": Vector3(-0.55, 0.36, 2.08),
 	"van": Vector3(-0.62, 0.50, 2.18),
 	"scooter": Vector3(0.12, 0.30, 1.0),
+	# Issue #269: the heavy three — tempo puffs low at the back like the
+	# van; the truck and tanker carry vertical stacks behind the cab, so
+	# their puffs are born high, at the stack mouth.
+	"tempo": Vector3(-0.62, 0.48, 3.32),
+	"truck": Vector3(-0.95, 2.75, -1.05),
+	"tanker": Vector3(0.95, 2.75, -1.05),
 }
 
 
@@ -208,6 +238,181 @@ static func build_scooter_body(b: MeshTools, paint: Color) -> void:
 	_cyl_z(b, 0.03, 0.3, Vector3(0.12, 0.28, 0.85), TRIM)  # tailpipe (issue #166)
 
 
+static func build_tempo_body(b: MeshTools, paint: Color, interior := true) -> void:
+	## Issue #269: shared passenger tempo — long lofted hull with a tall
+	## window band, benches inside, and a roof rack of luggage bundles
+	## (capsules, never boxes). Original colours, no liveries.
+	b.add_loft(MeshTools.chamfer_footprint(1.06, 2.18, 0.16),
+			MeshTools.chamfer_footprint(1.02, 2.12, 0.22),
+			Vector3(0, 0, 0.1), 0.42, 1.22, paint, MeshTools.FINISH_GLOSS)  # lower hull
+	b.add_loft(MeshTools.chamfer_footprint(1.0, 2.05, 0.14),
+			MeshTools.chamfer_footprint(0.86, 1.62, 0.22),
+			Vector3(0, 0, 0.16), 1.22, 1.98, paint, MeshTools.FINISH_GLOSS)  # greenhouse
+	for wz in [-1.85, 1.95]:
+		for sx in [-1.0, 1.0]:
+			_arch_lip(b, Vector3(1.0 * sx, 0.55, wz), 0.66, 0.12, TRIM, 2.6)  # arch lips
+	_panel(b, Vector3(1.9, 0.62, 0.06), Vector3(0, 1.62, -1.95), GLASS, 0.22, MeshTools.FINISH_GLOSS)  # windshield
+	for side in [-1.0, 1.0]:
+		for wz in [-0.9, 0.3, 1.5]:  # three windows a side; the right
+			# front bay is the blank sliding-door face, driver glass opposite
+			if wz == -0.9 and side > 0.0:
+				_panel(b, Vector3(0.05, 0.56, 0.98), Vector3(1.0 * side, 1.6, wz), paint, 0.0, MeshTools.FINISH_GLOSS)
+			else:
+				_panel(b, Vector3(0.05, 0.56, 0.98), Vector3(1.0 * side, 1.6, wz), GLASS, 0.0, MeshTools.FINISH_GLOSS)
+	_panel(b, Vector3(1.55, 0.5, 0.06), Vector3(0, 1.58, 2.26), GLASS, -0.1, MeshTools.FINISH_GLOSS)  # rear glass
+	_panel(b, Vector3(2.24, 0.3, 0.3), Vector3(0, 0.6, -2.18), TRIM)  # bumpers
+	_panel(b, Vector3(2.24, 0.3, 0.3), Vector3(0, 0.6, 2.34), TRIM)
+	_panel(b, Vector3(0.7, 0.16, 0.06), Vector3(0, 0.95, -2.26), FRAME)  # grille
+	_panel(b, Vector3(0.34, 0.16, 0.07), Vector3(-0.62, 1.05, -2.28), LAMP, 0.0, MeshTools.FINISH_GLOSS)  # headlights
+	_panel(b, Vector3(0.34, 0.16, 0.07), Vector3(0.62, 1.05, -2.28), LAMP, 0.0, MeshTools.FINISH_GLOSS)
+	_panel(b, Vector3(0.3, 0.15, 0.07), Vector3(-0.7, 1.1, 2.42), TAIL, 0.0, MeshTools.FINISH_GLOSS)  # taillights
+	_panel(b, Vector3(0.3, 0.15, 0.07), Vector3(0.7, 1.1, 2.42), TAIL, 0.0, MeshTools.FINISH_GLOSS)
+	_tempo_roof_rack(b)
+	_cyl_z(b, 0.05, 0.42, Vector3(-0.75, 0.55, 2.2), TRIM)  # tailpipe
+	if interior:
+		add_tempo_interior(b)
+
+
+static func _tempo_roof_rack(b: MeshTools) -> void:
+	## Roof rack (issue #269): side rails + crossbars of slim lofts, then
+	## luggage that reads soft — capsules and a rolled tarp cylinder.
+	for side in [-1.0, 1.0]:
+		b.add_loft(MeshTools.chamfer_footprint(0.05, 1.5, 0.02),
+				MeshTools.chamfer_footprint(0.05, 1.5, 0.02),
+				Vector3(0.92 * side, 0, 0.35), 1.98, 2.18, TRIM)  # side rails
+	for wz in [-1.0, -0.1, 0.8, 1.7]:
+		b.add_loft(MeshTools.chamfer_footprint(0.95, 0.04, 0.02),
+				MeshTools.chamfer_footprint(0.95, 0.04, 0.02),
+				Vector3(0, 0, wz), 1.98, 2.18, TRIM)  # crossbars
+	b.add_mesh(_capsule_mesh(0.16, 1.7), Transform3D(
+			Basis(Vector3(1, 0, 0), PI / 2.0), Vector3(-0.35, 2.28, 0.2)), SEAT)  # holdall
+	b.add_mesh(_capsule_mesh(0.14, 1.5), Transform3D(
+			Basis(Vector3(1, 0, 0), PI / 2.0), Vector3(0.38, 2.24, 0.3)), SHIRT_B)  # sack
+	b.add_mesh(_cyl_mesh(0.13, 2.6, 10), Transform3D(
+			Basis(Vector3(1, 0, 0), PI / 2.0), Vector3(0, 2.24, -0.85)), FRINGE_GREEN)  # rolled tarp
+
+
+static func add_tempo_interior(b: MeshTools) -> void:
+	## Benches + front seat behind the open door glass, dash and wheel.
+	_panel(b, Vector3(1.8, 0.16, 0.3), Vector3(0, 1.28, -1.45), DASH)
+	b.add_mesh(_cyl_mesh(0.16, 0.03, 12),
+			Transform3D(Basis(Vector3(1, 0, 0), 1.15), Vector3(-0.5, 1.42, -1.32)),
+			Color(0.12, 0.12, 0.13))
+	_panel(b, Vector3(0.55, 0.14, 0.5), Vector3(-0.5, 0.98, -1.1), SEAT_DARK)  # front seat
+	_panel(b, Vector3(0.55, 0.5, 0.12), Vector3(-0.5, 1.22, -0.88), SEAT_DARK)
+	for wz in [-0.25, 0.95, 1.9]:  # passenger benches facing inward
+		_panel(b, Vector3(0.5, 0.12, 1.15), Vector3(-0.55, 1.02, wz), SEAT)
+		_panel(b, Vector3(0.5, 0.12, 1.15), Vector3(0.55, 1.02, wz), SEAT)
+
+
+static func _truck_cab(b: MeshTools, paint: Color, stack_side := -1.0) -> void:
+	## Shared heavy cab (issue #269): tall lofted two-piece hull with a
+	## deep windshield band, air-deflector roof spine and a vertical
+	## exhaust stack — truck ahead, tanker behind.
+	b.add_loft(MeshTools.chamfer_footprint(1.12, 1.18, 0.15),
+			MeshTools.chamfer_footprint(1.06, 0.92, 0.2),
+			Vector3(0, 0, -2.35), 0.82, 1.85, paint, MeshTools.FINISH_GLOSS)  # cab lower hull
+	b.add_loft(MeshTools.chamfer_footprint(1.06, 0.95, 0.14),
+			MeshTools.chamfer_footprint(0.9, 0.6, 0.22),
+			Vector3(0, 0, -2.45), 1.85, 2.62, paint, MeshTools.FINISH_GLOSS)  # cab greenhouse
+	b.add_prism(MeshTools.chamfer_footprint(0.5, 0.7, 0.12),
+			Vector3(0, 0, -2.4), 2.62, 2.86, paint, MeshTools.FINISH_GLOSS)  # roof deflector spine
+	_panel(b, Vector3(2.0, 0.72, 0.07), Vector3(0, 2.14, -3.34), GLASS, 0.14, MeshTools.FINISH_GLOSS)  # windshield
+	for side in [-1.0, 1.0]:
+		_panel(b, Vector3(0.06, 0.55, 0.85), Vector3(1.02 * side, 2.12, -2.55), GLASS, 0.0, MeshTools.FINISH_GLOSS)  # side glass
+	_panel(b, Vector3(2.3, 0.36, 0.3), Vector3(0, 0.7, -3.4), TRIM)  # bumpers
+	_panel(b, Vector3(0.9, 0.2, 0.07), Vector3(0, 1.05, -3.5), FRAME)  # grille
+	_panel(b, Vector3(0.36, 0.18, 0.08), Vector3(-0.72, 1.35, -3.44), LAMP, 0.0, MeshTools.FINISH_GLOSS)  # headlights
+	_panel(b, Vector3(0.36, 0.18, 0.08), Vector3(0.72, 1.35, -3.44), LAMP, 0.0, MeshTools.FINISH_GLOSS)
+	_panel(b, Vector3(0.3, 0.16, 0.08), Vector3(-0.82, 1.5, -1.28), TAIL, 0.0, MeshTools.FINISH_GLOSS)  # rear cab markers
+	_panel(b, Vector3(0.3, 0.16, 0.08), Vector3(0.82, 1.5, -1.28), TAIL, 0.0, MeshTools.FINISH_GLOSS)
+	_cyl_y(b, 0.06, 1.7, Vector3(0.95 * stack_side, 1.9, -1.05), TRIM)  # exhaust stack behind cab
+	_cyl_y(b, 0.08, 0.1, Vector3(0.95 * stack_side, 2.75, -1.05), HUB, MeshTools.FINISH_GLOSS)  # stack mouth
+	_cyl_x(b, 0.12, 0.55, Vector3(1.14, 2.1, -3.2), TRIM)  # mirror arm + blade
+	_panel(b, Vector3(0.04, 0.26, 0.16), Vector3(1.38, 2.12, -3.2), TRIM)
+	for wz in [-2.15, -1.15]:
+		for sx in [-1.0, 1.0]:
+			var wx: float = 1.08 * sx
+			_arch_lip(b, Vector3(wx, 0.62, wz), 0.72, 0.14, TRIM, 2.6)  # arch lips
+
+
+static func build_truck_body(b: MeshTools, paint: Color, cargo := true) -> void:
+	## Issue #269: flatbed truck — chamfered deck with low lofted side
+	## rails, chassis rails, side fuel tank, and soft cargo (pipe bundle,
+	## tarp roll) strapped on. Occasionally one parks kerbside with
+	## hazards (breakdown.gd).
+	_truck_cab(b, paint)
+	# Chassis: two rails the whole wheelbase, crossmember at the tail.
+	for side in [-1.0, 1.0]:
+		b.add_loft(MeshTools.chamfer_footprint(0.14, 2.3, 0.05),
+				MeshTools.chamfer_footprint(0.14, 2.3, 0.05),
+				Vector3(0.5 * side, 0, 0.9), 0.68, 0.95, FRAME)
+	_panel(b, Vector3(2.0, 0.22, 0.14), Vector3(0, 0.78, 2.82), FRAME)  # tail crossmember
+	_cyl_x(b, 0.05, 1.9, Vector3(0, 0.55, 2.9), TRIM)  # underride bar
+	_cyl_z(b, 0.22, 1.1, Vector3(-1.05, 0.78, 0.3), TRIM)  # side fuel tank
+	# Deck: chamfered prism plate proud of the rails.
+	b.add_prism(MeshTools.chamfer_footprint(1.08, 2.0, 0.1),
+			Vector3(0, 0, 0.85), 0.95, 1.12, CARGO, MeshTools.FINISH_SATIN)
+	# Side rails: slim lofted walls with stake posts, drop-down tail.
+	for side in [-1.0, 1.0]:
+		b.add_loft(MeshTools.chamfer_footprint(0.06, 1.98, 0.03),
+				MeshTools.chamfer_footprint(0.06, 1.98, 0.03),
+				Vector3(1.06 * side, 0, 0.85), 1.12, 1.48, paint, MeshTools.FINISH_SATIN)
+		for wz in [-0.75, 0.3, 1.35, 2.4]:
+			_panel(b, Vector3(0.05, 0.4, 0.07), Vector3(1.06 * side, 1.28, wz), FRAME)  # stakes
+	b.add_loft(MeshTools.chamfer_footprint(1.04, 0.06, 0.03),
+			MeshTools.chamfer_footprint(1.04, 0.06, 0.03),
+			Vector3(0, 0, 2.78), 1.12, 1.44, paint, MeshTools.FINISH_SATIN)  # tail gate rail
+	_panel(b, Vector3(0.3, 0.15, 0.07), Vector3(-0.9, 1.3, 2.9), TAIL, 0.0, MeshTools.FINISH_GLOSS)  # tail lights
+	_panel(b, Vector3(0.3, 0.15, 0.07), Vector3(0.9, 1.3, 2.9), TAIL, 0.0, MeshTools.FINISH_GLOSS)
+	if cargo:
+		# Cargo (issue #269): a strapped bundle of PVC pipes (cylinders)
+		# plus a rolled tarp — soft shapes, zero boxes.
+		for i in 3:
+			b.add_mesh(_cyl_mesh(0.14, 3.1, 10), Transform3D(
+					Basis(Vector3(1, 0, 0), PI / 2.0),
+					Vector3(-0.45 + 0.45 * i, 1.32 + 0.06 * i, 0.6)), CARGO)
+		b.add_mesh(_cyl_mesh(0.16, 2.7, 10), Transform3D(
+					Basis(Vector3(1, 0, 0), PI / 2.0), Vector3(0, 1.62, 0.7)), FRINGE_GREEN)
+		for wz in [0.0, 1.4]:  # straps: arcs across the load, thin along Z
+			var strap := PackedVector2Array()
+			for i in 5:
+				var t := PI * float(i) / 4.0
+				strap.append(Vector2(cos(t) * 0.55, 1.5 + sin(t) * 0.55))
+			b.add_shell(strap, wz - 0.04, wz + 0.04, Vector3.ZERO, true, TRIM)
+
+
+static func build_tanker_body(b: MeshTools, paint: Color) -> void:
+	## Issue #269: water tanker — same heavy cab, then a lying capsule
+	## tank with band rings, a top catwalk, rear hose reel and access
+	## ladder. All curves, no boxes.
+	_truck_cab(b, paint, 1.0)
+	for side in [-1.0, 1.0]:
+		b.add_loft(MeshTools.chamfer_footprint(0.14, 2.3, 0.05),
+				MeshTools.chamfer_footprint(0.14, 2.3, 0.05),
+				Vector3(0.5 * side, 0, 1.25), 0.68, 0.95, FRAME)  # chassis rails
+	_cyl_x(b, 0.05, 1.9, Vector3(0, 0.55, 3.3), TRIM)  # underride bar
+	_cyl_z(b, 0.22, 1.1, Vector3(-1.05, 0.78, 0.35), TRIM)  # side fuel tank
+	# Tank: lying capsule (domed ends), silver, gloss.
+	b.add_mesh(_capsule_mesh(1.05, 3.6), Transform3D(
+			Basis(Vector3(1, 0, 0), PI / 2.0), Vector3(0, 2.0, 1.1)),
+			Color(0.70, 0.72, 0.75), MeshTools.FINISH_GLOSS)
+	for wz in [-0.2, 1.0, 2.2]:  # band rings slightly proud of the shell
+		b.add_mesh(_cyl_mesh(1.07, 0.16, 18), Transform3D(
+				Basis(Vector3(1, 0, 0), PI / 2.0), Vector3(0, 2.0, wz)),
+			Color(0.16, 0.35, 0.55), MeshTools.FINISH_SATIN)
+	b.add_loft(MeshTools.chamfer_footprint(0.35, 1.5, 0.06),
+			MeshTools.chamfer_footprint(0.35, 1.5, 0.06),
+			Vector3(0, 0, 1.1), 3.05, 3.14, TRIM)  # top catwalk strip
+	_cyl_z(b, 0.12, 0.3, Vector3(0, 3.14, 1.1), HUB)  # fill cap
+	_cyl_x(b, 0.28, 0.34, Vector3(0, 1.35, 3.18), TRIM)  # hose reel
+	_panel(b, Vector3(0.55, 0.4, 0.08), Vector3(0, 1.3, 3.22), TRIM)  # valve chest
+	for i in 5:  # rear access ladder rungs
+		_cyl_x(b, 0.035, 0.8, Vector3(0, 1.0 + i * 0.38, 2.62), HUB)
+	_panel(b, Vector3(0.3, 0.15, 0.07), Vector3(-0.9, 1.1, 3.35), TAIL, 0.0, MeshTools.FINISH_GLOSS)
+	_panel(b, Vector3(0.3, 0.15, 0.07), Vector3(0.9, 1.1, 3.35), TAIL, 0.0, MeshTools.FINISH_GLOSS)
+
+
 ## ---------------------------------------------------------------- drivers + decor
 
 ## Ambient driver figure for one vehicle kind (issue #125): low-poly
@@ -223,6 +428,12 @@ static func add_driver(b: MeshTools, kind: String) -> void:
 			_van_driver(b)
 		"scooter":
 			_scooter_rider(b)
+		"tempo":
+			_tempo_driver(b)
+		"truck":
+			_truck_driver(b)
+		"tanker":
+			_truck_driver(b)
 
 
 static func _rick_driver(b: MeshTools) -> void:
@@ -261,6 +472,24 @@ static func _scooter_rider(b: MeshTools) -> void:
 	_panel(b, Vector3(0.13, 0.1, 0.42), Vector3(0.15, 0.9, 0.02), TRIM)
 	_panel(b, Vector3(0.08, 0.08, 0.4), Vector3(-0.2, 1.15, -0.35), SHIRT_B, 0.9)
 	_panel(b, Vector3(0.08, 0.08, 0.4), Vector3(0.2, 1.15, -0.35), SHIRT_B, 0.9)
+
+
+static func _tempo_driver(b: MeshTools) -> void:
+	## Issue #269: seated at the wheel in the tall cab — kurta, cap,
+	## forearms to the rim.
+	_panel(b, Vector3(0.42, 0.5, 0.24), Vector3(-0.5, 1.15, -1.1), SHIRT_A)
+	_panel(b, Vector3(0.19, 0.19, 0.19), Vector3(-0.5, 1.52, -1.12), SKIN_B)
+	_panel(b, Vector3(0.23, 0.08, 0.23), Vector3(-0.5, 1.65, -1.12), CAP)
+	_panel(b, Vector3(0.08, 0.08, 0.34), Vector3(-0.68, 1.3, -1.25), SHIRT_A, 1.0)
+	_panel(b, Vector3(0.08, 0.08, 0.34), Vector3(-0.32, 1.3, -1.25), SHIRT_A, 1.0)
+
+
+static func _truck_driver(b: MeshTools) -> void:
+	## Issue #269: elbow on the sill, half out of the side glass —
+	## heads above the windshield base line so it reads at street level.
+	_panel(b, Vector3(0.19, 0.19, 0.19), Vector3(-0.98, 2.22, -2.5), SKIN_B)
+	_panel(b, Vector3(0.24, 0.08, 0.24), Vector3(-0.98, 2.36, -2.5), CAP)
+	_panel(b, Vector3(0.08, 0.08, 0.44), Vector3(-0.9, 2.02, -2.32), SHIRT_C, 0.35)
 
 
 ## Rickshaw personality (issue #125): marigold garland across the
@@ -431,6 +660,11 @@ static func _capsule_mesh(radius: float, height: float) -> CapsuleMesh:
 
 static func _cyl_x(b: MeshTools, radius: float, height: float, pos: Vector3, color: Color) -> void:
 	b.add_mesh(_cyl_mesh(radius, height, 10), Transform3D(Basis(Vector3(0, 0, 1), PI / 2.0), pos), color)
+
+
+## Vertical cylinder (issue #269): exhaust stacks and similar.
+static func _cyl_y(b: MeshTools, radius: float, height: float, pos: Vector3, color: Color, finish := MeshTools.FINISH_MATTE) -> void:
+	b.add_mesh(_cyl_mesh(radius, height, 10), Transform3D(Basis(), pos), color, finish)
 
 
 static func _cyl_z(b: MeshTools, radius: float, height: float, pos: Vector3, color: Color, finish := MeshTools.FINISH_MATTE) -> void:

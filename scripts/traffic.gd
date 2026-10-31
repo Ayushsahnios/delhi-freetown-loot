@@ -1,5 +1,7 @@
 extends Node
-## Traffic AI: ambient autos and hatchbacks lane-following the road grid.
+## Traffic AI: ambient fleet lane-following the road grid — e-rickshaws,
+## hatchbacks, scooters and (issue #269) the heavy three: shared
+## passenger tempos, flatbed trucks and a water tanker.
 ## Purely kinematic movers (no physics bodies): vehicles stay at road level
 ## on fixed lanes that never intersect building blocks, so nothing can fall
 ## through the ground or tunnel through geometry.
@@ -45,6 +47,9 @@ var _roads := 0
 var _auto_mm: MultiMesh = null
 var _car_mms: Array[MultiMesh] = []
 var _scooter_mms: Array[MultiMesh] = []
+var _tempo_mms: Array[MultiMesh] = []
+var _truck_mms: Array[MultiMesh] = []
+var _tanker_mm: MultiMesh = null
 var _mm_used := {}
 var _mm_free := {}
 var _bumps: Array = []
@@ -67,6 +72,13 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 		_car_mms.append(_new_mm(_car_mesh(paint)))
 	for paint in [Vehicles.PAINTS[0], Vehicles.PAINTS[1]]:
 		_scooter_mms.append(_new_mm(_scooter_mesh(paint)))
+	# Fleet variety (issue #269): tempo, flatbed truck, water tanker —
+	# rarer than the core flow, each still one MultiMesh per style.
+	for paint in [Vehicles.PAINTS[2], Vehicles.PAINTS[5]]:
+		_tempo_mms.append(_new_mm(_tempo_mesh(paint)))
+	for paint in [Vehicles.PAINTS[0], Vehicles.PAINTS[4]]:
+		_truck_mms.append(_new_mm(_truck_mesh(paint)))
+	_tanker_mm = _new_mm(_tanker_mesh())
 	for _i in range(COUNT):
 		_vehicles.append(_spawn())
 	# Idle exhaust (issue #166): one shared puff pool for the fleet; the
@@ -101,17 +113,29 @@ func _spawn() -> Dictionary:
 	var road := -_world / 2.0 + road_i * _pitch - (_pitch - _road_w) / 2.0
 	var dir := 1 if _rng.randf() < 0.5 else -1
 	var roll := _rng.randf()
-	var is_auto := roll < 0.55
-	var is_scooter := roll >= 0.8
 	var kind := "auto"
 	var cruise := _rng.randf_range(8.0, 11.0)
 	var mm := _auto_mm
-	if is_scooter:
-		## Issue #98: scooters zip through the lanes a touch quicker.
+	# Fleet variety (issue #269): mostly e-rickshaws and cars; a fifth of
+	# the flow is the heavy three — tempo, flatbed truck, water tanker —
+	# big, slow and each in its own register.
+	if roll >= 0.95:
+		kind = "tanker"
+		cruise = _rng.randf_range(6.0, 8.0)
+		mm = _tanker_mm
+	elif roll >= 0.90:
+		kind = "truck"
+		cruise = _rng.randf_range(6.5, 8.5)
+		mm = _truck_mms[_rng.randi_range(0, _truck_mms.size() - 1)]
+	elif roll >= 0.82:
+		kind = "tempo"
+		cruise = _rng.randf_range(9.0, 12.0)
+		mm = _tempo_mms[_rng.randi_range(0, _tempo_mms.size() - 1)]
+	elif roll >= 0.8:
 		kind = "scooter"
 		cruise = _rng.randf_range(13.0, 16.0)
 		mm = _scooter_mms[_rng.randi_range(0, _scooter_mms.size() - 1)]
-	elif not is_auto:
+	elif roll >= 0.55:
 		kind = "car"
 		cruise = _rng.randf_range(12.0, 15.0)
 		mm = _car_mms[_rng.randi_range(0, _car_mms.size() - 1)]
@@ -496,5 +520,35 @@ func _scooter_mesh(paint: Color) -> ArrayMesh:
 	Vehicles.build_scooter_body(b, paint)
 	Vehicles.add_driver(b, "scooter")
 	for spec in Vehicles.SCOOTER_WHEELS:
+		Vehicles.add_merged_wheel(b, spec)
+	return b.build_mesh()
+
+
+func _tempo_mesh(paint: Color) -> ArrayMesh:
+	## Issue #269: shared passenger tempo with its roof-rack luggage.
+	var b := MeshTools.new()
+	Vehicles.build_tempo_body(b, paint)
+	Vehicles.add_driver(b, "tempo")
+	for spec in Vehicles.TEMPO_WHEELS:
+		Vehicles.add_merged_wheel(b, spec)
+	return b.build_mesh()
+
+
+func _truck_mesh(paint: Color) -> ArrayMesh:
+	## Issue #269: flatbed truck — pipes and a tarp roll strapped on.
+	var b := MeshTools.new()
+	Vehicles.build_truck_body(b, paint)
+	Vehicles.add_driver(b, "truck")
+	for spec in Vehicles.TRUCK_WHEELS:
+		Vehicles.add_merged_wheel(b, spec)
+	return b.build_mesh()
+
+
+func _tanker_mesh() -> ArrayMesh:
+	## Issue #269: water tanker — the one-off silver drum on the street.
+	var b := MeshTools.new()
+	Vehicles.build_tanker_body(b, Vehicles.PAINTS[3])
+	Vehicles.add_driver(b, "tanker")
+	for spec in Vehicles.TANKER_WHEELS:
 		Vehicles.add_merged_wheel(b, spec)
 	return b.build_mesh()

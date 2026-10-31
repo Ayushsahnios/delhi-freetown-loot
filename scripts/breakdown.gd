@@ -40,17 +40,25 @@ var _quads: Array[MeshInstance3D] = []
 var _tick: AudioStreamPlayer3D = null
 
 
-static func build_body_mesh(van: bool, paint: Color) -> ArrayMesh:
+static func build_body_mesh(kind: String, paint: Color) -> ArrayMesh:
 	## A fleet-style body from the de-box vocabulary (issue #237) with
 	## the wheels merged in — same recipe as the traffic meshes and the
 	## ambulance, so the whole breakdown renders as one draw call plus
 	## the four hazard quads.
 	var b := MeshTools.new()
-	if van:
-		Vehicles.build_van_body(b, paint, false)
-	else:
-		Vehicles.build_hatchback_body(b, paint, false)
-	var wheels: Array = Vehicles.VAN_WHEELS if van else Vehicles.HATCH_WHEELS
+	var wheels: Array
+	match kind:
+		"van":
+			Vehicles.build_van_body(b, paint, false)
+			wheels = Vehicles.VAN_WHEELS
+		"truck":
+			# Issue #269: a laden flatbed dying at the kerb — hazards tied
+			# to the same relay blink as the vans (issue #254).
+			Vehicles.build_truck_body(b, paint)
+			wheels = Vehicles.TRUCK_WHEELS
+		_:
+			Vehicles.build_hatchback_body(b, paint, false)
+			wheels = Vehicles.HATCH_WHEELS
 	for spec in wheels:
 		Vehicles.add_merged_wheel(b, spec)
 	return b.build_mesh()
@@ -63,12 +71,18 @@ func setup(p_along_z: bool, p_road: float, p_dir: int, start_t: float,
 	dir = p_dir
 	t = start_t
 	kerb = p_kerb
-	var van := randf() < 0.4
+	# Issue #269: vans most often, sometimes a laden flatbed truck.
+	var kind_roll := randf()
+	var kind := "car"
+	if kind_roll < 0.30:
+		kind = "van"
+	elif kind_roll < 0.42:
+		kind = "truck"
 	var paint: Color = Vehicles.PAINTS[randi() % Vehicles.PAINTS.size()]
 	var body := MeshInstance3D.new()
-	body.mesh = build_body_mesh(van, paint)
+	body.mesh = build_body_mesh(kind, paint)
 	add_child(body)
-	_hazards(van)
+	_hazards(kind)
 	_tick = AudioStreamPlayer3D.new()
 	_tick.stream = AudioSynth.make_relay_click()
 	_tick.volume_db = TICK_DB
@@ -80,15 +94,22 @@ func setup(p_along_z: bool, p_road: float, p_dir: int, start_t: float,
 	_apply()
 
 
-func _hazards(van: bool) -> void:
+func _hazards(kind: String) -> void:
 	## Four amber lamp positions — at the headlamp and tail-lamp
 	## corners of whichever body was built — all four flash in unison,
 	## the hazard convention rather than an indicator pair.
-	var half_w := 1.22 if van else 1.02
-	var fz := -2.36 if van else -2.0
-	var rz := 2.12 if van else 2.0
-	var fy := 0.85 if van else 0.84
-	var ry := 1.0 if van else 0.92
+	var dims: Array = {
+		"car": [1.02, -2.0, 2.0, 0.84, 0.92],
+		"van": [1.22, -2.36, 2.12, 0.85, 1.0],
+		# Issue #269: the flatbed is longer and wider, its lamps riding
+		# high on the cab face and the tail gate.
+		"truck": [1.35, -3.45, 2.9, 1.35, 1.3],
+	}[kind]
+	var half_w: float = dims[0]
+	var fz: float = dims[1]
+	var rz: float = dims[2]
+	var fy: float = dims[3]
+	var ry: float = dims[4]
 	for corner in [
 		[Vector3(half_w, fy, fz), PI / 2.0],
 		[Vector3(-half_w, fy, fz), -PI / 2.0],
