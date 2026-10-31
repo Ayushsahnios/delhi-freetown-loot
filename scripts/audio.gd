@@ -65,6 +65,14 @@ const DOG_BARK_MIN_GAP := 22.0    # a stray barks, then the street settles
 const DOG_BARK_MAX_GAP := 65.0
 const LATE_NIGHT_THIN_DB := 3.5   # beds drop again through the small hours
 const LATE_HONK_WIDEN := 0.8      # extra distant-honk gap multiplier
+const TEMPLE_BELL_MIN_DB := -20.0  # distant mandir bell, morning window only
+const TEMPLE_BELL_MAX_DB := -14.0
+const TEMPLE_BELL_MIN_GAP := 24.0  # a strike, then the lane settles (#267)
+const TEMPLE_BELL_MAX_GAP := 70.0
+const SHANKH_DB := -18.0           # one conch swell as the window opens
+const AZAN_DB := -16.0             # one short evening call, under dialogue
+const SACRED_UNIT_M := 10.0        # inverse-distance reach, sacred voices
+const SACRED_MAX_M := 110.0        # gone well before the next district
 
 # Engine voice pack (issue #213): every drivable kind gets its own hum.
 const ENGINE_IDLE_DB := -17.0   # idling at a standstill, under every horn
@@ -133,6 +141,16 @@ var _bark_player: AudioStreamPlayer
 var _bark_cd := 45.0
 var _cricket_f := 0.0   # chirp bed gate: in after dusk, out before dawn
 var _late_f := 0.0      # deep-night gate: barks + the extra bed thinning
+var _temple_player: AudioStreamPlayer3D  # mandir lane anchor (issue #267)
+var _mosque_player: AudioStreamPlayer3D  # mosque block anchor (issue #267)
+var _bell_wav: AudioStreamWAV
+var _shankh_wav: AudioStreamWAV
+var _azan_wav: AudioStreamWAV
+var _bell_cd := 16.0
+var _day_hours := 12.0   # hour hand for the sacred windows (issue #267)
+var _shankh_done := false  # one conch swell per morning window
+var _azan_done := false    # one evening call phrase per day
+var _prev_day_frac := 0.0  # wrap detector: a day_t drop is midnight
 
 
 func setup() -> void:
@@ -229,6 +247,22 @@ func setup() -> void:
 		sp.max_distance = 80.0
 		spatial_root.add_child(sp)
 		_spatial_horns.append(sp)
+	# Sacred soundscape (issue #267): distance-attenuated one-shots on
+	# the same street bus — the mandir bell and shankh share the
+	# temple-gate anchor, the evening call sits on the mosque side.
+	_temple_player = AudioStreamPlayer3D.new()
+	_temple_player.stream = _make_temple_bell()
+	_bell_wav = _temple_player.stream
+	_shankh_wav = _make_shankh()
+	_mosque_player = AudioStreamPlayer3D.new()
+	_mosque_player.stream = _make_azan_call()
+	_azan_wav = _mosque_player.stream
+	for sacred in [_temple_player, _mosque_player]:
+		sacred.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+		sacred.unit_size = SACRED_UNIT_M
+		sacred.max_distance = SACRED_MAX_M
+		sacred.bus = "Ambient"
+		spatial_root.add_child(sacred)
 	# Street honks belong on the street bus so the settings slider and
 	# the interior muffle (issue #227) hear them too.
 	for sp in _spatial_horns:
@@ -428,6 +462,19 @@ func _process(delta: float) -> void:
 				+ linear_to_db(maxf(_cricket_f, 0.001)) \
 				- _rain_level * CRICKET_RAIN_DUCK_DB \
 				- _duck * DIALOGUE_DUCK_DB
+	_bell_cd -= delta
+	if _bell_cd <= 0.0:
+		_bell_cd = _rng.randf_range(TEMPLE_BELL_MIN_GAP, TEMPLE_BELL_MAX_GAP)
+		# The mandir bell rings sparse through the 06:00-08:00 window
+		# (issue #267), sharing the shankh's temple-gate anchor.
+		if _day_hours >= 6.0 and _day_hours < 8.0 \
+				and _temple_player != null and not _temple_player.playing:
+			_temple_player.stream = _bell_wav
+			_temple_player.volume_db = _rng.randf_range(
+					TEMPLE_BELL_MIN_DB, TEMPLE_BELL_MAX_DB) \
+					- _duck * DIALOGUE_DUCK_DB
+			_temple_player.pitch_scale = _rng.randf_range(0.94, 1.06)
+			_temple_player.play()
 	_bark_cd -= delta
 	if _bark_cd <= 0.0:
 		_bark_cd = _rng.randf_range(DOG_BARK_MIN_GAP, DOG_BARK_MAX_GAP)
@@ -508,6 +555,26 @@ func set_day(t: float) -> void:
 	_cricket_f = _night_window(hours, 19.5, 21.25, 4.75, 6.25)
 	_late_f = _night_window(hours, 21.5, 23.0, 4.5, 6.5)
 	_day_gain_db = -EVENING_DROP_DB * _night_f - LATE_NIGHT_THIN_DB * _late_f
+	# Sacred soundscape (issue #267): the hour hand drives the windows;
+	# a day_t drop is midnight, so the once-per-day flags reset with the
+	# city's clock, not the player's session.
+	_day_hours = hours
+	if t < _prev_day_frac:
+		_shankh_done = false
+		_azan_done = false
+	_prev_day_frac = t
+	if not _shankh_done and hours >= 6.1 and hours < 6.9 \
+			and _temple_player != null and not _temple_player.playing:
+		_shankh_done = true
+		_temple_player.stream = _shankh_wav
+		_temple_player.volume_db = SHANKH_DB - _duck * DIALOGUE_DUCK_DB
+		_temple_player.play()
+	if not _azan_done and hours >= 17.5 and hours < 18.5 \
+			and _mosque_player != null and not _mosque_player.playing:
+		_azan_done = true
+		_mosque_player.stream = _azan_wav
+		_mosque_player.volume_db = AZAN_DB - _duck * DIALOGUE_DUCK_DB
+		_mosque_player.play()
 
 func _night_window(hours: float, dusk_start: float, dusk_end: float,
 		dawn_start: float, dawn_end: float) -> float:
@@ -678,6 +745,9 @@ func loudness_profile() -> Array:
 		_measure("purchase_blip", _blip_player.stream, PURCHASE_BLIP_DB),
 		_measure("crickets", _cricket_player.stream, CRICKET_DB),
 		_measure("dog_bark", _bark_player.stream, DOG_BARK_MAX_DB),
+		_measure("temple_bell", _bell_wav, TEMPLE_BELL_MAX_DB),
+		_measure("shankh", _shankh_wav, SHANKH_DB),
+		_measure("azan_call", _azan_wav, AZAN_DB),
 		_measure("engine", _engine_player.stream, ENGINE_FULL_DB),
 		_measure("brake_squeal", _squeal_player.stream, BRAKE_SQUEAL_DB),
 		_measure("indicator", _indicator_player.stream, INDICATOR_DB),
@@ -1117,6 +1187,118 @@ func _make_dog_bark() -> AudioStreamWAV:
 		var sample := int(clampf(lp * 0.5, -1.0, 1.0) * 32767.0)
 		bytes.encode_s16(i * 2, sample)
 	return _wav(bytes, false)
+
+func _make_temple_bell() -> AudioStreamWAV:
+	## Single temple-bell strike (issue #267): classic inharmonic bell
+	## partials — hum, prime, tierce, quint, nominal — each ringing out
+	## at its own rate over a bright strike transient, so the small brass
+	## bell on the mandir gate reads from a lane away.
+	var dur := 3.0
+	var frames := int(MIX_RATE * dur)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	# Partial table: frequency ratio, amplitude, decay seconds.
+	var partials := [
+		[0.5, 0.30, 2.8], [1.0, 0.45, 2.3], [1.2, 0.22, 1.7],
+		[1.5, 0.20, 1.35], [2.0, 0.12, 1.0], [2.76, 0.07, 0.55],
+	]
+	var f0 := 329.63
+	var phases := []
+	phases.resize(partials.size())
+	for i in phases.size():
+		phases[i] = _rng.randf() * TAU
+	var strike := 0.0
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		var s := 0.0
+		for p in partials.size():
+			var ratio := float(partials[p][0])
+			var amp := float(partials[p][1])
+			var dec := float(partials[p][2])
+			phases[p] += TAU * f0 * ratio / MIX_RATE
+			s += sin(phases[p]) * amp * pow(maxf(1.0 - t / dec, 0.0), 1.9)
+		# Strike transient: one-pole lowpassed noise in the first 30 ms.
+		strike += (_rng.randf_range(-1.0, 1.0) - strike) * 0.55
+		if t < 0.03:
+			s += strike * 0.22 * (1.0 - t / 0.03)
+		var sample := int(clampf(s * 0.55, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+func _make_shankh() -> AudioStreamWAV:
+	## Conch-shell swell (issue #267): the morning shankh that opens the
+	## temple window — a soft, breathy B-flat with a slow swell, a gentle
+	## vibrato, and a droop as the breath runs out.
+	var dur := 3.4
+	var frames := int(MIX_RATE * dur)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var phase := 0.0
+	var breath := 0.0
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		# Pitch: steady Bb3, vibrato fading in, drooping over the tail.
+		var droop := lerpf(1.0, 0.93,
+				clampf((t - (dur - 0.45)) / 0.45, 0.0, 1.0))
+		var f := 233.08 * droop \
+				* (1.0 + 0.006 * minf(t / 1.2, 1.0) * sin(TAU * 4.7 * t))
+		phase += TAU * f / MIX_RATE
+		var env := pow(minf(t / 0.7, 1.0), 2.0) \
+				* pow(maxf(1.0 - t / dur, 0.0), 1.4)
+		var wave := sin(phase) + sin(phase * 2.0) * 0.5 \
+				+ sin(phase * 3.0) * 0.18
+		breath += (_rng.randf_range(-1.0, 1.0) - breath) * 0.16
+		wave += breath * 0.14
+		var sample := int(clampf(wave * env * 0.42, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+func _make_azan_call() -> AudioStreamWAV:
+	## Evening call phrase (issue #267): a short, respectful, fully
+	## synthesized melodic line — a soft reed-like tone gliding between
+	## five notes, rising to a held peak and settling home. Pure
+	## abstraction: no recited text, no samples; distance-attenuated at
+	## the mosque anchor and ducked under dialogue.
+	var notes := [
+		[0.00, 293.66], [1.30, 349.23], [2.90, 440.00],
+		[4.50, 392.00], [6.00, 349.23], [7.30, 293.66],
+	]
+	var dur := 8.8
+	var frames := int(MIX_RATE * dur)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var phase := 0.0
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		# Frequency curve: hold each note, glide 0.22 s into the next.
+		var f := 293.66
+		for n in notes.size():
+			var start := float(notes[n][0])
+			var freq := float(notes[n][1])
+			if t < start:
+				break
+			var glide := clampf((t - start) / 0.22, 0.0, 1.0)
+			f = freq if glide >= 1.0 or n == 0 \
+					else lerpf(float(notes[n - 1][1]), freq, glide)
+		# Vibrato fades in with the phrase and stays gentle.
+		f *= 1.0 + 0.007 * minf(t / 0.9, 1.0) * sin(TAU * 5.4 * t)
+		phase += TAU * f / MIX_RATE
+		var wave := sin(phase) + sin(phase * 2.0) * 0.28 \
+				+ sin(phase * 3.0) * 0.10
+		var env := minf(t / 0.35, 1.0) * pow(maxf(1.0 - t / dur, 0.0), 1.6)
+		var sample := int(clampf(wave * env * 0.34, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+func set_sacred_anchors(mandir: Vector3, mosque: Vector3) -> void:
+	## World anchors for the sacred voices (issue #267): the temple-gate
+	## cluster on the mandir lane, and the mosque side of the same block.
+	## Players default to the world origin until main.gd hands over the
+	## real corners, so the mix is safe even before the map exists.
+	if _temple_player != null:
+		_temple_player.global_position = mandir
+	if _mosque_player != null:
+		_mosque_player.global_position = mosque
 
 func _make_engine_voice() -> AudioStreamWAV:
 	## Loopable engine hum (issue #213): a 55 Hz crank voice — sawtooth

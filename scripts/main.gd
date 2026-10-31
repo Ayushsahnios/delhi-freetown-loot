@@ -308,6 +308,15 @@ func _ready() -> void:
 	add_child(_audio)
 	_audio.setup()
 	_audio.register_world(_food, _traffic)
+	# Sacred soundscape anchors (issue #267): the mandir voices sit at
+	# the Purani Dilli temple gate — the same corner the shrine and gate
+	# dressing occupy — and the evening call comes from the block's far
+	# side, matching the block-center convention of the dressing slices.
+	var pd_anchor := Vector2(-WORLD / 2.0 + 3 * PITCH + ROAD / 2.0,
+			-WORLD / 2.0 + 7 * PITCH + ROAD / 2.0)
+	_audio.set_sacred_anchors(
+			Vector3(pd_anchor.x - 8.0, 2.5, pd_anchor.y + 2.0),
+			Vector3(pd_anchor.x + 10.0, 2.5, pd_anchor.y - 8.0))
 	_radio = RadioScript.new()
 	add_child(_radio)
 	_radio.setup()
