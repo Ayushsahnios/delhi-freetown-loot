@@ -467,9 +467,10 @@ func _build_catenary(b: MeshTools) -> void:
 
 
 func _build_lights() -> void:
-	## Two warm platform lamps under the canopy (fixed, like the metro
-	## gates) so the station reads at night.
-	for zz in [-8.0, 6.0]:
+	## Three warm platform lamps under the canopy (fixed, like the metro
+	## gates) so the station reads at night — even 7 m spacing across
+	## the platform (issue #265 lamp evenness check).
+	for zz in [-8.0, -1.0, 6.0]:
 		var lamp := OmniLight3D.new()
 		lamp.position = Vector3(-6.75, 4.2, zz)
 		lamp.light_color = Color(1.0, 0.85, 0.6)
