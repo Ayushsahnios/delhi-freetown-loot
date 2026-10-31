@@ -52,6 +52,7 @@ const CityDressingScript := preload("res://scripts/city_dressing.gd")
 const SignageScript := preload("res://scripts/signage.gd")
 const DelhiDressing3Script := preload("res://scripts/delhi_dressing3.gd")
 const Interiors3Script := preload("res://scripts/interiors3.gd")
+const Interiors2Script := preload("res://scripts/interiors2.gd")
 const ClutterScript := preload("res://scripts/world_clutter.gd")
 const MetroScript := preload("res://scripts/metro.gd")
 const RailwayScript := preload("res://scripts/railway.gd")
@@ -139,6 +140,7 @@ var _waypoint := Vector3.INF
 var _food: Node
 var _interiors: Node
 var _interiors3: Node
+var _interiors2: Node
 var _wardrobe: WardrobeScript
 var _taxi: Node
 var _courier: Node
@@ -252,6 +254,15 @@ func _ready() -> void:
 	_interiors3 = Interiors3Script.new()
 	add_child(_interiors3)
 	_interiors3.setup(WORLD, PITCH, ROAD, _food)
+	# Walk-in interiors slice 2 (issue #206): kirana general store at the
+	# Connaught Place block edge, walk-in paan shop by the thana plaza
+	# and a pavement bookstore at the park corner — water/biscuit and
+	# paan/soda counter service, free shelf browsing, and the paan
+	# counter joins the [B] bribe network.
+	_interiors2 = Interiors2Script.new()
+	add_child(_interiors2)
+	_interiors2.setup(WORLD, PITCH, ROAD, _food)
+	_paan_shops.append(_interiors2.paan_shop_position())
 	_taxi = TaxiScript.new()
 	add_child(_taxi)
 	_taxi.setup(_landmarks)
@@ -523,6 +534,10 @@ func _build_city() -> void:
 	# Interiors slice 3 geometry (issue #224): chemist shop + dhaba nook,
 	# de-boxed vocabulary (chamfered prisms, lathe props, arc-shell roof).
 	_add_static(Interiors3Script.build(WORLD, PITCH, ROAD), LodScript.MID)
+	# Interiors slice 2 geometry (issue #206): kirana + paan shop +
+	# bookstore, same de-boxed vocabulary (chamfered prisms, beveled
+	# counters, lathe props, arc-shell awnings).
+	_add_static(Interiors2Script.build(WORLD, PITCH, ROAD), LodScript.MID)
 	# Bilingual signage (issue #131): Devanagari + English boards at
 	# the bazaar, Purani Dilli, the thana and landmark approaches.
 	_add_static(SignageScript.build(WORLD, PITCH, ROAD), LodScript.SMALL)
@@ -1737,6 +1752,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_wardrobe.register(player, _missions, _audio, Callable(self, "_autosave_silent"))
 	_interiors.register(player, _audio)
 	_interiors3.register(player, _audio)
+	_interiors2.register(player, _audio)
 	_taxi.register(player, _missions)
 	_courier.register(player, _missions)
 	_photo = PhotoScript.new()
