@@ -79,6 +79,11 @@ const ENGINE_IDLE_DB := -17.0   # idling at a standstill, under every horn
 const ENGINE_FULL_DB := -11.0   # flat out on the open stretch
 const ENGINE_REV_BUMP := 0.16   # pitch overshoot while flooring it
 const ENGINE_PITCH := {         # per kind: idle -> flat-out pitch_scale
+	# Issue #269: the heavy three idle deep and never wind far — the
+	# tanker is the lowest voice on the street.
+	"tanker": [0.5, 0.95],
+	"truck": [0.55, 1.0],
+	"tempo": [0.72, 1.3],
 	"van": [0.82, 1.5],
 	"car": [0.95, 1.75],
 	"auto": [1.05, 1.95],
@@ -235,6 +240,12 @@ func setup() -> void:
 	_horn_voices["van"] = _horn_voices["car"]  # van shares the car voice,
 	# pitched down at play time so it reads heavier.
 	_horn_voices["scooter"] = _make_scooter_horn()
+	# Issue #269: the heavy three speak from the existing packs — the
+	# tempo takes the rickshaw two-tone a step down, the truck and
+	# tanker blast the car horn from the basement, played slow.
+	_horn_voices["tempo"] = _horn_voices["auto"]
+	_horn_voices["truck"] = _horn_voices["car"]
+	_horn_voices["tanker"] = _horn_voices["car"]
 	# Reactive street horns (issue #165): one-shot 3D players positioned
 	# at the actual honking auto, so panning and distance come free.
 	var spatial_root := Node3D.new()
@@ -285,7 +296,10 @@ func horn(kind := "auto") -> void:
 	if _horn_player == null:
 		return
 	_horn_player.stream = _horn_voices.get(kind, _horn_voices["auto"])
-	_horn_player.pitch_scale = 0.85 if kind == "van" \
+	_horn_player.pitch_scale = 0.72 if kind == "tanker" \
+			else 0.78 if kind == "truck" \
+			else 0.9 if kind == "tempo" \
+			else 0.85 if kind == "van" \
 			else _rng.randf_range(0.96, 1.04)
 	_horn_player.play()
 
@@ -495,11 +509,19 @@ func _process(delta: float) -> void:
 		p.volume_db = _rng.randf_range(DISTANT_MIN_DB, DISTANT_MAX_DB) \
 				- _duck * DIALOGUE_DUCK_DB
 		p.pitch_scale = _rng.randf_range(0.55, 0.85)
-		# Phantom traffic takes turns on all three voices (issue #187):
-		# mostly the e-rickshaw fleet, sometimes a car or a scooter.
+		# Phantom traffic takes turns on the voices (issue #187): mostly
+		# the e-rickshaw fleet, sometimes a car or a scooter, and now a
+		# far-off heavy-truck groan (issue #269) pitched into the floor.
 		var roll := _rng.randf()
-		p.stream = _horn_voices["car"] if roll > 0.85 else \
-				_horn_voices["scooter"] if roll > 0.75 else _horn_voices["auto"]
+		if roll > 0.92:
+			p.stream = _horn_voices["truck"]
+			p.pitch_scale = _rng.randf_range(0.4, 0.55)
+		elif roll > 0.85:
+			p.stream = _horn_voices["car"]
+		elif roll > 0.75:
+			p.stream = _horn_voices["scooter"]
+		else:
+			p.stream = _horn_voices["auto"]
 		p.play()
 		break
 

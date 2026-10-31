@@ -1,7 +1,8 @@
 extends Node
 ## Vehicle polish check (issue #166) — headless gate for the fleet
 ## refresh: spoked wheels with a tread band, the matte/gloss material
-## split, the dusk lamp-glow curve, and per-kind exhaust offsets.
+## split, the dusk lamp-glow curve, per-kind exhaust offsets, and
+## the issue #269 heavy-three meshes (surfaces, gloss, tri counts).
 ## Usage:
 ##   godot --headless --path . res://scenes/vehicle_check.tscn
 ## Exits 0 when everything passes, 2 with a FAILED report otherwise.
@@ -47,12 +48,40 @@ func _ready() -> void:
 				% [head.emission_energy_multiplier, tail.emission_energy_multiplier])
 
 	# 4. Exhaust offsets exist for every fleet kind.
-	for kind in ["auto", "car", "van", "scooter"]:
+	for kind in ["auto", "car", "van", "scooter", "tempo", "truck", "tanker"]:
 		if not Vehicles.EXHAUST_POS.has(kind):
 			problems.append("no exhaust offset for kind " + kind)
 
+	# 5. Issue #269 heavy fleet: tempo / truck / tanker build with a
+	# gloss paint surface and report triangle counts for the de-box
+	# budget (published in the PR body).
+	for kind in ["tempo", "truck", "tanker"]:
+		var hb := MeshTools.new()
+		if kind == "tempo":
+			Vehicles.build_tempo_body(hb, Vehicles.PAINTS[2])
+		elif kind == "truck":
+			Vehicles.build_truck_body(hb, Vehicles.PAINTS[0])
+		else:
+			Vehicles.build_tanker_body(hb, Vehicles.PAINTS[3])
+		var hmesh := hb.build_mesh()
+		if hmesh.get_surface_count() < 3:
+			problems.append("heavy kind %s mesh has %d surfaces — expected ≥ 3"
+					% [kind, hmesh.get_surface_count()])
+		var heavy_gloss := false
+		var tris := 0
+		for i in hmesh.get_surface_count():
+			var m: StandardMaterial3D = hmesh.surface_get_material(i)
+			if m != null and m.clearcoat_enabled:
+				heavy_gloss = true
+			var idx = hmesh.surface_get_arrays(i)[Mesh.ARRAY_INDEX]
+			if idx != null:
+				tris += int(idx.size() / 3.0)
+		if not heavy_gloss:
+			problems.append("heavy kind " + kind + " has no clearcoat gloss surface")
+		print("heavy %s: %d surfaces, %d tris" % [kind, hmesh.get_surface_count(), tris])
+
 	if problems.is_empty():
-		print("VEHICLE CHECK PASS — tread+spoke wheels, gloss split, dusk lamp glow, exhaust offsets")
+		print("VEHICLE CHECK PASS — wheels, gloss split, lamp glow, exhaust offsets, heavy fleet")
 		get_tree().quit(0)
 	else:
 		for p in problems:
