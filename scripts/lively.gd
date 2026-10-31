@@ -29,6 +29,11 @@ var talking := false
 ## Force the phone idle regardless of the seed roll.
 var phone_override := false
 
+## Rest stoop (radians, head-down pitch plus a slight forward lean) —
+## issue #222 elders and ragpickers. Composes on the captured base
+## pose like every other write, so recycled walkers never drift.
+var stoop := 0.0
+
 var _skel: Skeleton3D = null
 var _model: Node3D = null
 var _holder: Node3D = null
@@ -86,20 +91,23 @@ func _process_modification(delta: float = 0.0) -> void:
 	if talking:
 		pitch += pow(sin(_t * 2.3 + _p4), 3.0) * 0.09 + 0.02
 		yaw += sin(_t * 1.7 + _p1) * 0.045
+	if stoop > 0.001:
+		pitch += stoop  # neck share rides along with the neck write below
 	if _skel != null and is_instance_valid(_skel):
 		if _head >= 0:
 			_skel.set_bone_pose_rotation(_head,
 					_base_head * Quaternion.from_euler(Vector3(pitch, yaw, roll)))
 		if _neck >= 0:
 			_skel.set_bone_pose_rotation(_neck, _base_neck
-					* Quaternion.from_euler(Vector3(pitch * 0.45, yaw * 0.45, roll * 0.4)))
+					* Quaternion.from_euler(Vector3(
+							pitch * 0.45 + stoop * 0.25, yaw * 0.45, roll * 0.4)))
 	# --- model node: weight shift, turn bank, speed lean ---
 	if _model != null and is_instance_valid(_model):
 		var sway := 0.0
 		if mode == 0 and _speed_sm < 0.25:
 			sway = sin(_t * 0.42 + _p2) * 0.022
 		var bank := clampf(-_yawrate_sm * 0.35, -0.16, 0.16)
-		_model.rotation = _base_rot + Vector3(-lean, 0.0, sway + bank)
+		_model.rotation = _base_rot + Vector3(-lean - stoop * 0.45, 0.0, sway + bank)
 
 
 ## One-time hookup: bones, base poses, seeded wander parameters. Returns

@@ -60,6 +60,19 @@ const BENCH_NEAR := 8.5        ## near a shelter bay, bench idling wins
 const BENCH_MIN := 12.0        ## bench linger length (s, after arriving)
 const BENCH_MAX := 26.0
 const BENCH_APPROACH := 1.5     ## amble speed over to the bench (m/s)
+# Age + street characters (issue #222): children stroll beside adults
+# (pair followers on a quicker clip cycle), elders amble stooped with a
+# cane, and three street silhouettes join the flow — the lathi
+# watchman, the jute-sack ragpicker, the head-porter produce stack.
+const KID_SHARE := 0.09         ## walkers that are children
+const KID_FLOOR := 0.92         ## child height floor (m); band 1.02-1.16
+const KID_MIN := 1.02
+const KID_MAX := 1.16
+const KID_STRIDE := 1.38        ## quicker clip cycle: faster arm swing
+const ELDER_SHARE := 0.14       ## elders: slow stooped amble, cane
+const CHOWKIDAR_SHARE := 0.05   ## watchman walking rounds with a lathi
+const RAGPICKER_SHARE := 0.04   ## jute-sack carrier, deep stoop
+const SABZI_SHARE := 0.04       ## sabzi-wala head-porting the produce stack
 const ROAD_Y := 0.08  ## asphalt surface height (roads.gd ROAD_Y)
 const WALK_H := 0.14  ## sidewalk top height (roads.gd CURB_H)
 const WALK_W := 2.2   ## sidewalk band width (roads.gd WALK_TILE)
@@ -117,16 +130,41 @@ func _pair_up() -> void:
 		var b: Dictionary = _peds[leader_i + 1]
 		a["pair"] = leader_i + 1
 		b["pair"] = leader_i
-		b["lead"] = false
-		b["side"] = 1.0 if _rng.randf() < 0.5 else -1.0
-		b["rank"] = a["rank"]
-		a["phone"] = false
-		b["phone"] = false
-		for m in [a, b]:
-			var rig: Node = _chars.lively(m["node"])
-			if rig != null:
-				rig.phone_override = false
-				rig.talking = true
+		_pair_mates(a, b)
+	# Issue #222: children walk beside adults — attach each kid as a
+	# pair follower of a free adult, so the small silhouette always
+	# strolls alongside its grown-up.
+	var attached := 0
+	for k in _peds.size():
+		if attached >= 4 or _peds[k]["age"] != "kid" or _peds[k]["pair"] >= 0:
+			continue
+		var li := -1
+		for i in _peds.size():
+			if i != k and _peds[i]["age"] == "adult" and _peds[i]["pair"] < 0:
+				li = i
+				break
+		if li < 0:
+			break
+		_peds[li]["pair"] = k
+		_peds[k]["pair"] = li
+		_pair_mates(_peds[li], _peds[k])
+		attached += 1
+
+
+func _pair_mates(a: Dictionary, b: Dictionary) -> void:
+	## Follower setup shared by chat pairs and kid escorts (issues #217
+	## and #222): the follower mirrors its leader (lead flag, side,
+	## rank, no phone) and both keep talking accents while strolling.
+	b["lead"] = false
+	b["side"] = 1.0 if _rng.randf() < 0.5 else -1.0
+	b["rank"] = a["rank"]
+	a["phone"] = false
+	b["phone"] = false
+	for m in [a, b]:
+		var rig: Node = _chars.lively(m["node"])
+		if rig != null:
+			rig.phone_override = false
+			rig.talking = true
 
 
 func set_crowd_zone(center: Vector3, radius: float) -> void:
@@ -200,6 +238,8 @@ func station_hawkers(spots: Array) -> void:
 			continue
 		if v["pair"] >= 0:
 			continue  # chatting pairs stay strollers; a stall is a solo post
+		if v["age"] != "adult":
+			continue  # kids/elders/street characters keep their walk (issue #222)
 		v["hawker"] = {"pos": spot["pos"], "face": spot["face"]}
 		v["phone"] = false
 		v["pause"] = 0.0
@@ -224,10 +264,17 @@ func street_debug() -> Dictionary:
 	## walkers are in each street-behavior state right now (issues #207
 	## and #217).
 	var out := {"phone": 0, "hawker": 0, "window": 0, "paan": 0, "strolling": 0,
-			"pair": 0, "bench": 0}
+			"pair": 0, "bench": 0, "kid": 0, "elder": 0, "street": 0}
 	for v in _peds:
 		if not v.visible:
 			continue
+		match v["age"]:
+			"kid":
+				out["kid"] += 1
+			"elder":
+				out["elder"] += 1
+			"chowkidar", "ragpicker", "sabzi":
+				out["street"] += 1
 		if not v["hawker"].is_empty():
 			out["hawker"] += 1
 		elif v["pause"] > 0.0:
@@ -633,7 +680,19 @@ func _place(v: Dictionary) -> void:
 
 
 func _roll_speed(v: Dictionary) -> float:
-	## Phone walkers amble (heads down, no urgency); everyone else strolls.
+	## Phone walkers amble (heads down, no urgency); everyone else
+	## strolls. Age rolls (issue #222): elders and the lathi watchman
+	## dawdle their rounds, kids hurry on short legs, the ragpicker
+	## shuffles, and the produce porter keeps the stack steady.
+	match v["age"]:
+		"elder", "chowkidar":
+			return _rng.randf_range(1.35, 1.9)
+		"kid":
+			return _rng.randf_range(2.5, 3.2)
+		"ragpicker":
+			return _rng.randf_range(1.7, 2.3)
+		"sabzi":
+			return _rng.randf_range(1.9, 2.4)
 	return _rng.randf_range(PHONE_MIN, PHONE_MAX) if v.phone \
 			else _rng.randf_range(WALK_MIN, WALK_MAX)
 
@@ -765,7 +824,10 @@ func _animate(v: Dictionary) -> void:
 	elif v.pause > 0.0:
 		_chars.play(v.anims, v.ap, "idle", 0.8)
 	else:
-		_chars.play(v.anims, v.ap, "walk", v.speed / WALK_CLIP_SPEED)
+		# Kids run a quicker clip cycle (issue #222): short strides and a
+		# faster arm swing beside their adult.
+		_chars.play(v.anims, v.ap, "walk",
+				v.speed / WALK_CLIP_SPEED * float(v["stride"]))
 
 
 func _hide_ped(v: Dictionary) -> void:
@@ -788,6 +850,7 @@ func _new_ped(zone: bool) -> Dictionary:
 		"rejoin": 0.0, "cd": 0.0, "phase": _rng.randf() * TAU,
 		"zone": zone, "node": null, "ap": null, "anims": {}, "id": {},
 		"phone": false, "pause": 0.0, "pkind": "", "pcd": 0.0, "hawker": {},
+		"age": "adult", "stride": 1.0,
 		"pair": -1, "lead": true, "side": 1.0, "bseat": null,
 		"barrived": false, "bgo": Vector3.ZERO,
 	}
@@ -810,7 +873,30 @@ func _dress(v: Dictionary) -> void:
 	var female := pick < MODELS.size() - 1
 	var id: Dictionary = Chars.identity(_rng.randi(), female)
 	v["id"] = id
-	var node := _chars.spawn(path, PED_HEIGHT * float(id["height"]))
+	# Age + street-character roll (issue #222) runs before the spawn so
+	# children can drop the height floor, and before the phone roll so
+	# the age silhouettes stay readable.
+	var age := "adult"
+	var want := PED_HEIGHT * float(id["height"])
+	var floor_h := Chars.HEIGHT_MIN
+	var roll := _rng.randf()
+	if roll < KID_SHARE:
+		age = "kid"
+		want = _rng.randf_range(KID_MIN, KID_MAX)
+		floor_h = KID_FLOOR
+	elif roll < KID_SHARE + ELDER_SHARE:
+		age = "elder"
+		want *= 0.95
+		id["hair"] = (id["hair"] as Color).lerp(Chars.HAIR_GREY, 0.55)
+	elif roll < KID_SHARE + ELDER_SHARE + CHOWKIDAR_SHARE:
+		age = "chowkidar"
+	elif roll < KID_SHARE + ELDER_SHARE + CHOWKIDAR_SHARE + RAGPICKER_SHARE:
+		age = "ragpicker"
+	elif roll < KID_SHARE + ELDER_SHARE + CHOWKIDAR_SHARE + RAGPICKER_SHARE \
+				+ SABZI_SHARE:
+		age = "sabzi"
+	v["age"] = age
+	var node := _chars.spawn(path, want, floor_h)
 	ShadowBlob.attach(node, 0.48)
 	_chars.dress(node, id)
 	add_child(node)
@@ -819,9 +905,28 @@ func _dress(v: Dictionary) -> void:
 	v.ap = _chars.get_player(node)
 	v.anims = _chars.anim_names(node)
 	# Street behavior roll (issue #207): this walker's head stays in a
-	# phone — slower amble and the head-down LivelyRig phone pose.
-	v["phone"] = _rng.randf() < PHONE_SHARE
-	if v["phone"]:
-		var rig: Node = _chars.lively(node)
-		if rig != null:
+	# phone — slower amble and the head-down LivelyRig phone pose. Only
+	# plain adults take it (issue #222): kids, elders and street
+	# characters keep a clean silhouette.
+	var rig: Node = _chars.lively(node)
+	if age != "adult":
+		v["phone"] = false
+		match age:
+			"kid":
+				v["stride"] = KID_STRIDE
+			"elder":
+				_chars.attach_walk_prop(node, "cane")
+				if rig != null:
+					rig.stoop = _rng.randf_range(0.10, 0.20)
+			"chowkidar":
+				_chars.attach_walk_prop(node, "lathi")
+			"ragpicker":
+				_chars.attach_walk_prop(node, "sack")
+				if rig != null:
+					rig.stoop = _rng.randf_range(0.14, 0.22)
+			"sabzi":
+				_chars.attach_produce_crate(node)
+	else:
+		v["phone"] = _rng.randf() < PHONE_SHARE
+		if v["phone"] and rig != null:
 			rig.phone_override = true

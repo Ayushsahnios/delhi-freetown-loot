@@ -44,17 +44,18 @@ static var _basis_cache := {}
 ## that steer the holder's global transform directly (the pedestrian
 ## recycler sets it every physics frame) would wipe a holder-side flip
 ## and make every walker glide backwards.
-func spawn(path: String, height: float) -> Node3D:
+func spawn(path: String, height: float, min_h := HEIGHT_MIN) -> Node3D:
 	var ps: PackedScene = load(path)
 	if ps == null:
 		push_error("character model missing: " + path)
 		return null
 	var model: Node3D = ps.instantiate()
-	# Issue 128: clamp the request into the human height band, then
-	# correct the scale against the model's TRUE rendered height — the
-	# bone/visual basis is only a first guess, so a variant whose basis
-	# misfires (tiny authoring units, padded spans) cannot sneak through.
-	var target := clampf(height, HEIGHT_MIN, HEIGHT_MAX)
+	# Issue 128: clamp the request into the height band, then correct the
+	# scale against the model's TRUE rendered height — the bone/visual
+	# basis is only a first guess, so a variant whose basis misfires
+	# (tiny authoring units, padded spans) cannot sneak through. Issue
+	# 222: callers may lower the floor (children spawn ~1.0-1.15 m).
+	var target := clampf(height, min_h, HEIGHT_MAX)
 	var basis := _size_basis(model)
 	if basis > 0.001:
 		model.scale = Vector3.ONE * (target / basis)
@@ -703,6 +704,126 @@ func _held_mesh(parent: Node3D, mesh: PrimitiveMesh, mat: StandardMaterial3D,
 	mi.material_override = mat
 	mi.transform = desired
 	parent.add_child(mi)
+
+
+## ------------------------------------------------------------------ street props
+
+## Age + street-character props (issue #222): elder cane, chowkidar
+## lathi, ragpicker jute sack, sabzi-wala produce crate. Holder-fixed
+## primitives in world units off the rendered height — the wardrobe
+## skirt pattern (bone space proved unreliable across the mixed rigs,
+## issue #82). De-box directive: cylinders, spheres, capsules and
+## rings only, no new flat-face boxes.
+const WOOD_DARK := Color(0.16, 0.10, 0.06)
+const BAMBOO := Color(0.62, 0.52, 0.32)
+const JUTE := Color(0.62, 0.52, 0.36)
+const LEAF_GREEN := Color(0.16, 0.42, 0.14)
+const TOMATO := Color(0.68, 0.16, 0.10)
+const POTATO := Color(0.72, 0.55, 0.30)
+
+func attach_walk_prop(holder: Node3D, kind: String) -> void:
+	## One readable silhouette prop at the walker's side or back:
+	## "cane" (elder), "lathi" (chowkidar watchman), "sack" (ragpicker).
+	if holder.get_child_count() == 0:
+		return
+	var model: Node3D = holder.get_child(0)
+	var h := _visual_height(model) * model.scale.y
+	if h <= 0.1:
+		return
+	var gear := Node3D.new()
+	gear.name = "PropGear"
+	holder.add_child(gear)
+	match kind:
+		"cane":
+			var stick := CylinderMesh.new()
+			stick.top_radius = 0.013
+			stick.bottom_radius = 0.016
+			stick.height = 0.52 * h
+			stick.radial_segments = 10
+			_held_mesh(gear, stick, _solid(WOOD_DARK), Transform3D(
+					Basis(Vector3(1.0, 0.0, 0.0), 0.10),
+					Vector3(0.13 * h, 0.26 * h, 0.03 * h)))
+			var knob := SphereMesh.new()
+			knob.radius = 0.022
+			knob.height = 0.044
+			_held_mesh(gear, knob, _solid(WOOD_DARK), Transform3D(Basis(),
+					Vector3(0.18 * h, 0.51 * h, 0.08 * h)))
+		"lathi":
+			var rod := CylinderMesh.new()
+			rod.top_radius = 0.015
+			rod.bottom_radius = 0.019
+			rod.height = 0.92 * h
+			rod.radial_segments = 10
+			_held_mesh(gear, rod, _solid(BAMBOO), Transform3D(
+					Basis(Vector3(1.0, 0.0, 0.0), 0.06),
+					Vector3(0.15 * h, 0.46 * h, 0.0)))
+		"sack":
+			var bag := CapsuleMesh.new()
+			bag.radius = 0.085
+			bag.height = 0.40
+			_held_mesh(gear, bag, _wrap_mat(JUTE), Transform3D(
+					Basis(Vector3(1.0, 0.0, 0.0), -0.55)
+						* Basis().scaled(Vector3(1.0, 1.0, 0.72)),
+					Vector3(-0.02 * h, 0.62 * h, 0.14 * h)))
+			var neck := CylinderMesh.new()
+			neck.top_radius = 0.030
+			neck.bottom_radius = 0.045
+			neck.height = 0.09
+			_held_mesh(gear, neck, _wrap_mat(JUTE.darkened(0.15)),
+					Transform3D(Basis(Vector3(1.0, 0.0, 0.0), -0.55),
+						Vector3(-0.02 * h, 0.80 * h, 0.21 * h)))
+
+
+func attach_produce_crate(holder: Node3D) -> Node3D:
+	## Sabzi-wala produce stack (issue #222): a woven basket heaped with
+	## vegetables, balanced on the head porter-style while walking —
+	## pedestrians.gd moves it to the ground beside the stall when the
+	## vendor holds a post. Returns the crate node (null on unusable
+	## rigs). Spheres, cylinders and one rim ring — no boxes.
+	if holder.get_child_count() == 0:
+		return null
+	var model: Node3D = holder.get_child(0)
+	var h := _visual_height(model) * model.scale.y
+	if h <= 0.1:
+		return null
+	var crate := Node3D.new()
+	crate.name = "ProduceCrate"
+	holder.add_child(crate)
+	var basket := CylinderMesh.new()
+	basket.top_radius = 0.13
+	basket.bottom_radius = 0.105
+	basket.height = 0.14
+	basket.radial_segments = 14
+	_held_mesh(crate, basket, _wrap_mat(JUTE.darkened(0.2)),
+			Transform3D(Basis(), Vector3(0.0, 0.07, 0.0)))
+	var rim := TorusMesh.new()
+	rim.inner_radius = 0.115
+	rim.outer_radius = 0.135
+	rim.rings = 24
+	rim.ring_segments = 8
+	_held_mesh(crate, rim, _wrap_mat(JUTE),
+			Transform3D(Basis(), Vector3(0.0, 0.135, 0.0)))
+	var heap := [
+		{"c": LEAF_GREEN, "p": Vector3(0.055, 0.165, 0.03), "r": 0.048},
+		{"c": LEAF_GREEN, "p": Vector3(-0.05, 0.165, -0.035), "r": 0.044},
+		{"c": TOMATO, "p": Vector3(0.0, 0.17, -0.05), "r": 0.038},
+		{"c": TOMATO, "p": Vector3(0.06, 0.17, -0.02), "r": 0.036},
+		{"c": TOMATO, "p": Vector3(-0.035, 0.175, 0.045), "r": 0.037},
+		{"c": POTATO, "p": Vector3(0.01, 0.18, 0.06), "r": 0.042},
+		{"c": POTATO, "p": Vector3(-0.055, 0.18, 0.0), "r": 0.040},
+	]
+	for f in heap:
+		var s := SphereMesh.new()
+		s.radius = float(f["r"])
+		s.height = float(f["r"]) * 2.0
+		s.radial_segments = 10
+		s.rings = 6
+		_held_mesh(crate, s, _solid(f["c"]),
+				Transform3D(Basis(), f["p"]))
+	# Head-carry rest pose (porter-stack height); repositioned by the
+	# caller when the vendor pins to a stall.
+	crate.position = Vector3(0.0, 0.945 * h, 0.0)
+	return crate
 
 
 ## Chest-bone rig for torso kit: finds the upper spine bone (the male
