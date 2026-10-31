@@ -23,6 +23,7 @@ extends Node
 
 const MAIN_SCENE := preload("res://scenes/main.tscn")
 const LodScript := preload("res://scripts/lod.gd")
+const QualityScript := preload("res://scripts/quality.gd")
 const DEFAULT_BUDGET_MS := 22.0
 
 
@@ -43,6 +44,12 @@ func _ready() -> void:
 			budget = float(args[i + 1])
 		elif a == "--no-lod":
 			LodScript.disabled = true
+		elif a == "--quality" and i + 1 < args.size():
+			# Preset override (issue 270): the gate must measure an exact
+			# preset, so LOW/HIGH is forced at boot regardless of any saved
+			# user://settings.json on the machine running the gate.
+			var q := String(args[i + 1]).to_lower()
+			QualityScript.force_mode = q if q in ["low", "high"] else ""
 		elif a == "--tp" and i + 1 < args.size():
 			var bits: PackedStringArray = args[i + 1].split(",")
 			if bits.size() == 2:

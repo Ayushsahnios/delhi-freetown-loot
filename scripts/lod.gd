@@ -27,6 +27,11 @@ const MARGIN := 0.12
 ## baseline (untiered) frame cost can be measured on the same binary.
 static var disabled := false
 
+## Draw-distance multiplier (issue 270): the LOW graphics preset boots
+## the city at 0.55x tiers. Set before the world build; runtime preset
+## switches go through rescale() instead.
+static var tier_scale := 1.0
+
 
 static func tier(root: Node, end_m: float) -> int:
 	## Give every GeometryInstance3D under `root` (that does not already
@@ -43,10 +48,40 @@ static func _walk(node: Node, end_m: float) -> int:
 	var count := 0
 	var gi := node as GeometryInstance3D
 	if gi != null and gi.visibility_range_end <= 0.0:
-		gi.visibility_range_end = end_m
-		gi.visibility_range_end_margin = end_m * MARGIN
+		var end := end_m * tier_scale
+		gi.visibility_range_end = end
+		gi.visibility_range_end_margin = end * MARGIN
 		gi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+		gi.set_meta("lod_end_base", end_m)
 		count += 1
 	for child in node.get_children():
 		count += _walk(child, end_m)
+	return count
+
+
+static func rescale(root: Node, scale: float) -> int:
+	## Runtime preset switch (issue 270): re-tier everything this script
+	## originally tiered, from the stashed base distance x `scale`.
+	## Untiered geometry (landmarks, roads, sky) and ranges set by other
+	## systems (no lod_end_base meta) are left untouched — a LOW->HIGH
+	## round trip therefore restores exact HIGH values, no drift.
+	if disabled or root == null:
+		return 0
+	var count := 0
+	for child in root.get_children():
+		count += _rescale_walk(child, scale)
+	return count
+
+
+static func _rescale_walk(node: Node, scale: float) -> int:
+	var count := 0
+	var gi := node as GeometryInstance3D
+	if gi != null and gi.has_meta("lod_end_base"):
+		var base: float = gi.get_meta("lod_end_base")
+		var end := base * scale
+		gi.visibility_range_end = end
+		gi.visibility_range_end_margin = end * MARGIN
+		count += 1
+	for child in node.get_children():
+		count += _rescale_walk(child, scale)
 	return count
