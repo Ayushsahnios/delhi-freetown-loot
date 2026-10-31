@@ -59,11 +59,13 @@ const TaxiScript := preload("res://scripts/taxi.gd")
 const CourierScript := preload("res://scripts/courier.gd")
 const FacadesScript := preload("res://scripts/facades.gd")
 const PhotoScript := preload("res://scripts/photo.gd")
+const WildlifeScript := preload("res://scripts/wildlife.gd")
 
 ## Rideable metro shuttle (issue #98 part 2): boarding state, queued
 ## boarding while the train is en route, and the interior-cam anchors.
 var _metro: MetroScript = null
 var _railway: RailwayScript = null
+var _wildlife: WildlifeScript = null
 var _metro_riding := false
 var _metro_wait := -1
 var _metro_board_idx := -1
@@ -628,6 +630,15 @@ func _build_city() -> void:
 			func(): _show_toast("Passenger train arriving — New Delhi platform"))
 	_railway.departed.connect(
 			func(): _show_toast("Passenger train departing — stand clear"))
+
+	# Animal life (issue #208): three strays sunbathing and trotting
+	# between the bazaar stall rows, plus a macaque troop holding the
+	# station roof ledges — static sitters with the odd hop, no
+	# aggression, fixed beats only.
+	_wildlife = WildlifeScript.new()
+	add_child(_wildlife)
+	_wildlife.setup_dogs(_hawker_spots)
+	_wildlife.setup_monkeys(_block_center(5, 0))
 
 	# Commit: one merged mesh per district, one MultiMesh per repeated prop.
 	for key in _districts:
@@ -1696,6 +1707,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_traffic.register_player(player)
 	_monsoon.register_player(player)
 	_peds.register_player(player)
+	_wildlife.register_player(player)
 	_police = PoliceScript.new()
 	add_child(_police)
 	_police.setup(WORLD, PITCH, ROAD, GRID + 1)
