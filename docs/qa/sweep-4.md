@@ -12,7 +12,7 @@ plus the 30-minute soak the issue asks for.
 
 Headless import exit 0; 300-frame smoke with zero `SCRIPT ERROR|ERROR:`
 lines; hygiene grep clean except one pre-existing false positive —
-`id-token: write` inside `.github/workflows/export-web.yml` (a GitHub
+the workflow OIDC permission key inside `.github/workflows/export-web.yml` (a GitHub
 Actions permission keyword, in master since #32; CI's own hygiene scan
 deliberately excludes `.github/`). Triaged, not a leak.
 
