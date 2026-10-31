@@ -117,6 +117,9 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 		[Vector3(1.0, 0.7, 1.0), Vector3(dx + 0.4, 0, dz - 1.3)],
 		[Vector3(0.9, 0.95, 1.8), Vector3(dx + 1.55, 0, dz - 0.1)],
 		[Vector3(1.9, 0.55, 0.9), Vector3(dx + 0.4, 0, dz + 1.0)],
+		# Seating nook (issue #218): second charpai + round table + stools.
+		[Vector3(1.75, 0.6, 0.8), Vector3(dx - 0.95, 0, dz + 0.15)],
+		[Vector3(1.6, 0.7, 1.7), Vector3(dx - 1.2, 0, dz + 1.7)],
 		# Temple gate posts.
 		[Vector3(1.4, 3.4, 1.4), Vector3(pd.x - 10.6, 0, pd.y - 0.5)],
 		[Vector3(1.4, 3.4, 1.4), Vector3(pd.x - 5.4, 0, pd.y - 0.5)],
@@ -146,6 +149,17 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 				at + Vector3(0, Roads.CURB_H + size.y * 0.5, 0))
 		solid.add_child(shape)
 	root.add_child(solid)
+	# Tandoor glow (issue #218): one warm ember light at the dhaba mouth,
+	# the same fixed-lamp pattern as the railway platform lamps — the
+	# seating nook reads at dusk without touching the night_check lamp
+	# network.
+	var tandoor := OmniLight3D.new()
+	tandoor.position = Vector3(dx - 1.2, Roads.CURB_H + 1.35, dz - 1.0)
+	tandoor.light_color = Color(1.0, 0.62, 0.30)
+	tandoor.light_energy = 1.1
+	tandoor.omni_range = 3.4
+	tandoor.omni_attenuation = 1.6
+	root.add_child(tandoor)
 	return root
 
 
@@ -272,7 +286,8 @@ static func _dhaba(b: MeshTools, x: float, z: float) -> void:
 	td.bottom_radius = 0.75
 	td.height = 1.2
 	b.add_mesh(td, Transform3D(Basis(), Vector3(x - 1.2, y + 0.6, z - 1.0)), TANDOOR)
-	b.add_box(Vector3(0.5, 0.14, 0.5), Vector3(x - 1.2, y + 1.22, z - 1.0), EMBER)
+	b.add_box(Vector3(0.5, 0.14, 0.5), Vector3(x - 1.2, y + 1.22, z - 1.0),
+			EMBER, MeshTools.FINISH_GLOSS)
 	# Wood pile beside it: stacked logs.
 	for w in 3:
 		b.add_box(Vector3(0.9, 0.22, 0.9), Vector3(x + 0.4, y + 0.13 + w * 0.24,
@@ -308,6 +323,53 @@ static func _dhaba(b: MeshTools, x: float, z: float) -> void:
 		for lz in [-0.35, 0.35]:
 			b.add_box(Vector3(0.12, 0.55, 0.12),
 					Vector3(x + 0.4 + lx, y + 0.27, z + 1.0 + lz), CHARPAI)
+	# Seating nook (issue #218): a second charpai west of the counter and
+	# a round steel table with two stools — beveled frames and cylinder
+	# legs per the de-box rule, matching the slice-3 nook vocabulary.
+	var cot_x := x - 0.95
+	var cot_z := z + 0.15
+	b.add_bev_box(Vector3(1.75, 0.26, 0.8),
+			Vector3(cot_x, y + 0.5, cot_z), 0.04, CHARPAI)
+	b.add_bev_box(Vector3(1.55, 0.07, 0.6),
+			Vector3(cot_x, y + 0.64, cot_z), 0.03, WEAVE)
+	for lx in [-0.75, 0.75]:
+		for lz in [-0.3, 0.3]:
+			var leg := CylinderMesh.new()
+			leg.top_radius = 0.05
+			leg.bottom_radius = 0.05
+			leg.height = 0.42
+			leg.radial_segments = 6
+			b.add_mesh(leg, Transform3D(Basis(),
+					Vector3(cot_x + lx, y + 0.21, cot_z + lz)), CHARPAI)
+	var top := CylinderMesh.new()
+	top.top_radius = 0.45
+	top.bottom_radius = 0.45
+	top.height = 0.05
+	top.radial_segments = 14
+	b.add_mesh(top, Transform3D(Basis(),
+			Vector3(x - 1.0, y + 0.42, z + 1.75)), PLATE)
+	var stem := CylinderMesh.new()
+	stem.top_radius = 0.07
+	stem.bottom_radius = 0.09
+	stem.height = 0.4
+	stem.radial_segments = 8
+	b.add_mesh(stem, Transform3D(Basis(),
+			Vector3(x - 1.0, y + 0.21, z + 1.75)), STEEL)
+	var base := CylinderMesh.new()
+	base.top_radius = 0.22
+	base.bottom_radius = 0.24
+	base.height = 0.04
+	base.radial_segments = 10
+	b.add_mesh(base, Transform3D(Basis(),
+			Vector3(x - 1.0, y + 0.02, z + 1.75)), STEEL)
+	for st in [Vector2(x - 1.75, z + 1.75), Vector2(x - 1.0, z + 1.0)]:
+		var seat := CylinderMesh.new()
+		seat.top_radius = 0.17
+		seat.bottom_radius = 0.19
+		seat.height = 0.32
+		seat.radial_segments = 8
+		b.add_mesh(seat, Transform3D(Basis(),
+				Vector3(st.x, y + 0.16, st.y)), WOOD)
 	# Tin roof on four bamboo poles over the whole corner.
 	for px in [-1.6, 1.6]:
 		for pz in [-1.5, 1.5]:

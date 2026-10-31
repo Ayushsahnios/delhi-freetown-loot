@@ -1791,7 +1791,7 @@ func _show_controls_card() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 	var body := Label.new()
-	body.text = "WASD move · Shift sprint · E enter or exit vehicles · metro gates board the shuttle\nH horn · N radio · Q chai · R samosa · Tab switch legend · M map · Esc pause\nYour first job waits at the gold START HERE beacon up the road"
+	body.text = "WASD move · Shift sprint · E enter or exit vehicles · metro lifts reach the platform\nH horn · N radio · Q chai · R samosa · Tab switch legend · M map · Esc pause\nYour first job waits at the gold START HERE beacon up the road"
 	body.add_theme_font_size_override("font_size", 14)
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(body)
@@ -1981,12 +1981,20 @@ func _toggle_vehicle() -> void:
 		_audio.engine_start(current_auto.kind)
 		_radio_on()
 		return
-	# Metro gate (issue #98 part 2): board the elevated shuttle before
-	# falling back to jacking traffic.
+	# Metro platform (issue #218): board at the lit door strip, ride the
+	# lift between street and platform, then fall back to jacking traffic.
 	if _metro != null:
-		var gate: Dictionary = _metro.gate_near(player.global_position, 4.2)
-		if not gate.is_empty():
-			_metro_board(int(gate["idx"]))
+		var door: Dictionary = _metro.platform_door_near(player.global_position)
+		if not door.is_empty():
+			_metro_board(int(door["idx"]))
+			return
+		var lift: Dictionary = _metro.platform_lift_near(player.global_position)
+		if not lift.is_empty():
+			_metro_descend(int(lift["idx"]))
+			return
+		var entry: Dictionary = _metro.street_entry_near(player.global_position, 4.2)
+		if not entry.is_empty():
+			_metro_ascend(int(entry["idx"]))
 			return
 	# No parked vehicle nearby: take over the closest ambient traffic vehicle.
 	# Traffic brakes for the player standing in its lane, so the nearest one
@@ -2015,7 +2023,7 @@ func _metro_board(idx: int) -> void:
 		return
 	if not _metro.is_dwelling_at(idx):
 		_metro_wait = idx
-		_show_toast("METRO · TRAIN EN ROUTE · WAIT AT THE GATE")
+		_show_toast("METRO · TRAIN EN ROUTE · WAIT AT THE LIT STRIP")
 		return
 	_metro_wait = -1
 	_metro_riding = true
@@ -2035,10 +2043,24 @@ func _metro_alight() -> void:
 	_metro_board_idx = -1
 	player.visible = true
 	player.controls_enabled = true
-	player.global_position = _metro.alight_pos(idx)
+	player.global_position = _metro.platform_alight_pos(idx)
 	player.resume_after_ride()
 	_audio.door_chime()
-	_show_toast("STEP OUT · " + _metro.station_name(idx))
+	_show_toast("STEP OUT · " + _metro.station_name(idx) + " PLATFORM · LIFT TO STREET")
+
+
+func _metro_ascend(idx: int) -> void:
+	## Issue #218: the street lift carries you up to the platform.
+	player.global_position = _metro.platform_entry_pos(idx)
+	_audio.door_chime()
+	_show_toast("PLATFORM · " + _metro.station_name(idx) + " · LIT STRIP BOARDS")
+
+
+func _metro_descend(idx: int) -> void:
+	## Issue #218: and back down to the street from the platform lift.
+	player.global_position = _metro.lift_street_pos(idx)
+	_audio.door_chime()
+	_show_toast("STREET · " + _metro.station_name(idx))
 
 
 func _metro_clear_ride() -> void:
@@ -2052,7 +2074,11 @@ func _metro_clear_ride() -> void:
 
 func _on_metro_arrived(idx: int, stop_name: String) -> void:
 	if _metro_wait == idx:
-		_metro_board(idx)
+		if _metro.on_platform(player.global_position):
+			_metro_board(idx)
+		else:
+			_metro_wait = -1
+			_show_toast("TRAIN AT " + stop_name + " · BOARD FROM THE PLATFORM")
 	elif _metro_riding:
 		_show_toast("ARRIVED · " + stop_name + " · E TO STEP OUT")
 
