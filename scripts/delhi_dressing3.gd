@@ -200,26 +200,52 @@ static func _add_tree_prop(root: Node3D, mesh: ArrayMesh,
 
 static func _peepal_mesh() -> ArrayMesh:
 	## Sacred fig: pale trunk, crown stacked high and moderate spread.
+	## De-boxed (#266): the two flat trunk boxes are now tapered round
+	## cylinders — a flared foot rising into a slim upper stem.
 	var b := MeshTools.new()
-	b.add_box(Vector3(0.55, 2.8, 0.55), Vector3(0, 1.4, 0), PEEPAL_BARK)
-	b.add_box(Vector3(0.38, 1.4, 0.38), Vector3(0, 3.4, 0), PEEPAL_BARK)
+	var foot := CylinderMesh.new()
+	foot.top_radius = 0.20
+	foot.bottom_radius = 0.27
+	foot.height = 2.8
+	foot.radial_segments = 8
+	b.add_mesh(foot, Transform3D(Basis(), Vector3(0, 1.4, 0)), PEEPAL_BARK)
+	var stem := CylinderMesh.new()
+	stem.top_radius = 0.15
+	stem.bottom_radius = 0.19
+	stem.height = 1.4
+	stem.radial_segments = 8
+	b.add_mesh(stem, Transform3D(Basis(), Vector3(0, 3.4, 0)), PEEPAL_BARK)
 	_crown(b, 5.35, 2.6, 1.25, LEAF_DEEP)
 	_crown(b, 4.15, 2.0, 1.1, LEAF_DEEP)
+	print("[dressing3] peepal tris=%d" % b.tris)
 	return b.build_mesh()
 
 
 static func _banyan_mesh() -> ArrayMesh:
 	## Banyan: dark trunk, wider-than-tall canopy, aerial prop roots
 	## hanging from the branch line to the ground around the trunk.
+	## De-boxed (#266): tapered round trunk, prop roots as slim
+	## tapering cylinders instead of square posts.
 	var b := MeshTools.new()
-	b.add_box(Vector3(0.8, 2.4, 0.8), Vector3(0, 1.2, 0), BANYAN_BARK)
+	var trunk := CylinderMesh.new()
+	trunk.top_radius = 0.30
+	trunk.bottom_radius = 0.40
+	trunk.height = 2.4
+	trunk.radial_segments = 8
+	b.add_mesh(trunk, Transform3D(Basis(), Vector3(0, 1.2, 0)), BANYAN_BARK)
 	_crown(b, 4.6, 3.3, 1.1, LEAF_DARK)
 	_crown(b, 3.5, 2.6, 1.0, LEAF_DARK)
 	for i in 5:
 		var a := TAU * i / 5.0 + 0.35
 		var r := 2.35
-		b.add_box(Vector3(0.12, 3.4, 0.12),
-				Vector3(cos(a) * r, 1.7, sin(a) * r), ROOT)
+		var root := CylinderMesh.new()
+		root.top_radius = 0.045
+		root.bottom_radius = 0.065
+		root.height = 3.4
+		root.radial_segments = 6
+		b.add_mesh(root, Transform3D(Basis(),
+				Vector3(cos(a) * r, 1.7, sin(a) * r)), ROOT)
+	print("[dressing3] banyan tris=%d" % b.tris)
 	return b.build_mesh()
 
 
