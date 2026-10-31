@@ -6,14 +6,16 @@ extends CanvasLayer
 
 const SETTINGS_PATH := "user://settings.json"
 const SETTINGS_TMP := "user://settings.json.tmp"
+const QualityScript := preload("res://scripts/quality.gd")
 const DEFAULTS := {"master": 100.0, "ambient": 100.0, "radio": 100.0,
-	"shadows": true, "muted": false}
+	"shadows": true, "muted": false, "quality": "auto"}
 
 var _game: Node
 var _visible_last_frame := false
 var _settings := {}
 var _resume_btn: Button
 var _settings_box: VBoxContainer
+var _quality_btn: Button
 
 
 func setup(game: Node) -> void:
@@ -198,17 +200,44 @@ func _build() -> void:
 	cb.button_pressed = bool(_settings.get("shadows", false))
 	cb.toggled.connect(func(on: bool) -> void: _apply_setting("shadows", on))
 	shadow_row.add_child(cb)
+	var quality_row := HBoxContainer.new()
+	quality_row.add_theme_constant_override("separation", 10)
+	_settings_box.add_child(quality_row)
+	var qbtn := Button.new()
+	qbtn.custom_minimum_size = Vector2(320, 0)
+	_quality_btn = qbtn
+	_refresh_quality_label()
+	qbtn.pressed.connect(func() -> void:
+		# AUTO -> HIGH -> LOW -> AUTO; sanitize keeps a tampered
+		# settings.json from breaking the cycle (issue 270).
+		var modes: Array = QualityScript.MODES
+		var cur := modes.find(QualityScript.sanitize(
+				String(_settings.get("quality", "auto"))))
+		_apply_setting("quality", modes[(cur + 1) % modes.size()]))
+	quality_row.add_child(qbtn)
 
 
 func _apply_setting(key: String, value) -> void:
 	_settings[key] = value
 	write_settings(_settings)
 	apply_audio(_settings)
+	if key == "quality" and _game != null and _game.has_method("apply_quality_now"):
+		# Live-apply without reload (issue 270); the button label rides
+		# along so the menu always shows the effective stored mode.
+		_game.apply_quality_now(String(value))
+		_refresh_quality_label()
 	if key == "shadows" and _game != null and _game.sun != null:
 		# The day cycle re-evaluates this every tick (sun below the
 		# horizon suspends the shadow map), so only the want-flag is set.
 		_game._sun_shadows_wanted = bool(value)
 		_game.sun.shadow_enabled = bool(value)
+
+
+func _refresh_quality_label() -> void:
+	if _quality_btn == null:
+		return
+	var mode := QualityScript.sanitize(String(_settings.get("quality", "auto")))
+	_quality_btn.text = "QUALITY: %s" % mode.to_upper()
 
 
 static func load_settings() -> Dictionary:

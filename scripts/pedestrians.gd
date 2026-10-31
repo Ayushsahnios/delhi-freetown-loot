@@ -88,6 +88,11 @@ const CART_SPEED_MAX := 2.05
 const ROAD_Y := 0.08  ## asphalt surface height (roads.gd ROAD_Y)
 const WALK_H := 0.14  ## sidewalk top height (roads.gd CURB_H)
 const WALK_W := 2.2   ## sidewalk band width (roads.gd WALK_TILE)
+
+## Graphics preset (issue 270): LOW trims the crowd cap — both targets
+## scale together, so a LOW street carries ~60 % of the bodies at every
+## hour of the day cycle without touching spawn logic.
+static var crowd_scale := 1.0
 const MODELS := [
 	Chars.FEMALE_A, Chars.FEMALE_B, Chars.FEMALE_C, Chars.FEMALE_D, Chars.MALE,
 ]
@@ -171,8 +176,9 @@ func set_life_pattern(night: float, rush: float, keep: float) -> void:
 	# bazaar zones back up regardless of the hour's darkness.
 	_night = night
 	_rush = rush
-	_base_target = roundi(float(COUNT) * clampf(keep, 0.0, 1.0))
-	_zone_target = roundi(float(ZONE_EXTRA)
+	_base_target = roundi(float(COUNT) * crowd_scale
+			* clampf(keep, 0.0, 1.0))
+	_zone_target = roundi(float(ZONE_EXTRA) * crowd_scale
 			* clampf(maxf(keep, rush), 0.0, 1.0))
 
 
@@ -187,6 +193,7 @@ func life_debug() -> Dictionary:
 			else:
 				base_vis += 1
 	return {"night": _night, "rush": _rush,
+			"crowd_scale": crowd_scale,
 			"base_target": _base_target, "zone_target": _zone_target,
 			"base_visible": base_vis, "zone_visible": zone_vis,
 			"base_total": COUNT, "zone_total": ZONE_EXTRA}

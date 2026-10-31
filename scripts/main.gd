@@ -30,6 +30,7 @@ const RadioScript := preload("res://scripts/radio.gd")
 const ChaseScript := preload("res://scripts/chase_music.gd")
 const ScoreScript := preload("res://scripts/score.gd")
 const LodScript := preload("res://scripts/lod.gd")
+const QualityScript := preload("res://scripts/quality.gd")
 const MiniMapScript := preload("res://scripts/minimap.gd")
 const MapScreenScript := preload("res://scripts/map_screen.gd")
 const RouteArrowScript := preload("res://scripts/route_arrow.gd")
@@ -101,6 +102,9 @@ var camera: Camera3D
 var sun: DirectionalLight3D
 var world_env: WorldEnvironment
 var _sun_shadows_wanted := true
+var _quality_mode := "auto"      ## stored preset: auto | high | low (issue 270)
+var _quality_low := false        ## effective state, after force mode / auto-drop
+var _quality_watch: Node = null  ## AUTO-mode FPS sampler (quality.gd Watch)
 var _sky_mat: ProceduralSkyMaterial = null
 var _cloud_layer: Node3D = null
 var _cloud_mat: StandardMaterial3D = null
@@ -224,6 +228,14 @@ func _ready() -> void:
 	PauseScript.apply_audio(boot)
 	_sun_shadows_wanted = bool(boot.get("shadows", true))
 	sun.shadow_enabled = _sun_shadows_wanted
+	# Graphics preset (issue 270): the stored mode is honoured BEFORE the
+	# city builds, so LOW boots straight into short draw distances instead
+	# of building far tiers and culling them after the fact.
+	_quality_mode = QualityScript.sanitize(String(boot.get("quality", "auto")))
+	_quality_low = QualityScript.effective_low(_quality_mode)
+	LodScript.tier_scale = QualityScript.LOW_LOD_SCALE if _quality_low else 1.0
+	PedestrianScript.crowd_scale = QualityScript.LOW_CROWD_SCALE if _quality_low else 1.0
+	QualityScript.apply_sun(sun, _quality_low)
 	_weather = WeatherScript.new()
 	add_child(_weather)
 	_weather.setup()
@@ -279,6 +291,9 @@ func _ready() -> void:
 	add_child(_monsoon)
 	_monsoon.setup(WORLD, PITCH, ROAD, GRID + 1)
 	_monsoon.register_traffic(_traffic)
+	# Preset crowd cap (issue 270): static, so the LOW target applies on
+	# the first life-pattern tick without touching spawn logic.
+	PedestrianScript.crowd_scale = QualityScript.LOW_CROWD_SCALE if _quality_low else 1.0
 	_peds = PedestrianScript.new()
 	add_child(_peds)
 	_peds.setup(WORLD, PITCH, ROAD, GRID + 1)
@@ -1704,6 +1719,42 @@ func _portrait_card(def: Dictionary) -> Control:
 	return svc
 
 
+func apply_quality_now(mode: String) -> void:
+	## Pause SETTINGS entry point (issue 270): sanitize, live-apply every
+	## knob without a reload, and arm or disarm the AUTO watcher. The
+	## pause menu persists the mode; this only applies it.
+	_quality_mode = QualityScript.sanitize(mode)
+	_quality_low = QualityScript.effective_low(_quality_mode)
+	# tier_scale rides along (issue 270): anything spawned AFTER a live
+	# switch must tier at the new preset, or late traffic/dressing would
+	# poke through the LOW cull distance a minute into the session.
+	LodScript.tier_scale = QualityScript.LOW_LOD_SCALE if _quality_low else 1.0
+	LodScript.rescale(self, QualityScript.LOW_LOD_SCALE if _quality_low else 1.0)
+	PedestrianScript.crowd_scale = QualityScript.LOW_CROWD_SCALE if _quality_low else 1.0
+	QualityScript.apply_sun(sun, _quality_low)
+	if _quality_mode == "auto":
+		if _quality_watch == null and _playing:
+			_quality_watch = QualityScript.Watch.new(self)
+			add_child(_quality_watch)
+	elif _quality_watch != null:
+		_quality_watch.queue_free()
+		_quality_watch = null
+
+
+func _auto_quality_drop() -> void:
+	## Watcher callback (issue 270): sustained frame overrun on AUTO drops
+	## the session to LOW. The drop is session-only — the stored setting
+	## stays AUTO, so a stronger machine tomorrow still boots HIGH.
+	_quality_low = true
+	LodScript.tier_scale = QualityScript.LOW_LOD_SCALE
+	LodScript.rescale(self, QualityScript.LOW_LOD_SCALE)
+	PedestrianScript.crowd_scale = QualityScript.LOW_CROWD_SCALE
+	QualityScript.apply_sun(sun, true)
+	if _quality_watch != null:
+		_quality_watch.queue_free()
+		_quality_watch = null
+
+
 func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	Game.selected_character = def
 	_select_layer.visible = false
@@ -1802,6 +1853,11 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 		_autos.append(a)
 
 	_playing = true
+	# AUTO preset arms the FPS watcher once play starts (issue 270); a
+	# pinned HIGH/LOW session never spawns it.
+	if _quality_mode == "auto" and _quality_watch == null:
+		_quality_watch = QualityScript.Watch.new(self)
+		add_child(_quality_watch)
 	_touch.set_active(true)
 	if not save.is_empty():
 		_apply_save(save)
