@@ -1840,7 +1840,7 @@ func _show_controls_card() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 	var body := Label.new()
-	body.text = "WASD move · Shift sprint · E enter or exit vehicles · metro lifts reach the platform\nH horn · N radio · Q chai · R samosa · Tab switch legend · M map · Esc pause\nYour first job waits at the gold START HERE beacon up the road"
+	body.text = "WASD move · Shift sprint · E enter or exit vehicles · metro lifts reach the platform\nH horn · N radio · Q chai · R samosa · T buy outfits · B bribe the police\nTab switch legend · M map · P photo mode · F9 save · Esc pause\nYour first job waits at the gold START HERE beacon up the road"
 	body.add_theme_font_size_override("font_size", 14)
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(body)
