@@ -54,6 +54,7 @@ const DelhiDressing3Script := preload("res://scripts/delhi_dressing3.gd")
 const Interiors3Script := preload("res://scripts/interiors3.gd")
 const ClutterScript := preload("res://scripts/world_clutter.gd")
 const MetroScript := preload("res://scripts/metro.gd")
+const FaunaScript := preload("res://scripts/fauna.gd")
 const RailwayScript := preload("res://scripts/railway.gd")
 const TaxiScript := preload("res://scripts/taxi.gd")
 const CourierScript := preload("res://scripts/courier.gd")
@@ -64,6 +65,8 @@ const PhotoScript := preload("res://scripts/photo.gd")
 ## boarding while the train is en route, and the interior-cam anchors.
 var _metro: MetroScript = null
 var _railway: RailwayScript = null
+## Animal life (issue #208): street dogs + metro-canopy monkey troop.
+var _fauna: FaunaScript = null
 var _metro_riding := false
 var _metro_wait := -1
 var _metro_board_idx := -1
@@ -617,6 +620,13 @@ func _build_city() -> void:
 	add_child(_metro)
 	_metro.arrived.connect(_on_metro_arrived)
 	_metro.departed.connect(_on_metro_departed)
+
+	# Animal life (issue #208): two sunbathing dogs by the stall rows, a
+	# trotter on the Chandni Chowk kerb beat, and a rhesus troop on the
+	# station canopies — sitters plus two ledge hoppers, all procedural.
+	_fauna = FaunaScript.new()
+	_fauna.setup(WORLD, PITCH, ROAD)
+	add_child(_fauna)
 
 	# Railway station district (issue #133): terminal platforms, truss
 	# canopy, porters, trolleys and a scene train that cycles in from
