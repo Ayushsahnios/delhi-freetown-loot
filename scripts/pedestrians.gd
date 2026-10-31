@@ -11,6 +11,11 @@ extends Node
 ## walkers occasionally pause to window-shop a facade or linger at a
 ## paan counter chewing, and converted zone walkers stand as hawkers
 ## behind the bazaar stall rows calling their wares (talking accents).
+## Crowd life 2 (issue #217) adds chatting pairs and bench idlers: a
+## few walkers stroll shoulder-to-shoulder in talking pairs (the
+## follower mirrors its leader — same line, same pauses, bolt as one),
+## and walkers near a bus-stop shelter drift over to idle at the bench
+## facing the road like waiting commuters before rejoining the flow.
 
 const Chars := preload("res://scripts/characters.gd")
 const ShadowBlob := preload("res://scripts/shadowblob.gd")
@@ -48,6 +53,13 @@ const PAUSE_GAP_MIN := 9.0     ## cooldown after a full pause
 const PAUSE_GAP_MAX := 22.0
 const PAAN_LINGER_R := 10.0    ## near a paan counter, paan pauses win
 const HAWKER_STAND := 1.85     ## stand-off in front of a stall counter
+# Crowd life 2 (issue #217): chatting pairs + bench idlers.
+const PAIR_GAP := 0.85         ## shoulder-to-shoulder pair spacing (m)
+const PAIR_STAGGER := 0.55     ## the follower walks half a step back
+const BENCH_NEAR := 8.5        ## near a shelter bay, bench idling wins
+const BENCH_MIN := 12.0        ## bench linger length (s, after arriving)
+const BENCH_MAX := 26.0
+const BENCH_APPROACH := 1.5     ## amble speed over to the bench (m/s)
 const ROAD_Y := 0.08  ## asphalt surface height (roads.gd ROAD_Y)
 const WALK_H := 0.14  ## sidewalk top height (roads.gd CURB_H)
 const WALK_W := 2.2   ## sidewalk band width (roads.gd WALK_TILE)
@@ -72,6 +84,7 @@ var _zone_target := 0
 var _last_model := -1
 var _paan: Array[Vector3] = []
 var _hawker_next := 0
+var _benches: Array = []
 
 
 func setup(world_size: float, pitch: float, road_width: float, road_count: int) -> void:
@@ -88,6 +101,32 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 		v.rank = i - COUNT if i >= COUNT else i
 		_dress(v)
 		_peds.append(v)
+	_pair_up()
+
+
+func _pair_up() -> void:
+	## Crowd life 2 (issue #217): a few walkers stroll as chatting
+	## pairs — mates with talking accents, one leader and one mirroring
+	## follower. The follower shares the leader's rank so the night
+	## thinning never splits a pair, and pair members never convert to
+	## hawkers (a stall is a solo post).
+	for leader_i in [3, 13, COUNT + 8, COUNT + 19, COUNT + 30]:
+		if leader_i + 1 >= _peds.size():
+			continue
+		var a: Dictionary = _peds[leader_i]
+		var b: Dictionary = _peds[leader_i + 1]
+		a["pair"] = leader_i + 1
+		b["pair"] = leader_i
+		b["lead"] = false
+		b["side"] = 1.0 if _rng.randf() < 0.5 else -1.0
+		b["rank"] = a["rank"]
+		a["phone"] = false
+		b["phone"] = false
+		for m in [a, b]:
+			var rig: Node = _chars.lively(m["node"])
+			if rig != null:
+				rig.phone_override = false
+				rig.talking = true
 
 
 func set_crowd_zone(center: Vector3, radius: float) -> void:
@@ -159,6 +198,8 @@ func station_hawkers(spots: Array) -> void:
 		_hawker_next += 1
 		if not bool(v.get("zone", false)):
 			continue
+		if v["pair"] >= 0:
+			continue  # chatting pairs stay strollers; a stall is a solo post
 		v["hawker"] = {"pos": spot["pos"], "face": spot["face"]}
 		v["phone"] = false
 		v["pause"] = 0.0
@@ -169,21 +210,37 @@ func station_hawkers(spots: Array) -> void:
 			rig.talking = true
 
 
+func register_benches(slots: Array) -> void:
+	## Bus-stop bench anchors (street_furniture.gd, main.gd): walkers
+	## passing near a shelter bay may drift over and idle at the bench
+	## facing the road (issue #217), then rejoin the sidewalk flow. One
+	## stand point per bench seat; a slot is busy while an idler holds it.
+	for s in slots:
+		_benches.append({"pos": s["pos"], "face": s["face"], "busy": false})
+
+
 func street_debug() -> Dictionary:
 	## Read-back for the headless gate + PR evidence: how many visible
-	## walkers are in each street-behavior state right now (issue #207).
-	var out := {"phone": 0, "hawker": 0, "window": 0, "paan": 0, "strolling": 0}
+	## walkers are in each street-behavior state right now (issues #207
+	## and #217).
+	var out := {"phone": 0, "hawker": 0, "window": 0, "paan": 0, "strolling": 0,
+			"pair": 0, "bench": 0}
 	for v in _peds:
 		if not v.visible:
 			continue
 		if not v["hawker"].is_empty():
 			out["hawker"] += 1
 		elif v["pause"] > 0.0:
-			out[v["pkind"]] += 1
+			if v["pkind"] == "bench":
+				out["bench"] += 1
+			else:
+				out[v["pkind"]] += 1
 		elif v["phone"]:
 			out["phone"] += 1
 		else:
 			out["strolling"] += 1
+		if v["lead"] and v["pair"] >= 0:
+			out["pair"] += 1
 	return out
 
 
@@ -198,6 +255,11 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("horn"):
 		_scatter(_player.global_position)
 	for v in _peds:
+		if not v.lead and v.pair >= 0:
+			# follower half of a chatting pair (issue #217): mirrors its
+			# leader every frame — no independent walk line of its own
+			_pair_follow(v, delta)
+			continue
 		var is_zone := bool(v.get("zone", false))
 		if is_zone and not _zone_awake():
 			if v.visible:
@@ -246,6 +308,21 @@ func _walk_tick(v: Dictionary, delta: float) -> void:
 	if not v.hawker.is_empty():
 		return
 	if v.pause > 0.0:
+		if v.pkind == "bench" and not v.barrived:
+			# bench idler (issue #217): amble over to the shelter bay
+			# first; the linger clock only starts once they arrive.
+			var step: Vector3 = v.bgo - v.pos
+			step.y = 0.0
+			var d := step.length()
+			if d > 0.22:
+				step = step / d * BENCH_APPROACH
+				v.pos += step * delta
+				_face(v, step)
+				v.phase += delta * 3.4
+			else:
+				v.barrived = true
+				_face(v, v.bseat["face"])
+			return
 		v.pause -= delta
 		if v.pause <= 0.0:
 			_end_pause(v)
@@ -296,6 +373,25 @@ func _begin_pause(v: Dictionary) -> void:
 	## window-shopper stops and studies the block facade across the
 	## walk band. Either way they stand on the idle clip for a few
 	## seconds, then resume the stroll with a fresh cooldown.
+	var slot: Dictionary = _bench_free_near(v.pos)
+	if not slot.is_empty() and _rng.randf() < 0.55:
+		# bench idler (issue #217): drift to the shelter bay and idle at
+		# the bench facing the road like a waiting commuter.
+		v.pkind = "bench"
+		slot["busy"] = true
+		v.bseat = slot
+		v.bgo = slot["pos"]
+		v.barrived = false
+		v.pause = _rng.randf_range(BENCH_MIN, BENCH_MAX)
+		return
+	if v.pair >= 0:
+		# chatting pair (issue #217): sometimes they stop and stand
+		# face-to-face mid-stroll, gesturing through a point.
+		v.pkind = "chat"
+		var mate: Vector3 = _peds[v.pair].pos
+		_face(v, Vector3(mate.x - v.pos.x, 0.0, mate.z - v.pos.z))
+		v.pause = _rng.randf_range(PAUSE_MIN, PAUSE_MAX) * 0.8
+		return
 	var counter: Variant = _paan_counter_near(v.pos)
 	if counter != null and _rng.randf() < 0.6:
 		v.pkind = "paan"
@@ -311,13 +407,38 @@ func _begin_pause(v: Dictionary) -> void:
 
 
 func _end_pause(v: Dictionary) -> void:
+	if v.pkind == "bench":
+		_release_bench(v)
+		_snap_to_sidewalk(v)
+		v.pcd = _rng.randf_range(PAUSE_GAP_MIN, PAUSE_GAP_MAX)
+		return
 	_clear_pause(v)
 	v.pcd = _rng.randf_range(PAUSE_GAP_MIN, PAUSE_GAP_MAX)
+
+
+func _release_bench(v: Dictionary) -> void:
+	if v.bseat != null:
+		v.bseat["busy"] = false
+		v.bseat = null
+		v.barrived = false
+
+
+func _bench_free_near(pos: Vector3) -> Dictionary:
+	## Nearest free bench-bay slot within BENCH_NEAR, or {}.
+	var best := {}
+	var best_d := BENCH_NEAR
+	for s in _benches:
+		var d := Vector2(s["pos"].x - pos.x, s["pos"].z - pos.z).length()
+		if d < best_d and not s["busy"]:
+			best = s
+			best_d = d
+	return best
 
 
 func _clear_pause(v: Dictionary) -> void:
 	## Drop any active pause state (also used when a walker bolts, sleeps
 	## or respawns — a hidden walker must never keep talking accents on).
+	_release_bench(v)
 	v.pause = 0.0
 	if v.pkind == "paan":
 		var rig: Node = _chars.lively(v.node)
@@ -334,8 +455,61 @@ func _paan_counter_near(pos: Vector3) -> Variant:
 		var d := Vector2(c.x - pos.x, c.z - pos.z).length()
 		if d < best_d:
 			best = c
-			best_d = d
+		best_d = d
 	return best
+
+
+# ------------------------------------------------------------ pairs
+
+func _pair_follow(v: Dictionary, delta: float) -> void:
+	## The follower half of a chatting pair (issue #217). While the pair
+	## bolts, the follower flees its own copy of the leader's panic (same
+	## direction, same timers — parallel paths); once both are calm the
+	## follower's pose is derived straight from the leader again, so a
+	## pair can never drift apart for long.
+	if v.panic > 0.0 or v.rejoin > 0.0:
+		_flee_tick(v, delta)
+		var calm_l: Dictionary = _peds[v.pair]
+		if v.panic <= 0.0 and v.rejoin <= 0.0 \
+				and calm_l.panic <= 0.0 and calm_l.rejoin <= 0.0:
+			_pair_snap(v, calm_l)
+		_animate(v)
+		return
+	var leader: Dictionary = _peds[v.pair]
+	if not leader.visible:
+		if v.visible:
+			v.visible = false
+			_hide_ped(v)
+		return
+	if not v.visible:
+		v.visible = true
+		if v.node != null:
+			v.node.visible = true
+	var fwd := Vector3(-sin(leader.heading), 0.0, -cos(leader.heading))
+	v.pos = leader.pos + Vector3(fwd.z, 0.0, -fwd.x) * (v.side * PAIR_GAP) \
+			- fwd * PAIR_STAGGER
+	v.pause = leader.pause
+	v.pkind = leader.pkind
+	if leader.pause > 0.0 and leader.pkind == "chat":
+		v.heading = leader.heading + PI  # stand face-to-face
+	else:
+		v.heading = leader.heading
+	_animate(v)
+
+
+func _pair_snap(v: Dictionary, leader: Dictionary) -> void:
+	## Re-align a follower to its leader after the panic dust settles
+	## (also used when the leader is re-placed or snapped back to a
+	## sidewalk line) so the pair reforms shoulder-to-shoulder.
+	v.along_z = leader.along_z
+	v.road = leader.road
+	v.t = leader.t
+	v.dir = leader.dir
+	v.speed = leader.speed
+	v.panic = 0.0
+	v.rejoin = 0.0
+	v.cd = leader.cd
+	_apply(v)
 
 
 # ---------------------------------------------------------------- panic
@@ -345,6 +519,16 @@ func _scatter(origin: Vector3) -> void:
 	## Hawkers hold their stalls — a vendor does not abandon the wares.
 	for v in _peds:
 		if not v.hawker.is_empty():
+			continue
+		if not v.lead and v.pair >= 0:
+			# pairs bolt together: the follower copies its leader's panic
+			var pl: Dictionary = _peds[v.pair]
+			if pl.panic > 0.0:
+				_clear_pause(v)
+				v.panic = pl.panic
+				v.rejoin = 0.0
+				v.cd = 1.0
+				v.panic_dir = pl.panic_dir
 			continue
 		_clear_pause(v)
 		var p: Vector3 = v.pos
@@ -365,6 +549,9 @@ func vehicle_strike(pos: Vector3, radius: float) -> int:
 	var n := 0
 	for v in _peds:
 		if not v.hawker.is_empty():
+			continue
+		if not v.lead and v.pair >= 0:
+			# a pair reacts as one body — the leader's strike decides
 			continue
 		_clear_pause(v)
 		var p: Vector3 = v.pos
@@ -415,6 +602,8 @@ func _snap_to_sidewalk(v: Dictionary) -> void:
 	v.rejoin = 0.0
 	v.cd = 1.0
 	_apply(v)
+	if v.pair >= 0 and v.lead:
+		_pair_snap(_peds[v.pair], v)
 
 
 # ---------------------------------------------------------------- helpers
@@ -599,6 +788,8 @@ func _new_ped(zone: bool) -> Dictionary:
 		"rejoin": 0.0, "cd": 0.0, "phase": _rng.randf() * TAU,
 		"zone": zone, "node": null, "ap": null, "anims": {}, "id": {},
 		"phone": false, "pause": 0.0, "pkind": "", "pcd": 0.0, "hawker": {},
+		"pair": -1, "lead": true, "side": 1.0, "bseat": null,
+		"barrived": false, "bgo": Vector3.ZERO,
 	}
 
 
