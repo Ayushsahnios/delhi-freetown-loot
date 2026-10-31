@@ -54,6 +54,7 @@ const SignageScript := preload("res://scripts/signage.gd")
 const DelhiDressing3Script := preload("res://scripts/delhi_dressing3.gd")
 const Interiors3Script := preload("res://scripts/interiors3.gd")
 const Interiors2Script := preload("res://scripts/interiors2.gd")
+const NightShopsScript := preload("res://scripts/night_shops.gd")
 const ClutterScript := preload("res://scripts/world_clutter.gd")
 const MetroScript := preload("res://scripts/metro.gd")
 const RailwayScript := preload("res://scripts/railway.gd")
@@ -145,6 +146,7 @@ var _food: Node
 var _interiors: Node
 var _interiors3: Node
 var _interiors2: Node
+var _night_shops: Node
 var _wardrobe: WardrobeScript
 var _taxi: Node
 var _courier: Node
@@ -243,6 +245,12 @@ func _ready() -> void:
 	_build_city()
 	_build_landmarks()
 	_build_street_lights()
+	# Shopfront night dressing (issue #265): warm doorway spill, bilingual
+	# neon name boards and hanging bulb strings at the enterable shops —
+	# emissive materials ramping with the dusk curve (see _update_day).
+	_night_shops = NightShopsScript.new()
+	add_child(_night_shops)
+	_night_shops.setup(WORLD, PITCH, ROAD)
 	_build_paan_shops()
 	_food = FoodScript.new()
 	add_child(_food)
@@ -2365,6 +2373,9 @@ func _update_day(delta: float) -> void:
 	# Vehicle headlamps and taillights ride the same dusk curve (issue
 	# #166): parked, driven and ambient traffic all light up at once.
 	VehiclesScript.set_lamp_glow(1.0 - clampf(daylight * 1.4, 0.0, 1.0))
+	# Shopfront night dressing (issue #265) rides the same dusk curve.
+	if _night_shops != null:
+		_night_shops.set_night(1.0 - clampf(daylight * 1.4, 0.0, 1.0))
 	# Street lamps join the windows at dusk: real OmniLights under every
 	# lamp head, so their warm pools render in every pipeline — the
 	# software-GL capture path included (issue #102).
