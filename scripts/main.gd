@@ -491,6 +491,18 @@ func _build_city() -> void:
 					xf * Transform3D(Basis(),
 					Vector3(0.4, RoadsScript.CURB_H + 1.35, -0.05))))
 		add_child(stops)
+	# Crowd life 2 (issue #217): register every shelter bay as a bench
+	# idler anchor — two stand points per stop, just off the bench on the
+	# road side, facing the road like waiting commuters.
+	var bench_spots: Array = []
+	for stop: Transform3D in furn.stops:
+		for lx: float in [-0.5, 0.5]:
+			bench_spots.append({
+				"pos": stop * Vector3(lx, RoadsScript.CURB_H + 0.02, 0.42),
+				"face": (stop.basis * Vector3(0.0, 0.0, -1.0)).normalized(),
+			})
+	if _peds != null and not bench_spots.is_empty():
+		_peds.register_benches(bench_spots)
 
 	# Delhi street dressing (issue #129): tangled overhead wiring on
 	# concrete poles, yellow-black painted kerbs, thela produce carts
