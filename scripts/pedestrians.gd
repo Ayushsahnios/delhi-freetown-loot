@@ -16,9 +16,15 @@ extends Node
 ## follower mirrors its leader — same line, same pauses, bolt as one),
 ## and walkers near a bus-stop shelter drift over to idle at the bench
 ## facing the road like waiting commuters before rejoining the flow.
+## Age + street-character variety (issue #222): kids stroll beside
+## adults (shorter, quicker cadence), elders amble stooped with a
+## cane, and fixed walkers carry the street trades — a sabzi-wala
+## pushing a produce-stacked thela cart, a khaki chowkidar with his
+## lathi, a ragpicker under a jute sack.
 
 const Chars := preload("res://scripts/characters.gd")
 const ShadowBlob := preload("res://scripts/shadowblob.gd")
+const Streetfolk := preload("res://scripts/streetfolk.gd")
 
 const COUNT := 26
 const EDGE := 1.4
@@ -60,6 +66,25 @@ const BENCH_NEAR := 8.5        ## near a shelter bay, bench idling wins
 const BENCH_MIN := 12.0        ## bench linger length (s, after arriving)
 const BENCH_MAX := 26.0
 const BENCH_APPROACH := 1.5     ## amble speed over to the bench (m/s)
+# Age + street-character variety (issue #222): kids stroll beside
+# adults, elders walk stooped with a cane, and fixed-index walkers
+# carry the readable street silhouettes — sabzi-wala thela cart,
+# chowkidar lathi patrol, ragpicker jute sack.
+const KID_SHARE := 0.12         ## walkers that spawn as children
+const ELDER_SHARE := 0.14       ## walkers that spawn as elders
+const KID_SCALE := 0.66         ## kids stand at ~2/3 adult height
+const KID_SPEED_MIN := 3.1      ## kids skip along quicker than adults
+const KID_SPEED_MAX := 3.9
+const KID_CADENCE := 1.28       ## walk-clip rate boost: faster arm swing
+const ELDER_SPEED_MIN := 1.35   ## elders amble slow, never rush
+const ELDER_SPEED_MAX := 1.85
+const ELDER_STOOP_MIN := 0.10   ## LivelyRig stoop pitch range (rad)
+const ELDER_STOOP_MAX := 0.17
+const ELDER_CANE_SHARE := 0.55  ## elders carrying a cane
+const FOLK_SPEED_MIN := 1.5     ## lathi patrol + sack pick amble
+const FOLK_SPEED_MAX := 2.0
+const CART_SPEED_MIN := 1.55    ## cart vendors lean into a slow push
+const CART_SPEED_MAX := 2.05
 const ROAD_Y := 0.08  ## asphalt surface height (roads.gd ROAD_Y)
 const WALK_H := 0.14  ## sidewalk top height (roads.gd CURB_H)
 const WALK_W := 2.2   ## sidewalk band width (roads.gd WALK_TILE)
@@ -99,7 +124,7 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 	for i in range(total):
 		var v := _new_ped(i >= COUNT)
 		v.rank = i - COUNT if i >= COUNT else i
-		_dress(v)
+		_dress(v, i)
 		_peds.append(v)
 	_pair_up()
 
@@ -200,6 +225,9 @@ func station_hawkers(spots: Array) -> void:
 			continue
 		if v["pair"] >= 0:
 			continue  # chatting pairs stay strollers; a stall is a solo post
+		if String(v.get("age", "adult")) != "adult" \
+					or String(v.get("street", "")) != "":
+			continue  # kids/elders/street characters keep their silhouettes
 		v["hawker"] = {"pos": spot["pos"], "face": spot["face"]}
 		v["phone"] = false
 		v["pause"] = 0.0
@@ -633,7 +661,19 @@ func _place(v: Dictionary) -> void:
 
 
 func _roll_speed(v: Dictionary) -> float:
-	## Phone walkers amble (heads down, no urgency); everyone else strolls.
+	## Kids skip, elders amble, street characters plod at their trade
+	## (issue #222); phone walkers amble (heads down, no urgency);
+	## everyone else strolls.
+	match String(v.get("street", "")):
+		"sabzi":
+			return _rng.randf_range(CART_SPEED_MIN, CART_SPEED_MAX)
+		"chowkidar", "ragpicker":
+			return _rng.randf_range(FOLK_SPEED_MIN, FOLK_SPEED_MAX)
+	match String(v.get("age", "adult")):
+		"kid":
+			return _rng.randf_range(KID_SPEED_MIN, KID_SPEED_MAX)
+		"elder":
+			return _rng.randf_range(ELDER_SPEED_MIN, ELDER_SPEED_MAX)
 	return _rng.randf_range(PHONE_MIN, PHONE_MAX) if v.phone \
 			else _rng.randf_range(WALK_MIN, WALK_MAX)
 
@@ -765,7 +805,10 @@ func _animate(v: Dictionary) -> void:
 	elif v.pause > 0.0:
 		_chars.play(v.anims, v.ap, "idle", 0.8)
 	else:
-		_chars.play(v.anims, v.ap, "walk", v.speed / WALK_CLIP_SPEED)
+		var rate: float = float(v.speed) / WALK_CLIP_SPEED
+		if String(v.get("age", "adult")) == "kid":
+			rate *= KID_CADENCE  # quicker cadence, faster arm swing
+		_chars.play(v.anims, v.ap, "walk", rate)
 
 
 func _hide_ped(v: Dictionary) -> void:
@@ -788,12 +831,13 @@ func _new_ped(zone: bool) -> Dictionary:
 		"rejoin": 0.0, "cd": 0.0, "phase": _rng.randf() * TAU,
 		"zone": zone, "node": null, "ap": null, "anims": {}, "id": {},
 		"phone": false, "pause": 0.0, "pkind": "", "pcd": 0.0, "hawker": {},
+		"age": "adult", "street": "",
 		"pair": -1, "lead": true, "side": 1.0, "bseat": null,
 		"barrived": false, "bgo": Vector3.ZERO,
 	}
 
 
-func _dress(v: Dictionary) -> void:
+func _dress(v: Dictionary, idx := -1) -> void:
 	## One rigged walker with its own identity seed (issue #120): body,
 	## hair, headwear and outfit all roll from one number, so a walker
 	## keeps its look across recycles while no two dress alike. A reroll
@@ -810,17 +854,79 @@ func _dress(v: Dictionary) -> void:
 	var female := pick < MODELS.size() - 1
 	var id: Dictionary = Chars.identity(_rng.randi(), female)
 	v["id"] = id
+	# Age + street-character roll (issue #222). Fixed indices guarantee
+	# the acceptance silhouettes exist every session: pair followers 4
+	# and COUNT+20 walk as kids beside adults, 7/COUNT+12 push thela
+	# carts, 17 patrols with a lathi, 22 carries the picking sack.
+	var age := "adult"
+	var street := ""
+	if idx == 4 or idx == COUNT + 20:
+		age = "kid"
+	elif idx == 7 or idx == COUNT + 12:
+		street = "sabzi"
+	elif idx == 17:
+		street = "chowkidar"
+	elif idx == 22:
+		street = "ragpicker"
+	else:
+		var ar := _rng.randf()
+		if ar < KID_SHARE:
+			age = "kid"
+		elif ar < KID_SHARE + ELDER_SHARE:
+			age = "elder"
+	v["age"] = age
+	v["street"] = street
+	match age:
+		"kid":
+			id["height"] = float(id["height"]) * KID_SCALE
+		"elder":
+			id["height"] = float(id["height"]) * 0.955
+			id["hair"] = (id["hair"] as Color).lerp(Chars.HAIR_GREY, 0.75)
+	match street:
+		"chowkidar":
+			# Khaki watchman uniform (the guard wardrobe branch).
+			id["role"] = 2
+			id["shirt"] = Chars.GUARD_KHAKI
+			id["pants"] = Chars.GUARD_KHAKI_DARK
+			id["hat"] = Chars.GUARD_KHAKI_DARK
+			id["headwear"] = 1
+			id["outfit"] = 0
+			id["print"] = 0
+			id["border"] = 0
+		"ragpicker":
+			id["shirt"] = Color(0.45, 0.42, 0.36)
+			id["pants"] = Color(0.30, 0.28, 0.25)
+			id["print"] = 0
+		"sabzi":
+			# Plain kurta vendor — the cart carries the silhouette.
+			id["outfit"] = 1
+			id["print"] = 0
 	var node := _chars.spawn(path, PED_HEIGHT * float(id["height"]))
-	ShadowBlob.attach(node, 0.48)
+	ShadowBlob.attach(node, 0.34 if age == "kid" else 0.48)
 	_chars.dress(node, id)
 	add_child(node)
 	node.visible = false
 	v.node = node
 	v.ap = _chars.get_player(node)
 	v.anims = _chars.anim_names(node)
+	var body_h := PED_HEIGHT * float(id["height"])
+	match street:
+		"sabzi":
+			Streetfolk.cart(node, body_h)
+		"chowkidar":
+			Streetfolk.lathi(node, body_h)
+		"ragpicker":
+			Streetfolk.sack(node, body_h)
+	if age == "elder" and street == "":
+		var rig_e: Node = _chars.lively(node)
+		if rig_e != null:
+			rig_e.stoop = _rng.randf_range(ELDER_STOOP_MIN, ELDER_STOOP_MAX)
+		if _rng.randf() < ELDER_CANE_SHARE:
+			Streetfolk.cane(node, body_h)
 	# Street behavior roll (issue #207): this walker's head stays in a
-	# phone — slower amble and the head-down LivelyRig phone pose.
-	v["phone"] = _rng.randf() < PHONE_SHARE
+	# phone — slower amble and the head-down LivelyRig phone pose. Kids
+	# and street characters keep their heads up; the silhouette carries.
+	v["phone"] = age == "adult" and street == "" and _rng.randf() < PHONE_SHARE
 	if v["phone"]:
 		var rig: Node = _chars.lively(node)
 		if rig != null:

@@ -29,6 +29,11 @@ var talking := false
 ## Force the phone idle regardless of the seed roll.
 var phone_override := false
 
+## Fixed stoop pitch (radians) layered onto the head/neck wander plus a
+## slight body hinge — elders walk bent forward over their canes
+## (issue #222). Zero on everyone else.
+var stoop := 0.0
+
 var _skel: Skeleton3D = null
 var _model: Node3D = null
 var _holder: Node3D = null
@@ -86,6 +91,7 @@ func _process_modification(delta: float = 0.0) -> void:
 	if talking:
 		pitch += pow(sin(_t * 2.3 + _p4), 3.0) * 0.09 + 0.02
 		yaw += sin(_t * 1.7 + _p1) * 0.045
+	pitch += stoop
 	if _skel != null and is_instance_valid(_skel):
 		if _head >= 0:
 			_skel.set_bone_pose_rotation(_head,
@@ -99,7 +105,7 @@ func _process_modification(delta: float = 0.0) -> void:
 		if mode == 0 and _speed_sm < 0.25:
 			sway = sin(_t * 0.42 + _p2) * 0.022
 		var bank := clampf(-_yawrate_sm * 0.35, -0.16, 0.16)
-		_model.rotation = _base_rot + Vector3(-lean, 0.0, sway + bank)
+		_model.rotation = _base_rot + Vector3(-lean - stoop * 0.3, 0.0, sway + bank)
 
 
 ## One-time hookup: bones, base poses, seeded wander parameters. Returns
