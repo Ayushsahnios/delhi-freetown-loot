@@ -54,6 +54,9 @@ const JEEP_WHITE := Color(0.93, 0.94, 0.95)
 const JEEP_NAVY := Color(0.10, 0.16, 0.35)
 
 var heat := 0.0
+## Don-respect payoff (issue #264): Monty's closing chain discounts
+## every heat rise by one star — applied via set_respect().
+var respect := false
 
 var _player: Node3D = null
 var _jeeps: Array[Dictionary] = []
@@ -117,6 +120,10 @@ func stars() -> int:
 	return clampi(int(floor(heat + 0.001)), 0, MAX_STARS)
 
 
+func set_respect(on: bool) -> void:
+	respect = on
+
+
 # ---------------------------------------------------------------- bribe
 
 func bribe_cost() -> int:
@@ -158,6 +165,10 @@ func jeep_positions() -> Array[Vector3]:
 
 
 func _raise(amount: float) -> void:
+	if respect:
+		# Don respect (issue #264): the first star of any rise is on
+		# the house — small chaos never even registers.
+		amount = maxf(amount - 1.0, 0.0)
 	heat = minf(heat + amount, MAX_HEAT)
 	_unseen = 0.0
 	_sync_stars()

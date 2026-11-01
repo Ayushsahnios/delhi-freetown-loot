@@ -63,6 +63,16 @@ const CATALOG := {
 				"helmet": Color(0.96, 0.80, 0.30),
 			},
 		},
+		{
+			"key": "franchise",
+			"name": "FRANCHISE RIDER",
+			"price": 0,
+			"payoff": true,
+			"overrides": {
+				"shirt": Color(0.85, 0.25, 0.08),
+				"helmet": Color(0.85, 0.25, 0.08),
+			},
+		},
 	],
 	"monty": [
 		{
@@ -81,6 +91,17 @@ const CATALOG := {
 			"overrides": {
 				"shirt": Color(0.90, 0.72, 0.16),
 				"pants": Color(0.88, 0.86, 0.80),
+			},
+		},
+		{
+			"key": "goldchain",
+			"name": "DON'S GOLD CHAIN",
+			"price": 0,
+			"payoff": true,
+			"overrides": {
+				"shirt": Color(0.08, 0.08, 0.10),
+				"pants": Color(0.05, 0.05, 0.07),
+				"chain": Color(1.0, 0.78, 0.22),
 			},
 		},
 	],
@@ -172,6 +193,19 @@ func restore(data: Dictionary) -> void:
 	_cursor = {}
 
 
+func unlock_look(id: String, key: String) -> void:
+	## Legend payoff unlock (issue #264): the franchise jacket and the
+	## Don's gold chain land on the rack owned and free — the player
+	## walks up and wears them like any other look.
+	if _owned.get(id) == null:
+		_owned[id] = {}
+	_owned[id][key] = true
+
+
+func owns(id: String, key: String) -> bool:
+	return bool(_owned.get(id, {}).get(key, false))
+
+
 # ---------------------------------------------------------------- shop
 
 func _process(_delta: float) -> void:
@@ -188,7 +222,13 @@ func _process(_delta: float) -> void:
 			_prompt.visible = false
 			return
 	var id := String(Game.selected_character.get("id", ""))
-	var looks: Array = CATALOG.get(id, [])
+	# Payoff looks (issue #264) stay off the rack until their chain
+	# unlocks them — then they browse like any owned outfit.
+	var looks: Array = []
+	for look in CATALOG.get(id, []):
+		if bool(look.get("payoff", false)) and not owns(id, String(look["key"])):
+			continue
+		looks.append(look)
 	if looks.is_empty():
 		_prompt.visible = false
 		return
