@@ -1816,6 +1816,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_missions.register_player(player)
 	_missions.mission_completed.connect(_on_mission_completed)
 	_missions.mission_failed.connect(_on_mission_failed)
+	_missions.payoff_unlocked.connect(_on_payoff_unlocked)
 	_food.register(player, _health, _missions, _audio)
 	_wardrobe.register(player, _missions, _audio, Callable(self, "_autosave_silent"))
 	_interiors.register(player, _audio)
@@ -2587,6 +2588,68 @@ func _on_mission_failed(_title: String) -> void:
 	_autosave_silent()
 
 
+func _on_payoff_unlocked(_kind: String, label: String) -> void:
+	## Legend finale payoff (issue #264): a closing chain just landed —
+	## apply the world/economy effects, announce, and checkpoint so the
+	## unlock survives a refresh.
+	_apply_legend_payoffs()
+	_show_toast("PAYOFF UNLOCKED  ·  " + label)
+	_autosave_silent()
+
+
+func _apply_legend_payoffs() -> void:
+	## Idempotent — safe on load and on unlock. Economy flags first,
+	## then the payoff looks land on the rack, then the dhaba sign.
+	var pay: Dictionary = _missions.payoffs
+	_courier.set_franchise(bool(pay.get("franchise", false)))
+	_police.set_respect(bool(pay.get("respect", false)))
+	if bool(pay.get("franchise", false)):
+		_wardrobe.unlock_look("riya", "franchise")
+	if bool(pay.get("respect", false)):
+		_wardrobe.unlock_look("monty", "goldchain")
+	if bool(pay.get("dhaba_empire", false)):
+		_ensure_dhaba_sign()
+
+
+func _ensure_dhaba_sign() -> void:
+	## Dhaba Empire payoff prop (issue #264): Sardar Ji's stand grows a
+	## permanent name board — saffron beveled panel on round lathe
+	## poles, dark trim bars, a warm bulb strip and an arc-shell canopy.
+	## Pure de-box vocabulary (bevels, lathes, arc shells — no flat-face
+	## boxes); runs at payoff time and again on every carrying load.
+	if get_node_or_null(NodePath("DhabaEmpireSign")) != null:
+		return
+	var y := RoadsScript.CURB_H
+	var b := MeshTools.new()
+	var pole := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.05, 0.0),
+			Vector2(0.05, 3.1), Vector2(0.0, 3.1)])
+	for px in [-1.3, 1.3]:
+		b.add_lathe(pole, Vector3(6.0 + px, y, 65.7),
+				Color(0.30, 0.21, 0.14), MeshTools.FINISH_MATTE, 8)
+	b.add_bev_box(Vector3(3.0, 0.64, 0.09),
+			Vector3(6.0, y + 2.74, 65.7), 0.03,
+			Color(0.95, 0.52, 0.10), MeshTools.FINISH_SATIN)
+	for ty in [2.40, 3.08]:
+		b.add_bev_box(Vector3(3.1, 0.09, 0.11),
+				Vector3(6.0, y + ty, 65.7), 0.02,
+				Color(0.15, 0.09, 0.05), MeshTools.FINISH_MATTE)
+	var bulb := CylinderMesh.new()
+	bulb.top_radius = 0.05
+	bulb.bottom_radius = 0.05
+	bulb.height = 0.13
+	for i in 7:
+		b.add_mesh(bulb, Transform3D(Basis(),
+				Vector3(6.0 - 1.2 + i * 0.4, y + 3.28, 65.7)),
+				Color(1.0, 0.84, 0.52), MeshTools.FINISH_GLOSS)
+	b.add_arc_shell(3.2, 0.6, 0.09, Vector3(6.0, y + 3.14, 65.7),
+			Color(0.82, 0.24, 0.08), MeshTools.FINISH_MATTE, 6)
+	var node := b.build_node()
+	if node == null:
+		return
+	node.name = "DhabaEmpireSign"
+	add_child(node)
+
+
 func _on_health_damaged(_amount: float) -> void:
 	if _flash_tween != null and _flash_tween.is_valid():
 		_flash_tween.kill()
@@ -2898,6 +2961,7 @@ func _collect_save() -> Dictionary:
 		"day_t": day_t,
 		"missions_completed": _missions.completed,
 		"day_ledger": _missions.ledger_snapshot(),
+		"legend_payoffs": _missions.payoffs_snapshot(),
 	}
 	# Per-character snapshots so everyone's wallet, health and last spot
 	# survive a save/load cycle, not just the current lead.
@@ -2933,6 +2997,13 @@ func _apply_save(save: Dictionary) -> void:
 	var ledger_saved = save.get("day_ledger", {})
 	if typeof(ledger_saved) == TYPE_DICTIONARY:
 		_missions.restore_ledger(ledger_saved)
+	# Legend finale payoffs (issue #264): re-arm the unlock flags, then
+	# apply the world/economy effects on top (sign, streak cap, heat
+	# discount, payoff looks).
+	var payoffs_saved = save.get("legend_payoffs", {})
+	if typeof(payoffs_saved) == TYPE_DICTIONARY:
+		_missions.restore_payoffs(payoffs_saved)
+	_apply_legend_payoffs()
 	var chars = save.get("chars", {})
 	if typeof(chars) == TYPE_DICTIONARY:
 		for id in chars:
