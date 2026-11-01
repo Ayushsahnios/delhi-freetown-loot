@@ -64,12 +64,15 @@ const CourierScript := preload("res://scripts/courier.gd")
 const FacadesScript := preload("res://scripts/facades.gd")
 const PhotoScript := preload("res://scripts/photo.gd")
 const WildlifeScript := preload("res://scripts/wildlife.gd")
+const OnboardingScript := preload("res://scripts/onboarding.gd")
 
 ## Rideable metro shuttle (issue #98 part 2): boarding state, queued
 ## boarding while the train is en route, and the interior-cam anchors.
 var _metro: MetroScript = null
 var _railway: RailwayScript = null
 var _wildlife: WildlifeScript = null
+## Issue #271: first-5-minutes goal checklist card — fresh saves only.
+var _onboarding: OnboardingScript = null
 var _metro_riding := false
 var _metro_wait := -1
 var _metro_board_idx := -1
@@ -1886,6 +1889,13 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 		_quality_watch = QualityScript.Watch.new(self)
 		add_child(_quality_watch)
 	_touch.set_active(true)
+	# Issue #271: the goal checklist card. Pre-#271 saves carry no
+	# "onboarding" key, so setup() stays dark for them — fresh saves
+	# (and resumed fresh saves) are its one and only audience.
+	_onboarding = OnboardingScript.new()
+	add_child(_onboarding)
+	_onboarding.setup(save, _missions.intro_giver_pos(), _audio)
+	_onboarding.all_clear.connect(func(): _show_toast("CHECKLIST CLEAR — THE STREETS ARE YOURS"))
 	if not save.is_empty():
 		_apply_save(save)
 	else:
@@ -1984,6 +1994,10 @@ func _process(delta: float) -> void:
 	if _autosave_t >= AUTOSAVE_INTERVAL:
 		_autosave_t = 0.0
 		_autosave_silent()
+	# Issue #271: the checklist's beacon goal tracks the player on foot.
+	if _onboarding != null and is_instance_valid(_onboarding) \
+				and player != null and is_instance_valid(player):
+		_onboarding.tick_beacon(player.global_position)
 	var cc := _block_center(4, 7)
 	var ccd := Vector2(player.global_position.x - cc.x, player.global_position.z - cc.z).length()
 	if not _chandni_seen and ccd < 34.0:
@@ -2167,6 +2181,9 @@ func _metro_board(idx: int) -> void:
 	_cam_anchor = camera.global_position
 	_cam_look_pt = _metro.cam_look()
 	_show_toast("BOARDED · NEXT STOP " + _metro.station_name(_metro.other_idx(idx)))
+	# Issue #271: boarding the shuttle ticks the metro goal.
+	if _onboarding != null:
+		_onboarding.note_metro()
 
 
 func _metro_alight() -> void:
@@ -2597,6 +2614,9 @@ func _on_stamina_changed(fraction: float) -> void:
 
 
 func _on_mission_completed(_title: String, _reward: int) -> void:
+	## Issue #271: any completed job ticks the checklist's first-job goal.
+	if _onboarding != null:
+		_onboarding.note_job()
 	## Mission complete sting (issue #209): the score suite's bright
 	## sitar variation of the reward arpeggio (issue #154's plain
 	## _audio.jingle() is retired from this beat).
@@ -2946,7 +2966,14 @@ func _save_game() -> void:
 	var data := _collect_save()
 	if data.is_empty():
 		return
-	_show_toast("GAME SAVED" if SaveGame.write(data) else "SAVE FAILED")
+	if SaveGame.write(data):
+		_show_toast("GAME SAVED")
+		# Issue #271: a player-triggered save ticks the checklist's
+		# save goal (the silent 90 s autosave deliberately does not).
+		if _onboarding != null:
+			_onboarding.note_save()
+	else:
+		_show_toast("SAVE FAILED")
 
 
 func _autosave_silent() -> void:
@@ -3002,6 +3029,10 @@ func _collect_save() -> Dictionary:
 			"heading": float(st["heading"]), "pos": [p.x, p.y, p.z]}
 	data["chars"] = chars
 	data["wardrobe"] = _wardrobe.snapshot()
+	# Issue #271: checklist state rides every save; {} means the card
+	# never activated (pre-#271 saves keep that shape forever).
+	if _onboarding != null and is_instance_valid(_onboarding):
+		data["onboarding"] = _onboarding.snapshot()
 	return data
 
 
