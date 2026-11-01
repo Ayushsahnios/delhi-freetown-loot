@@ -14,11 +14,24 @@ extends Node
 ## Usage:
 ##   godot --headless --path . res://scenes/daily_life_check.tscn
 ## Exits 0 with verdict=PASS when every rhythm holds, 2 otherwise.
+## Usage (captures, issue #268 rush vs lull for human eyes):
+##   xvfb-run -a -s "-screen 0 1280x720x24" godot --path . \
+##     --rendering-driver opengl3 res://scenes/daily_life_check.tscn -- \
+##     --out-lull docs/screenshots/traffic-lull-268.png \
+##     --out-rush docs/screenshots/traffic-rush-268.png
 
 const MAIN_SCENE := preload("res://scenes/main.tscn")
 
 
 func _ready() -> void:
+	var out_lull := ""
+	var out_rush := ""
+	var args := OS.get_cmdline_user_args()
+	for i in range(args.size()):
+		if String(args[i]) == "--out-lull" and i + 1 < args.size():
+			out_lull = String(args[i + 1])
+		elif String(args[i]) == "--out-rush" and i + 1 < args.size():
+			out_rush = String(args[i + 1])
 	var main := MAIN_SCENE.instantiate()
 	add_child(main)
 	await get_tree().process_frame
@@ -62,6 +75,8 @@ func _ready() -> void:
 	if int(noon_wave["target"]) != 19 or int(noon_wave["fleet"]) != 19:
 		problems.append("noon traffic fleet %d target %d — expected lull 19"
 				% [noon_wave["fleet"], noon_wave["target"]])
+	if out_lull != "":
+		await _capture(out_lull, "lull")
 
 	# Deep night: shutters closed, crowd thinned to the keep floor, bulbs on.
 	main.day_t = 0.02
@@ -130,6 +145,8 @@ func _ready() -> void:
 	if int(rush_wave["target"]) != 32 or int(rush_wave["fleet"]) != 32:
 		problems.append("rush traffic fleet %d target %d — expected peak 32"
 				% [rush_wave["fleet"], rush_wave["target"]])
+	if out_rush != "":
+		await _capture(out_rush, "rush")
 
 	if problems.is_empty():
 		print("DAILY LIFE CHECK PASS — shutters, crowds, chai rush and traffic wave on one clock")
@@ -159,3 +176,14 @@ func _settle_wave(traffic: Node, secs: float) -> void:
 		var w: Dictionary = traffic.wave_debug()
 		if int(w["fleet"]) == int(w["target"]):
 			return
+
+
+func _capture(path: String, label: String) -> void:
+	## Rush vs lull captures (issue #268 acceptance): save what the
+	## street looks like at this probe hour for human eyeballs. Skipped
+	## in the pure headless gate (no --out args, no GPU to read back).
+	for i in range(30):
+		await get_tree().process_frame
+	var img := get_viewport().get_texture().get_image()
+	img.save_png(path)
+	print("daily_life_check %s capture saved: %s" % [label, path])
