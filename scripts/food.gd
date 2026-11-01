@@ -47,6 +47,8 @@ var _toast_tween: Tween
 var night_f := 0.0
 var rush_f := 0.0
 var rain_demand := 0.0  # 0..1 monsoon chai rush — drives cart surge pricing
+var festival := false  # Diwali window (issue #263): mithai/paratha surge
+const FEST_MULT := 0.25  # full Diwali premium on sweets/griddles
 var _bulb_mat: StandardMaterial3D = null
 
 
@@ -110,11 +112,22 @@ func set_rain_demand(level: float) -> void:
 	rain_demand = clampf(level, 0.0, 1.0)
 
 
+func set_festival(on: bool) -> void:
+	## Diwali window (issue #263): mithai boxes and paratha griddles
+	## surge with festival demand for the fortnight.
+	festival = on
+
+
 func _price(item: Dictionary) -> int:
 	## Live price with the monsoon demand premium (issue #205): cart
 	## chai/samosa surge with the rain — full +35% at a downpour, phased
 	## in from drizzle, rounded up to the nearest five rupees. Counter
-	## menus (mithai/paratha) stay fixed.
+	## menus (mithai/paratha) stay fixed outside the Diwali window.
+	if festival and (item["name"] == "MITHAI" or item["name"] == "PARATHA"):
+		# Diwali fortnight (issue #263): sweets surge with the festival,
+		# rounded up like the rain premium.
+		var fest := float(item["price"]) * (1.0 + FEST_MULT)
+		return int(ceilf(fest / 5.0) * 5.0)
 	if item["name"] != "CHAI" and item["name"] != "SAMOSA":
 		return int(item["price"])
 	var surge := clampf((rain_demand - 0.25) / 0.75, 0.0, 1.0)
@@ -159,6 +172,8 @@ func _process(delta: float) -> void:
 
 func _mood() -> String:
 	## Prompt tail for the daily rhythm (issue #185) and squalls (#205).
+	if festival:
+		return "  ·  Diwali rush!"
 	if rain_demand > 0.25:
 		return "  ·  rain rush"
 	if rush_f > 0.5:

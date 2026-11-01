@@ -55,6 +55,7 @@ const DelhiDressing3Script := preload("res://scripts/delhi_dressing3.gd")
 const Interiors3Script := preload("res://scripts/interiors3.gd")
 const Interiors2Script := preload("res://scripts/interiors2.gd")
 const NightShopsScript := preload("res://scripts/night_shops.gd")
+const FestivalScript := preload("res://scripts/festival.gd")
 const ClutterScript := preload("res://scripts/world_clutter.gd")
 const MetroScript := preload("res://scripts/metro.gd")
 const RailwayScript := preload("res://scripts/railway.gd")
@@ -147,6 +148,7 @@ var _interiors: Node
 var _interiors3: Node
 var _interiors2: Node
 var _night_shops: Node
+var _festival: Node = null
 var _wardrobe: WardrobeScript
 var _taxi: Node
 var _courier: Node
@@ -255,6 +257,13 @@ func _ready() -> void:
 	_food = FoodScript.new()
 	add_child(_food)
 	_food.setup(_landmarks)
+	# Diwali festival window (issue #263): Nov 1-14 or --festival —
+	# string lights, threshold diyas, river fireworks, food surge.
+	if FestivalScript.is_festival():
+		_festival = FestivalScript.new()
+		add_child(_festival)
+		_festival.setup(WORLD, PITCH, ROAD, _block_center(9, 8))
+		_food.set_festival(true)
 	# Walk-in interiors (issue #183): the halwai shop and the dhaba
 	# corner take customers — counter service through the food system,
 	# a chime on the sweet-shop door, idle locals inside.
@@ -343,6 +352,9 @@ func _ready() -> void:
 	_radio = RadioScript.new()
 	add_child(_radio)
 	_radio.setup()
+	# Festival radio IDs ride the same window as the dressing (#263).
+	if _festival != null:
+		_radio.set_festival(true)
 	_chase = ChaseScript.new()
 	add_child(_chase)
 	_chase.setup()
@@ -2377,6 +2389,12 @@ func _update_day(delta: float) -> void:
 	# Shopfront night dressing (issue #265) rides the same dusk curve.
 	if _night_shops != null:
 		_night_shops.set_night(1.0 - clampf(daylight * 1.4, 0.0, 1.0))
+	# Diwali dressing (issue #263) rides the same dusk curve; the
+	# fireworks tick on it after dark.
+	if _festival != null:
+		var fglow := 1.0 - clampf(daylight * 1.4, 0.0, 1.0)
+		_festival.set_night(fglow)
+		_festival.tick(delta, fglow)
 	# Street lamps join the windows at dusk: real OmniLights under every
 	# lamp head, so their warm pools render in every pipeline — the
 	# software-GL capture path included (issue #102).

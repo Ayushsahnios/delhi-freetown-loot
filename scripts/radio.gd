@@ -26,6 +26,7 @@ var _loops: Array[AudioStreamWAV] = []
 var _id_wavs: Array[AudioStreamWAV] = []       # per-station ID one-shots
 var _id_player: AudioStreamPlayer
 var _station := 0
+var _festive := false  # Diwali window (issue #263): sparkle-tail IDs
 var _active_idx := 0
 var _active := false
 var _fade: Tween
@@ -72,6 +73,15 @@ func set_active(on: bool) -> void:
 		_fade = create_tween()
 		_fade.tween_property(p, "volume_db", FADE_FLOOR_DB, POWER_S)
 		_fade.tween_callback(p.stop)
+
+
+func set_festival(on: bool) -> void:
+	## Diwali window (issue #263): every station ID gets a bright
+	## sparkle-tinkle tail while the festival is live.
+	if on == _festive:
+		return
+	_festive = on
+	_id_wavs = [_make_id_dhol(on), _make_id_bansuri(on), _make_id_dhj(on)]
 
 
 func cycle_station() -> String:
@@ -260,7 +270,7 @@ func _make_dhj_news() -> AudioStreamWAV:
 	return _finish(buf)
 
 
-func _make_id_dhol() -> AudioStreamWAV:
+func _make_id_dhol(fest := false) -> AudioStreamWAV:
 	## DHOL POWER ID (~1.1 s): a dhol hit pair into a rising tumbi twang —
 	## the preset says its name the moment you land on it.
 	var frames := int(MIX_RATE * 1.1)
@@ -271,10 +281,12 @@ func _make_id_dhol() -> AudioStreamWAV:
 	_pluck(buf, int(0.3 * MIX_RATE), frames, 293.66, 0.3, 0.5)
 	_pluck(buf, int(0.48 * MIX_RATE), frames, 440.0, 0.5, 0.5)
 	_hat(buf, int(0.3 * MIX_RATE), frames, 0.1)
+	if fest:
+		_sparkle(buf, 0.62, frames)
 	return _finish_oneshot(buf)
 
 
-func _make_id_bansuri() -> AudioStreamWAV:
+func _make_id_bansuri(fest := false) -> AudioStreamWAV:
 	## BANSURI & SITAR ID (~1.4 s): a soft tanpura touch under a rising
 	## two-note flute figure.
 	var frames := int(MIX_RATE * 1.4)
@@ -283,10 +295,12 @@ func _make_id_bansuri() -> AudioStreamWAV:
 	_drone(buf, int(0.02 * MIX_RATE), frames, 220.0, 1.2, 0.4)
 	_flute(buf, int(0.1 * MIX_RATE), frames, 440.0, 0.5, 0.4)
 	_flute(buf, int(0.55 * MIX_RATE), frames, 587.33, 0.7, 0.4)
+	if fest:
+		_sparkle(buf, 0.75, frames)
 	return _finish_oneshot(buf)
 
 
-func _make_id_dhj() -> AudioStreamWAV:
+func _make_id_dhj(fest := false) -> AudioStreamWAV:
 	## DHJ NEWS ID (~1.2 s): urgent beeps straight into anchor chatter.
 	var frames := int(MIX_RATE * 1.2)
 	var buf := PackedFloat32Array()
@@ -295,7 +309,21 @@ func _make_id_dhj() -> AudioStreamWAV:
 	_beep(buf, int(0.18 * MIX_RATE), frames, 1180.0, 0.09, 0.3)
 	_beep(buf, int(0.32 * MIX_RATE), frames, 1560.0, 0.16, 0.3)
 	_chatter_phrase(buf, int(0.6 * MIX_RATE), frames, 130.0, 3, 0.3)
+	if fest:
+		_sparkle(buf, 0.78, frames)
 	return _finish_oneshot(buf)
+
+
+func _sparkle(buf: PackedFloat32Array, at_s: float, frames: int) -> void:
+	## Festival tail (issue #263): three rising tinkle plucks with hat
+	## ticks — the Diwali station-ID flourish.
+	var t0 := int(at_s * MIX_RATE)
+	_pluck(buf, t0, frames, 1568.0, 0.08, 0.35)
+	_hat(buf, t0, frames, 0.12)
+	_pluck(buf, t0 + int(0.09 * MIX_RATE), frames, 1975.5, 0.08, 0.32)
+	_hat(buf, t0 + int(0.09 * MIX_RATE), frames, 0.12)
+	_pluck(buf, t0 + int(0.18 * MIX_RATE), frames, 2637.0, 0.1, 0.30)
+	_hat(buf, t0 + int(0.18 * MIX_RATE), frames, 0.12)
 
 
 func _finish_oneshot(buf: PackedFloat32Array) -> AudioStreamWAV:
