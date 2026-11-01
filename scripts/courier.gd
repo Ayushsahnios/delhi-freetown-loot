@@ -38,6 +38,9 @@ var _depots: Array[Dictionary] = []
 ## Active run: "dest" (Dictionary), "dist", "time", "total" (float).
 var _run: Dictionary = {}
 var _streak := 0
+## Franchise payoff (issue #264): Riya's closing chain doubles the
+## streak cap — applied by the main scene on payoff/load.
+var franchise := false
 var _t := 0.0
 
 var _prompt: Label
@@ -61,6 +64,14 @@ func setup(landmarks: Array[Dictionary]) -> void:
 func register(p: CharacterBody3D, missions) -> void:
 	_player = p
 	_missions = missions
+
+
+func set_franchise(on: bool) -> void:
+	franchise = on
+
+
+func streak_cap() -> int:
+	return STREAK_CAP * (2 if franchise else 1)
 
 
 ## Public: drop the run without pay (death / arrest reset).
@@ -148,7 +159,7 @@ func _grab(depot: Dictionary, from: Vector3) -> void:
 func _deliver() -> void:
 	var dest: Dictionary = _run["dest"]
 	var dist := float(_run["dist"])
-	var pay := (BASE_PAY + dist * PER_M) * (1.0 + STREAK_STEP * minf(_streak, STREAK_CAP))
+	var pay := (BASE_PAY + dist * PER_M) * (1.0 + STREAK_STEP * minf(_streak, streak_cap()))
 	if float(_run["time"]) > FAST_CUT * float(_run["total"]):
 		pay *= 1.0 + FAST_BONUS
 	var rounded := int(roundf(pay / 5.0) * 5.0)

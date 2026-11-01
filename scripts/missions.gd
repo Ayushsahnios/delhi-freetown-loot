@@ -11,9 +11,11 @@ extends Node
 
 const DialogueScript := preload("res://scripts/dialogue.gd")
 const StoryArcs := preload("res://scripts/story_arcs.gd")
+const LegendFinales := preload("res://scripts/legend_finales.gd")
 
 signal mission_completed(title: String, reward: int)
 signal mission_failed(title: String)
+signal payoff_unlocked(kind: String, label: String)
 
 const TRIGGER_R := 3.5
 const OFFER_EXIT_R := 5.5
@@ -32,6 +34,10 @@ var enabled := true
 var ledger := {}
 ## Mission id -> times completed; persisted in the save file.
 var completed := {}
+## Legend finale payoffs (issue #264): kind -> true once that legend's
+## closing chain lands. Persisted in the save; effects are applied by
+## the main scene via payoff_unlocked / _apply_legend_payoffs.
+var payoffs := {}
 
 var _player: CharacterBody3D = null
 var _defs: Array[Dictionary] = []
@@ -175,6 +181,22 @@ func restore_ledger(saved: Dictionary) -> void:
 		var amt := maxi(int(saved[key]), 0)
 		if amt > 0:
 			ledger[String(key)] = amt
+
+
+func payoffs_snapshot() -> Dictionary:
+	## Save piggyback (issue #264): unlocked legend payoffs, plain bools.
+	return payoffs.duplicate()
+
+
+func restore_payoffs(saved: Dictionary) -> void:
+	## Load path: re-arm the payoff flags; the main scene applies the
+	## world/economy effects on top (sign, streak cap, heat discount).
+	payoffs = {}
+	if typeof(saved) != TYPE_DICTIONARY:
+		return
+	for key in saved:
+		if bool(saved[key]):
+			payoffs[String(key)] = true
 
 
 func _ledger_add(source: String, amount: int) -> void:
@@ -529,6 +551,10 @@ func _build_defs() -> void:
 	# mission completions ("after") and the named legend ("requires").
 	for fin in StoryArcs.STORY_FINALE:
 		_defs.append(fin.duplicate(true))
+	# Legend finale arcs (issue #264): each legend's three-mission
+	# closing chain with a persistent payoff on the final step.
+	for arc2 in LegendFinales.LEGEND_FINALE_ARCS:
+		_defs.append(arc2.duplicate(true))
 
 
 # ---------------------------------------------------------------- loop
@@ -705,6 +731,13 @@ func _complete_mission() -> void:
 	_toast.visible = true
 	_toast_t = 2.5
 	mission_completed.emit(String(def["title"]), reward)
+	if def.has("payoff"):
+		## Legend finale (issue #264): the closing step of each chain
+		## converts into a persistent unlock — fired once, ever.
+		var pk := String(def["payoff"]["kind"])
+		if not bool(payoffs.get(pk, false)):
+			payoffs[pk] = true
+			payoff_unlocked.emit(pk, String(def["payoff"].get("label", pk)))
 	_refresh_finale_gates()
 	_end_mission(def)
 	if def.has("outro"):
@@ -1006,6 +1039,9 @@ func _fmt_time(s: float) -> String:
 func _refresh_finale_gates() -> void:
 	## Finale missions (issue #96) unlock in order: a locked finale
 	## flips available once every mission in its "after" list is done.
+	var total_done := 0
+	for k in completed:
+		total_done += int(completed[k])
 	for def in _defs:
 		if not def.has("after"):
 			continue
@@ -1017,6 +1053,10 @@ func _refresh_finale_gates() -> void:
 			if int(completed.get(String(pre), 0)) == 0:
 				ready = false
 				break
+		# Missions-completed threshold (issue #264): a chain opener also
+		# waits until the street résumé is long enough.
+		if ready and def.has("need_done") and total_done < int(def["need_done"]):
+			ready = false
 		if ready:
 			_states[fid] = "available"
 			_show_giver(fid, true)
