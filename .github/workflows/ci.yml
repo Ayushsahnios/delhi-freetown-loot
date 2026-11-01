@@ -57,7 +57,9 @@ jobs:
       - name: Perf budget gate (headless frame-time, issue 167)
         run: |
           set -o pipefail
-          timeout 420 godot --headless --path . res://scenes/perf_check.tscn -- --frames 120 --warmup 45 2>&1 | tee /tmp/perf.log
+          # --festival (issue #263): the budget always measures the Diwali
+          # dressing, not only during the Nov 1-14 window.
+          timeout 420 godot --headless --path . res://scenes/perf_check.tscn -- --frames 120 --warmup 45 --festival 2>&1 | tee /tmp/perf.log
           grep -q "verdict=PASS" /tmp/perf.log
 
       - name: Hygiene scan (no addresses or leaks in committed files)
