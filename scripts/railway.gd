@@ -29,6 +29,17 @@ const ACCEL := 1.4
 const CAR_LEN := 8.8
 const CAR_GAP := 0.6
 
+## Departure board (issue #184): fictional services, all platform 1.
+const BOARD_SERVICES := [
+	["GOMTI EXPRESS", "11:42"],
+	["SHALIMAR EXPRESS", "12:05"],
+	["TAJ EXPRESS", "12:30"],
+	["HERITAGE SPECIAL", "13:10"],
+	["NIGHT RAJDHANI", "21:50"],
+]
+const BOARD_STATUS := ["ON TIME", "BOARDING", "DELAYED 20", "ARRIVING",
+	"AT PLATFORM"]
+
 ## Palette from the reference: cream + red-oxide checker floor, grey
 ## truss, green/white canopy stripes, yellow board with red border,
 ## terracotta station roof, red/cream train livery.
@@ -42,6 +53,7 @@ const STRIPE_GREEN := Color(0.16, 0.42, 0.28)
 const STRIPE_WHITE := Color(0.92, 0.92, 0.90)
 const BOARD_YELLOW := Color(0.94, 0.76, 0.10)
 const BOARD_RED := Color(0.72, 0.12, 0.10)
+const BOARD_DARK := Color(0.16, 0.14, 0.12)
 const WALL_CREAM := Color(0.87, 0.79, 0.64)
 const ROOF_TERRA := Color(0.62, 0.28, 0.15)
 const DARK_WIN := Color(0.13, 0.15, 0.19)
@@ -68,23 +80,37 @@ const STEEL := Color(0.58, 0.58, 0.60)
 
 signal arrived
 signal departed
+signal counter_near
 
 var _state := "away"
 var _timer := 4.0
 var _speed := 0.0
 var _train: Node3D = null
+var _player: CharacterBody3D = null
+var _audio: Node = null
+var _counter_done := false
+var _arrived_row_flipped := false
+var _fans: Array[Node3D] = []
+var _flap_hinge: Array[Node3D] = []
+var _flap_label: Array[Label3D] = []
+var _flap_status: Array[String] = []
+var _flap_next: Array[String] = []
+var _flap_flip_t: Array[float] = []
+var _flip_timer := 6.0
 
 
 func setup(center: Vector3) -> void:
 	position = center
 	name = "RailwayStation"
 	_build_static()
+	_build_hall_dynamic()
 	_build_train()
 
 
 # ------------------------------------------------------------ scene train
 
 func _process(delta: float) -> void:
+	_tick_hall(delta)
 	if _train == null:
 		return
 	if _state == "dwell" or _state == "away":
@@ -131,6 +157,8 @@ func _build_static() -> void:
 	_build_canopy(b)
 	_build_sign(b)
 	_build_building(b)
+	_build_counter(b)
+	_build_hall_furniture(b)
 	_build_furniture(b)
 	_build_porters(b)
 	_build_catenary(b)
@@ -138,6 +166,7 @@ func _build_static() -> void:
 	root.name = "StationYard"
 	var mi := MeshInstance3D.new()
 	mi.mesh = b.build_mesh()
+	print("[railway] station-yard tris=%d" % b.tris)
 	root.add_child(mi)
 	var tile_a := BoxMesh.new()
 	tile_a.size = Vector3(2.0, 0.03, 2.0)
@@ -285,10 +314,33 @@ func _build_sign(b: MeshTools) -> void:
 
 
 func _build_building(b: MeshTools) -> void:
-	## Far-platform station building: cream walls, terracotta gable roof
-	## (ridge along z), dark windows and a door facing the track, small
-	## blue panel signage (plain — text belongs to #131).
-	b.add_box(Vector3(6.0, 3.2, 13.0), Vector3(6.6, 2.1, -1.0), WALL_CREAM)
+	## Station concourse (issue #184): a hollow through-hall — long
+	## walls with matching doorways on both sides (west to the platform
+	## and train, east to the street), end walls, a cream tile floor
+	## with red-oxide border inlays, terracotta gable roof and dark
+	## windows inside the wall span. Counter, benches, board and fans
+	## live in the funcs that follow (static mesh + dynamic nodes).
+	for wx in [3.6, 9.6]:
+		# Doorway z 0.45..1.55 on BOTH long walls — the hall runs
+		# straight through, platform side to street side.
+		for seg in [[-7.5, 0.45], [1.55, 5.5]]:
+			var z0: float = seg[0]
+			var z1: float = seg[1]
+			b.add_bev_box(Vector3(0.18, 3.2, z1 - z0),
+					Vector3(wx, 2.1, (z0 + z1) / 2.0), 0.04, WALL_CREAM)
+		b.add_bev_box(Vector3(0.18, 0.95, 1.1), Vector3(wx, 3.225, 1.0),
+				0.02, WALL_CREAM)
+		# Jambs plus one door leaf swung open against the inner face.
+		b.add_box(Vector3(0.22, 2.3, 0.08), Vector3(wx, 1.65, 0.42), DOOR_WOOD)
+		b.add_box(Vector3(0.22, 2.3, 0.08), Vector3(wx, 1.65, 1.58), DOOR_WOOD)
+		var leaf := 3.73 if wx < 6.0 else 9.47
+		b.add_box(Vector3(0.06, 2.2, 1.05), Vector3(leaf, 1.63, -0.08), DOOR_WOOD)
+	for ez in [-7.5, 5.5]:
+		b.add_bev_box(Vector3(6.0, 3.2, 0.18), Vector3(6.6, 2.1, ez), 0.04, WALL_CREAM)
+	# Interior floor: cream tile with red-oxide border inlays.
+	b.add_box(Vector3(5.7, 0.03, 12.7), Vector3(6.6, 0.515, -1.0), TILE_A)
+	for bx in [3.87, 9.33]:
+		b.add_box(Vector3(0.24, 0.012, 12.7), Vector3(bx, 0.536, -1.0), TILE_B)
 	var pitch := atan(1.6 / 3.0)
 	var slab := BoxMesh.new()
 	slab.size = Vector3(3.55, 0.16, 14.2)
@@ -302,11 +354,62 @@ func _build_building(b: MeshTools) -> void:
 		b.add_box(Vector3(6.0, 0.4, 0.2), Vector3(6.6, 3.9, gz), WALL_CREAM)
 		b.add_box(Vector3(4.4, 0.4, 0.2), Vector3(6.6, 4.3, gz), WALL_CREAM)
 		b.add_box(Vector3(2.6, 0.4, 0.2), Vector3(6.6, 4.65, gz), WALL_CREAM)
-	b.add_box(Vector3(0.18, 2.2, 1.1), Vector3(3.62, 1.55, 1.0), DOOR_WOOD)
-	for zz in [-8.0, -5.0, 4.0, 7.0]:
-		b.add_box(Vector3(0.14, 1.1, 1.4), Vector3(3.62, 2.0, zz), DARK_WIN)
-		b.add_box(Vector3(0.14, 1.1, 1.4), Vector3(9.6, 2.0, zz), DARK_WIN)
-	b.add_box(Vector3(0.1, 0.5, 3.0), Vector3(3.56, 2.9, -3.0), BLUE_PANEL)
+	# Windows inside the wall span (the old z -8/7 pair floated in
+	# mid-air outside the building), proud of both wall faces.
+	for wz in [-5.0, -2.0, 3.2]:
+		b.add_box(Vector3(0.22, 1.1, 1.4), Vector3(3.6, 2.0, wz), DARK_WIN)
+		b.add_box(Vector3(0.22, 1.1, 1.4), Vector3(9.6, 2.0, wz), DARK_WIN)
+	b.add_box(Vector3(0.1, 0.5, 3.0), Vector3(3.49, 2.9, -3.0), BLUE_PANEL)
+
+
+func _build_counter(b: MeshTools) -> void:
+	## South-end ticket counter (issue #184): wooden body with a pale
+	## slab top and red skirt, a barred grille on the south wall, a
+	## clerk in a pale kurta reading over the counter, TICKETS plate.
+	b.add_bev_box(Vector3(2.6, 0.72, 0.85), Vector3(6.6, 0.89, 4.6), 0.03, WOOD)
+	b.add_box(Vector3(2.8, 0.07, 1.0), Vector3(6.6, 1.29, 4.6), TILE_A)
+	b.add_box(Vector3(2.8, 0.44, 0.06), Vector3(6.6, 0.75, 4.13), TILE_B)
+	b.add_box(Vector3(2.3, 1.2, 0.1), Vector3(6.6, 2.2, 5.42), BOARD_DARK)
+	b.add_box(Vector3(2.1, 1.0, 0.05), Vector3(6.6, 2.2, 5.38), DARK_WIN)
+	for gx in [5.85, 6.35, 6.85, 7.35]:
+		b.add_box(Vector3(0.06, 1.0, 0.08), Vector3(gx, 2.2, 5.35), GOLD)
+	# Clerk (~1.6 m): dark trouser legs, kurta lathe, head at grille
+	# height facing into the hall over the counter top.
+	for side in [-0.12, 0.12]:
+		b.add_round_lathe(MeshTools.capsule_profile(0.105, 0.085, 0.60),
+				Transform3D(Basis(), Vector3(6.6 + side, 0.83, 5.15)), LEGS)
+	b.add_round_lathe(PackedVector2Array([
+				Vector2(0.05, 0.0), Vector2(0.21, 0.08), Vector2(0.22, 0.32),
+				Vector2(0.215, 0.60), Vector2(0.19, 0.74), Vector2(0.05, 0.78)]),
+			Transform3D(Basis(), Vector3(6.6, 1.12, 5.15)), KURTA,
+			MeshTools.FINISH_MATTE, 10, 0.62)
+	b.add_round_lathe(MeshTools.capsule_profile(0.045, 0.05, 0.10),
+			Transform3D(Basis(), Vector3(6.6, 1.90, 5.15)), SKIN)
+	b.add_round_lathe(MeshTools.ball_profile(0.125, 3),
+			Transform3D(Basis(), Vector3(6.6, 1.95, 5.15)), SKIN,
+			MeshTools.FINISH_MATTE, 10, 0.95)
+	b.add_box(Vector3(0.9, 0.32, 0.06), Vector3(5.0, 2.5, 5.41), TILE_A)
+
+
+func _build_hall_furniture(b: MeshTools) -> void:
+	## Concourse fittings (issue #184): two slat benches backing the
+	## long walls, one luggage cluster by the north wall.
+	_hall_bench(b, 4.35, -2.0, -1.0)
+	_hall_bench(b, 8.85, -2.0, 1.0)
+	var bx := BoxMesh.new()
+	bx.size = Vector3(0.62, 0.34, 0.46)
+	b.add_mesh(bx, Transform3D(Basis(Vector3.UP, 0.3), Vector3(5.6, 0.70, -5.5)), BUNDLE)
+	b.add_mesh(bx, Transform3D(Basis(Vector3.UP, -0.2), Vector3(5.7, 1.04, -5.45)), BUNDLE)
+	b.add_box(Vector3(0.7, 0.5, 0.22), Vector3(4.85, 0.78, -5.2), Color(0.40, 0.24, 0.12))
+
+
+func _hall_bench(b: MeshTools, x: float, z: float, side: float) -> void:
+	## Platform slat bench with its backrest against the nearest long
+	## wall (side -1 west, +1 east).
+	b.add_box(Vector3(0.5, 0.07, 1.9), Vector3(x, 0.68, z), WOOD)
+	b.add_box(Vector3(0.07, 0.55, 1.9), Vector3(x + side * 0.22, 0.95, z), WOOD)
+	for dz in [-0.8, 0.8]:
+		b.add_box(Vector3(0.42, 0.36, 0.1), Vector3(x, 0.5, z + dz), STEEL)
 
 
 func _build_furniture(b: MeshTools) -> void:
@@ -477,6 +580,19 @@ func _build_lights() -> void:
 		lamp.omni_range = 14.0
 		lamp.omni_attenuation = 1.2
 		add_child(lamp)
+	# Concourse interior (issue #184): warm hall wash + counter glow.
+	var hall := OmniLight3D.new()
+	hall.position = Vector3(6.6, 3.15, 0.2)
+	hall.light_color = Color(1.0, 0.88, 0.66)
+	hall.omni_range = 11.0
+	hall.omni_attenuation = 1.2
+	add_child(hall)
+	var glow := OmniLight3D.new()
+	glow.position = Vector3(6.6, 2.7, 4.3)
+	glow.light_color = Color(1.0, 0.82, 0.55)
+	glow.omni_range = 6.0
+	glow.omni_attenuation = 1.4
+	add_child(glow)
 
 
 func _build_colliders() -> void:
@@ -486,7 +602,17 @@ func _build_colliders() -> void:
 	body.name = "StationColliders"
 	_col(body, Vector3(8.8, 0.5, 28.0), Vector3(-6.6, 0.25, -1.0), 0.0)
 	_col(body, Vector3(8.0, 0.5, 24.0), Vector3(6.2, 0.25, -1.0), 0.0)
-	_col(body, Vector3(6.0, 3.2, 13.0), Vector3(6.6, 2.1, -1.0), 0.0)
+	# Hollow concourse (issue #184): wall segments with the doorways
+	# (z 0.45..1.55 both long walls) left clear, end walls, counter,
+	# hall benches.
+	for wx in [3.6, 9.6]:
+		_col(body, Vector3(0.18, 3.2, 7.95), Vector3(wx, 2.1, -3.525), 0.0)
+		_col(body, Vector3(0.18, 3.2, 3.95), Vector3(wx, 2.1, 3.525), 0.0)
+	for ez in [-7.5, 5.5]:
+		_col(body, Vector3(6.0, 3.2, 0.18), Vector3(6.6, 2.1, ez), 0.0)
+	_col(body, Vector3(2.6, 0.8, 0.85), Vector3(6.6, 0.93, 4.6), 0.0)
+	_col(body, Vector3(1.1, 0.7, 1.9), Vector3(4.35, 0.88, -2.0), 0.0)
+	_col(body, Vector3(1.1, 0.7, 1.9), Vector3(8.85, 0.88, -2.0), 0.0)
 	_col(body, Vector3(2.4, 1.7, 1.2), Vector3(0.0, 0.85, BUFFER_Z), 0.0)
 	for t in [[-3.6, -8.0], [-6.8, 11.5]]:
 		_col(body, Vector3(1.8, 1.2, 1.4), Vector3(t[0], 0.6, t[1]), 0.0)
@@ -505,6 +631,149 @@ func _col(parent: Node, size: Vector3, pos: Vector3, _yaw: float) -> void:
 	col.shape = box
 	col.position = pos
 	parent.add_child(col)
+
+
+func _build_hall_dynamic() -> void:
+	## Moving concourse pieces (issue #184): split-flap departure board
+	## (dark frame, DEPARTURES header, five flap rows hinged at the
+	## top), TICKETS label, and two ceiling fans (static rod + hub,
+	## spinning blade hubs ticked in _tick_hall).
+	var frame := MeshTools.new()
+	frame.add_bev_box(Vector3(3.6, 1.8, 0.14), Vector3(6.6, 2.35, -7.40),
+			0.04, BOARD_DARK)
+	for fp in [[6.0, -3.0], [7.2, 1.6]]:
+		var fx: float = fp[0]
+		var fz: float = fp[1]
+		var rod := CylinderMesh.new()
+		rod.top_radius = 0.03
+		rod.bottom_radius = 0.03
+		rod.height = 0.8
+		frame.add_mesh(rod, Transform3D(Basis(), Vector3(fx, 3.83, fz)), STEEL)
+		var hub := CylinderMesh.new()
+		hub.top_radius = 0.10
+		hub.bottom_radius = 0.10
+		hub.height = 0.14
+		frame.add_mesh(hub, Transform3D(Basis(), Vector3(fx, 3.42, fz)), STEEL)
+		var spin := Node3D.new()
+		spin.position = Vector3(fx, 3.40, fz)
+		var blades := MeshTools.new()
+		var blade := BoxMesh.new()
+		blade.size = Vector3(0.98, 0.02, 0.18)
+		for k in 3:
+			var bas := Basis(Vector3.UP, TAU * k / 3.0) * Basis(Vector3.RIGHT, 0.18)
+			blades.add_mesh(blade, Transform3D(bas, bas * Vector3(0.5, 0.0, 0.0)), STEEL)
+		var bmi := MeshInstance3D.new()
+		bmi.mesh = blades.build_mesh()
+		spin.add_child(bmi)
+		add_child(spin)
+		_fans.append(spin)
+	var fmi := MeshInstance3D.new()
+	fmi.mesh = frame.build_mesh()
+	add_child(fmi)
+	var head := Label3D.new()
+	head.text = "DEPARTURES"
+	head.font_size = 44
+	head.modulate = BOARD_YELLOW
+	head.pixel_size = 0.008
+	head.position = Vector3(6.6, 2.98, -7.31)
+	add_child(head)
+	var tickets := Label3D.new()
+	tickets.text = "TICKETS"
+	tickets.font_size = 40
+	tickets.modulate = BOARD_RED
+	tickets.pixel_size = 0.008
+	tickets.rotation.y = PI
+	tickets.position = Vector3(5.0, 2.5, 5.35)
+	add_child(tickets)
+	for i in BOARD_SERVICES.size():
+		var y := 2.62 - i * 0.28
+		var hinge := Node3D.new()
+		hinge.position = Vector3(6.6, y + 0.125, -7.34)
+		var flap := MeshTools.new()
+		flap.add_box(Vector3(3.34, 0.25, 0.03), Vector3(0.0, -0.125, 0.0),
+				Color(0.10, 0.10, 0.11))
+		var row := MeshInstance3D.new()
+		row.mesh = flap.build_mesh()
+		hinge.add_child(row)
+		var lab := Label3D.new()
+		lab.text = _row_text(i, BOARD_STATUS[i % BOARD_STATUS.size()])
+		lab.font_size = 24
+		lab.pixel_size = 0.006
+		lab.modulate = Color(0.95, 0.93, 0.85)
+		lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lab.position = Vector3(0.0, -0.125, 0.03)
+		hinge.add_child(lab)
+		add_child(hinge)
+		_flap_hinge.append(hinge)
+		_flap_label.append(lab)
+		_flap_status.append(BOARD_STATUS[i % BOARD_STATUS.size()])
+		_flap_next.append("")
+		_flap_flip_t.append(0.0)
+
+
+func register(p: CharacterBody3D, audio: Node) -> void:
+	## Live-game handover (food.gd pattern): the ticket-counter toast
+	## and the flap-clack volume need the real player + audio node.
+	_player = p
+	_audio = audio
+
+
+func _tick_hall(delta: float) -> void:
+	## Concourse life, run ahead of the train block's early returns:
+	## fans spin, flap rows flip on a slow cadence (clack from
+	## audio.gd, distance-attenuated), a train arrival forces the
+	## Rajdhani row to ARRIVING, and the counter toast fires once.
+	for fan in _fans:
+		fan.rotate_y(5.2 * delta)
+	for i in _flap_hinge.size():
+		var t := _flap_flip_t[i]
+		if t <= 0.0:
+			continue
+		t = minf(t + delta / 0.2, 1.0)
+		_flap_hinge[i].rotation.x = t * PI
+		if t >= 0.5 and _flap_next[i] != "":
+			_flap_status[i] = _flap_next[i]
+			_flap_label[i].text = _row_text(i, _flap_status[i])
+			_flap_next[i] = ""
+		if t >= 1.0:
+			_flap_hinge[i].rotation.x = 0.0
+			t = 0.0
+		_flap_flip_t[i] = t
+	_flip_timer -= delta
+	if _flip_timer <= 0.0 and not _flap_hinge.is_empty():
+		_flip_timer = randf_range(4.0, 10.0)
+		var i := randi() % _flap_hinge.size()
+		if _flap_flip_t[i] <= 0.0:
+			var pool: Array = BOARD_STATUS.duplicate()
+			pool.erase(_flap_status[i])
+			_start_flip(i, pool[randi() % pool.size()])
+	if _state == "dwell" and not _arrived_row_flipped:
+		_arrived_row_flipped = true
+		if _flap_flip_t.size() == 5 and _flap_flip_t[4] <= 0.0:
+			_start_flip(4, "ARRIVING")
+	elif _state == "away":
+		_arrived_row_flipped = false
+	if _player != null and not _counter_done:
+		var lp := to_local(_player.global_position)
+		if absf(lp.x - 6.6) < 2.6 and lp.z > 2.4 and lp.z < 6.2:
+			_counter_done = true
+			counter_near.emit()
+
+
+func _start_flip(i: int, status: String) -> void:
+	_flap_next[i] = status
+	_flap_flip_t[i] = 0.0001
+	if _audio != null and _player != null:
+		var d: float = _player.global_position.distance_to(
+				to_global(Vector3(6.6, 2.3, -7.4)))
+		if d < 26.0:
+			_audio.board_clack(
+					lerpf(-11.0, -26.0, clampf((d - 3.0) / 23.0, 0.0, 1.0)))
+
+
+func _row_text(i: int, status: String) -> String:
+	return "%s  %s  PL 1  %s" % [BOARD_SERVICES[i][0],
+			BOARD_SERVICES[i][1], status]
 
 
 func _build_train() -> void:

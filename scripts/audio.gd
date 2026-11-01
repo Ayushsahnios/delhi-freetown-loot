@@ -108,6 +108,7 @@ var _ambient_on := false
 var _duck := 0.0  # 0 = normal mix, 1 = fully ducked for dialogue
 var _murmur_player: AudioStreamPlayer
 var _clatter_player: AudioStreamPlayer
+var _clack_player: AudioStreamPlayer
 var _call_player: AudioStreamPlayer
 var _spatial_horns: Array[AudioStreamPlayer3D] = []
 var _player: Node3D = null
@@ -196,6 +197,9 @@ func setup() -> void:
 	_clatter_player = AudioStreamPlayer.new()
 	_clatter_player.stream = _make_clatter()
 	add_child(_clatter_player)
+	_clack_player = AudioStreamPlayer.new()
+	_clack_player.stream = _make_board_clack()
+	add_child(_clack_player)
 	_call_player = AudioStreamPlayer.new()
 	_call_player.stream = _make_call()
 	add_child(_call_player)
@@ -281,6 +285,7 @@ func setup() -> void:
 	# Settings sliders scale the Ambient bus, never these players directly.
 	for p in [_horn_player, _ambient_player, _rain_player, _thunder_player,
 			_thunk_player, _jingle_player, _murmur_player, _clatter_player,
+		_clack_player,
 			_call_player, _chime_player, _blip_player, _cricket_player,
 			_bark_player, _engine_player, _squeal_player,
 			_indicator_player] + _distant_players \
@@ -410,6 +415,16 @@ func thunder() -> void:
 	_thunder_player.pitch_scale = _rng.randf_range(0.8, 1.15)
 	_thunder_player.volume_db = _rng.randf_range(THUNDER_MIN_DB, THUNDER_MAX_DB)
 	_thunder_player.play()
+
+
+func board_clack(db := -15.0) -> void:
+	## Split-flap departure-board clack (issue #184) — one row flip;
+	## db is the caller's distance attenuation (railway.gd).
+	if _clack_player == null:
+		return
+	_clack_player.pitch_scale = _rng.randf_range(0.92, 1.08)
+	_clack_player.volume_db = db
+	_clack_player.play()
 
 
 func thunk(strength := 1.0) -> void:
@@ -758,6 +773,7 @@ func loudness_profile() -> Array:
 		_measure("distant_horn", _distant_players[0].stream, DISTANT_MAX_DB),
 		_measure("murmur", _murmur_player.stream, MURMUR_DB),
 		_measure("clatter", _clatter_player.stream, CLATTER_MAX_DB),
+		_measure("board_clack", _clack_player.stream, -11.0),
 		_measure("vendor_call", _call_player.stream, CALL_MAX_DB),
 		_measure("spatial_horn", _spatial_horns[0].stream, SPATIAL_HORN_MAX_DB),
 		_measure("footstep_pave", _step_voices["pave"], FOOTSTEP_RUN_DB),
@@ -1115,6 +1131,28 @@ func _make_clatter() -> AudioStreamWAV:
 		if t < 0.004:
 			s += _rng.randf_range(-1.0, 1.0) * (1.0 - t / 0.004) * 0.5
 		var sample := int(clampf(s * 0.55, -1.0, 1.0) * 32767.0)
+		bytes.encode_s16(i * 2, sample)
+	return _wav(bytes, false)
+
+
+func _make_board_clack() -> AudioStreamWAV:
+	## Split-flap row flip (issue #184): sharp 860 Hz sin^4 knock with
+	## a low sub-thud and a 3 ms noise transient — mechanical board
+	## clatter, gone in 80 ms.
+	var frames := int(MIX_RATE * 0.08)
+	var bytes := PackedByteArray()
+	bytes.resize(frames * 2)
+	var phase := 0.0
+	var sub := 0.0
+	for i in frames:
+		var t := float(i) / MIX_RATE
+		phase += TAU * 860.0 / MIX_RATE
+		sub += TAU * 190.0 / MIX_RATE
+		var s := pow(absf(sin(phase)), 4.0) 				* pow(maxf(1.0 - t / 0.08, 0.0), 2.2)
+		s += sin(sub) * 0.35 * pow(maxf(1.0 - t / 0.05, 0.0), 3.0)
+		if t < 0.003:
+			s += _rng.randf_range(-1.0, 1.0) * (1.0 - t / 0.003) * 0.5
+		var sample := int(clampf(s * 0.6, -1.0, 1.0) * 32767.0)
 		bytes.encode_s16(i * 2, sample)
 	return _wav(bytes, false)
 

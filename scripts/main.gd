@@ -696,6 +696,8 @@ func _build_city() -> void:
 			func(): _show_toast("Passenger train arriving — New Delhi platform"))
 	_railway.departed.connect(
 			func(): _show_toast("Passenger train departing — stand clear"))
+	_railway.counter_near.connect(
+			func(): _show_toast("Tickets, platform 1 — Shalimar Express 12:05 next"))
 
 	# Animal life (issue #208): three strays sunbathing and trotting
 	# between the bazaar stall rows, plus a macaque troop holding the
@@ -1839,6 +1841,7 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 	_missions.mission_failed.connect(_on_mission_failed)
 	_missions.payoff_unlocked.connect(_on_payoff_unlocked)
 	_food.register(player, _health, _missions, _audio)
+	_railway.register(player, _audio)
 	_wardrobe.register(player, _missions, _audio, Callable(self, "_autosave_silent"))
 	_interiors.register(player, _audio)
 	_interiors3.register(player, _audio)
