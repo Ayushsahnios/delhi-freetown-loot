@@ -3,6 +3,10 @@ extends Node
 ## Walk up, read the prices on the prompt, pay from the mission wallet,
 ## get HP back — the first real money sink in the Paisa systems.
 
+## Issue #271: every successful cart/counter purchase rings this — the
+## onboarding card's "buy street food" goal listens in.
+signal bought
+
 const HealthScript := preload("res://scripts/health.gd")
 const MissionScript := preload("res://scripts/missions.gd")
 const Chars := preload("res://scripts/characters.gd")
@@ -208,6 +212,7 @@ func _buy(item: Dictionary) -> void:
 	_health.heal(float(item["heal"]))
 	_show_toast("%s  ·  +%d HP  ·  Rs %d" % [item["name"], int(item["heal"]), price])
 	_prompt.visible = false
+	bought.emit()
 
 
 # ---------------------------------------------------------------- cart visuals

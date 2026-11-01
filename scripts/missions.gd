@@ -93,6 +93,16 @@ func register_player(p: CharacterBody3D) -> void:
 	_player = p
 
 
+func intro_giver_pos() -> Vector3:
+	## Issue #271: world position of the START HERE intro giver, or
+	## Vector3.INF when no intro mission exists (feeds the onboarding
+	## checklist card's beacon goal).
+	for def in _defs:
+		if bool(def.get("intro", false)):
+			return def["giver"]
+	return Vector3.INF
+
+
 func active_target() -> Vector3:
 	## World position of the current objective marker, for the minimap.
 	## Vector3.INF when no mission is running.
