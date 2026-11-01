@@ -185,17 +185,18 @@ static func tank_mesh() -> ArrayMesh:
 	lid.bottom_radius = 0.15
 	lid.height = 0.10
 	b.add_mesh(lid, Transform3D(Basis(), Vector3(0, 1.28, 0)), TANK_LID)
-	b.add_box(Vector3(1.24, 0.08, 1.24), Vector3(0, 0.04, 0), SLAB)
+	b.add_bev_box(Vector3(1.24, 0.08, 1.24), Vector3(0, 0.04, 0), 0.03, SLAB)
 	return b.build_mesh()
 
 
 static func ac_mesh() -> ArrayMesh:
-	## AC outdoor unit: body with a darker protruding grill face. Local
-	## front is +Z (the wall mounts local -Z).
+	## AC outdoor unit: chamfered body with a darker protruding grill
+	## face and cap (cluster 4). Local front is +Z (the wall mounts
+	## local -Z).
 	var b := MeshTools.new()
-	b.add_box(Vector3(0.62, 0.52, 0.34), Vector3(0, 0, 0), AC_BODY)
-	b.add_box(Vector3(0.50, 0.38, 0.06), Vector3(0, -0.02, 0.19), AC_GRILL)
-	b.add_box(Vector3(0.58, 0.05, 0.30), Vector3(0, 0.28, 0.0), AC_GRILL)
+	b.add_bev_box(Vector3(0.62, 0.52, 0.34), Vector3(0, 0, 0), 0.03, AC_BODY)
+	b.add_bev_box(Vector3(0.50, 0.38, 0.06), Vector3(0, -0.02, 0.19), 0.02, AC_GRILL)
+	b.add_bev_box(Vector3(0.58, 0.05, 0.30), Vector3(0, 0.28, 0.0), 0.02, AC_GRILL)
 	return b.build_mesh()
 
 
@@ -208,7 +209,10 @@ static func dish_mesh() -> ArrayMesh:
 	disc.height = 0.05
 	b.add_mesh(disc, Transform3D(Basis(Vector3(1, 0, 0), deg_to_rad(55.0)),
 			Vector3(0, 0.10, 0.03)), DISH)
-	b.add_box(Vector3(0.05, 0.22, 0.05), Vector3(0, -0.02, 0.0), DISH)
+	var arm := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.025, 0.0),
+			Vector2(0.025, 0.22), Vector2(0.0, 0.22)])
+	b.add_lathe(arm, Vector3(0, -0.13, 0.0), DISH,
+			MeshTools.FINISH_MATTE, 6)
 	return b.build_mesh()
 
 
