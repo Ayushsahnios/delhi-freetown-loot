@@ -31,6 +31,7 @@ var _live_sy := -1.0   ## last sy written to the buffer (-1 = never)
 var _live_dy := 0.0    ## last dy written to the buffer
 var _peds: Node = null
 var _food: Node = null
+var _traffic: Node = null
 
 
 func setup_shutters(mmi: MultiMeshInstance3D, xfs: Array[Transform3D]) -> void:
@@ -54,6 +55,12 @@ func register_life(peds: Node, food: Node) -> void:
 	_food = food
 
 
+func register_traffic(t: Node) -> void:
+	## Traffic rhythm (issue #268): the fleet breathes on this clock —
+	## rush roll-ins, the midday lull and the late-night quiet band.
+	_traffic = t
+
+
 func tick(day_t: float, daylight: float) -> void:
 	## Called once per frame from main._update_day — the clock is sun-aligned
 	## (day_t 0.5 reads 12:00), so the rush window sits right after dawn.
@@ -68,6 +75,8 @@ func tick(day_t: float, daylight: float) -> void:
 		_peds.set_life_pattern(night, rush, keep)
 	if _food != null:
 		_food.set_night_rush(night, rush)
+	if _traffic != null:
+		_traffic.set_hours(hours)
 
 
 func _apply_roll() -> void:

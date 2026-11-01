@@ -7,6 +7,10 @@ extends Node
 ## through the ground or tunnel through geometry.
 ## The whole fleet renders through a handful of MultiMeshes (one merged
 ## mesh per vehicle style), so full traffic costs only a few draw calls.
+## Traffic rhythm (issue #268): the fleet breathes with the commute —
+## rush windows roll extra vehicles in near the player, midday holds the
+## baseline, and the late-night quiet band lets the far side of the city
+## empty out while the streets near the player keep a light flow.
 
 const MeshTools := preload("res://scripts/meshtools.gd")
 const Vehicles := preload("res://scripts/vehicles.gd")
@@ -19,6 +23,30 @@ const LANE := 2.8
 const WRAP_MARGIN := 24.0
 const ACCEL := 9.0
 const BRAKE := 22.0
+
+# Commute wave (issue #268): every style's MultiMesh is sized for the
+# rush ceiling (COUNT * 1.45 ≈ 32). The baseline fleet is COUNT; the
+# wave target moves between the night floor and that ceiling.
+const PEAK_COUNT := 32
+const MIN_FLEET := 6
+const WAVE_SPAWN_S := 0.2   ## roll-in spacing: a rush builds over ~2 s
+const WITNESS_M := 90.0     ## surplus beyond this range may leave early
+const RETIRE_GRACE_S := 6.0 ## surplus near the player still leaves after this
+
+# The commute curve (issue #268): two rush plateaus at ~1.45x with
+# half-hour shoulders, a softer midday lull, and the late-night quiet
+# band at 0.6x. Everything derives from the sun-aligned clock hours
+# daily_life.gd already computes for the crowd.
+const RUSH_WINDOWS := [Vector2(8.0, 10.0), Vector2(17.5, 19.5)]
+const RUSH_MULT := 1.45
+const LULL_MULT := 0.85
+const NIGHT_MULT := 0.6
+const BAND_EDGE_H := 0.5    ## soft shoulder width, clock hours
+
+## Graphics preset tie-in (issues 270 + 268): LOW trims the wave ceiling
+## the same way pedestrians.gd crowd_scale trims the crowd — set by
+## main.gd before setup and on every live preset switch.
+static var density_scale := 1.0
 
 # Ambulance street event (issue #215): one van sweeps a lane every
 # 2-4 min, faster than the flow; nearby AI eases aside until it passes.
@@ -59,6 +87,10 @@ var _amb = null
 var _amb_timer := 60.0
 var _bd: Node3D = null
 var _bd_timer := 90.0
+var _density_mult := 1.0
+var _target_n := COUNT
+var _wave_cd := 0.0
+var _hours := 12.0
 
 
 func setup(world_size: float, pitch: float, road_width: float, road_count: int) -> void:
@@ -79,7 +111,8 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 	for paint in [Vehicles.PAINTS[0], Vehicles.PAINTS[4]]:
 		_truck_mms.append(_new_mm(_truck_mesh(paint)))
 	_tanker_mm = _new_mm(_tanker_mesh())
-	for _i in range(COUNT):
+	_wave_target()
+	for _i in range(_target_n):
 		_vehicles.append(_spawn())
 	# Idle exhaust (issue #166): one shared puff pool for the fleet; the
 	# traffic node sits at the origin, so pool space is world space.
@@ -101,17 +134,43 @@ func register_player(p: Node3D) -> void:
 	_player = p
 
 
+func set_hours(h: float) -> void:
+	## Day-clock input (issue #268): fanned out every frame by
+	## daily_life.gd, the same tick that drives the crowd pattern.
+	## The target recomputes here (process frame) so a headless probe
+	## reads the hour's number before any physics beat; fleet movement
+	## still converges on the physics tick in _tick_wave.
+	_hours = h
+	_wave_target()
+
+
+func wave_debug() -> Dictionary:
+	## Read-back for the headless gate (daily_life_check.gd): the same
+	## numbers the wave follows.
+	return {"hours": _hours, "mult": _density_mult, "target": _target_n,
+			"fleet": _vehicles.size(), "baseline": COUNT, "peak": PEAK_COUNT,
+			"scale": density_scale}
+
+
 func set_speed_bumps(bumps: Array) -> void:
 	## Street furniture (issue #69): ambient traffic brakes for the
 	## raised strips and bobs as its wheels take them.
 	_bumps = bumps
 
 
-func _spawn() -> Dictionary:
+func _spawn(roll_in := false) -> Dictionary:
 	var along_z := _rng.randf() < 0.5
 	var road_i := _rng.randi_range(0, _roads - 1)
 	var road := -_world / 2.0 + road_i * _pitch - (_pitch - _road_w) / 2.0
 	var dir := 1 if _rng.randf() < 0.5 else -1
+	var t := _rng.randf_range(-_world / 2.0, _world / 2.0)
+	# Rush roll-in (issue #268): the surplus joins near the player so a
+	# rush reads as extra traffic on YOUR street, not a distant hum.
+	if roll_in and _player != null:
+		var pc := _player.global_position.z if along_z \
+				else _player.global_position.x
+		t = clampf(pc + _rng.randf_range(-70.0, 70.0),
+				-_world / 2.0, _world / 2.0)
 	var roll := _rng.randf()
 	var kind := "auto"
 	var cruise := _rng.randf_range(8.0, 11.0)
@@ -144,15 +203,15 @@ func _spawn() -> Dictionary:
 		"id": _next_id, "mm": mm, "idx": _alloc(mm), "pos": Vector3.ZERO,
 		"heading": 0.0, "along_z": along_z, "road": road, "dir": dir,
 		"kind": kind,
-		"t": _rng.randf_range(-_world / 2.0, _world / 2.0),
-		"speed": cruise, "cruise": cruise, "bob": 0.0,
-		"kerb_n": 0.0, "amb_yield": false,
+		"t": t, "speed": cruise, "cruise": cruise, "bob": 0.0,
+		"kerb_n": 0.0, "amb_yield": false, "leave_s": 0.0,
 	}
 	_apply_transform(v)
 	return v
 
 
 func _physics_process(delta: float) -> void:
+	_tick_wave(delta)
 	for v in _vehicles:
 		var target: float = minf(v.cruise, _player_limit(v))
 		target = minf(target, _traffic_limit(v))
@@ -172,6 +231,79 @@ func _physics_process(delta: float) -> void:
 	_idle_exhaust(delta)
 	_tick_ambulance(delta)
 	_tick_breakdown(delta)
+
+
+func _tick_wave(delta: float) -> void:
+	## Roll the fleet toward the commute target (issue #268): surplus
+	## rolls in near the player at a measured pace (a rush builds over
+	## a few seconds, not one pop); when the target falls, the surplus
+	## leaves once it has driven out of the witness range — or after a
+	## grace beat, so a quiet street never stalls above target forever.
+	_wave_target()
+	if _vehicles.size() < _target_n:
+		_wave_cd -= delta
+		if _wave_cd <= 0.0:
+			_vehicles.append(_spawn(true))
+			_wave_cd = WAVE_SPAWN_S
+		return
+	_wave_cd = 0.0
+	if _vehicles.size() <= _target_n:
+		for v in _vehicles:
+			v.leave_s = 0.0
+		return
+	var eye := _eye()
+	var kept: Array[Dictionary] = []
+	var cand: Array[Dictionary] = []
+	for v in _vehicles:
+		v.leave_s = float(v.leave_s) + delta
+		if v.pos.distance_to(eye) > WITNESS_M \
+				or float(v.leave_s) > RETIRE_GRACE_S:
+			cand.append(v)
+		else:
+			kept.append(v)
+	if cand.size() > _vehicles.size() - _target_n:
+		# Only the over-target share may leave; keep the nearest.
+		cand.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return a.pos.distance_squared_to(eye) \
+					> b.pos.distance_squared_to(eye))
+		while cand.size() > _vehicles.size() - _target_n:
+			kept.append(cand.pop_back())
+	for v in cand:
+		_release(v)
+	_vehicles = kept
+
+
+func _wave_target() -> void:
+	## Fleet target for the current clock hour + preset scale.
+	_density_mult = _wave_mult(_hours)
+	_target_n = clampi(roundi(float(COUNT) * _density_mult
+			* density_scale), MIN_FLEET, PEAK_COUNT)
+
+
+func _wave_mult(h: float) -> float:
+	## Commute curve (issue #268): a rush plateau rides over everything
+	## (the lull eases up for the evening peak), night thins the far
+	## city, midday sits a little under the baseline.
+	var m := 1.0
+	m = lerpf(m, NIGHT_MULT, _band(h, 22.0, 5.0))
+	m = lerpf(m, LULL_MULT, _band(h, 11.0, 16.0))
+	for w in RUSH_WINDOWS:
+		m = lerpf(m, RUSH_MULT, _band(h, w.x, w.y))
+	return m
+
+
+func _band(h: float, start: float, end_: float) -> float:
+	## 1 inside the clock band [start, end) — wrapping past midnight —
+	## 0 outside, with a BAND_EDGE_H-hour soft shoulder on each side.
+	var width := fmod(end_ - start + 24.0, 24.0)
+	var d := fmod(h - start + 24.0, 24.0)
+	return clampf(minf(d, width - d) / BAND_EDGE_H, 0.0, 1.0)
+
+
+func _eye() -> Vector3:
+	## Where the wave is watched from: the player when one is live,
+	## else the world centre (headless checks before any registration).
+	return _player.global_position if _player != null else Vector3.ZERO
 
 
 func _idle_exhaust(delta: float) -> void:
@@ -417,7 +549,10 @@ func take_vehicle(id: int) -> void:
 			var dead: Dictionary = _vehicles[i]
 			_release(dead)
 			_vehicles.remove_at(i)
-			_vehicles.append(_spawn())
+			# Replacement only up to the wave target (issue #268): the
+			# street refills to the hour's density, not always full.
+			if _vehicles.size() < _target_n:
+				_vehicles.append(_spawn())
 			return
 
 
@@ -467,7 +602,7 @@ func _new_mm(mesh: ArrayMesh) -> MultiMesh:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = mesh
-	mm.instance_count = COUNT
+	mm.instance_count = PEAK_COUNT
 	mm.visible_instance_count = 0
 	var mmi := MultiMeshInstance3D.new()
 	mmi.multimesh = mm

@@ -33,6 +33,7 @@ func _ready() -> void:
 	var budget := DEFAULT_BUDGET_MS
 	var draws := false
 	var tp := Vector2(INF, INF)
+	var day_t := -1.0
 	var args := OS.get_cmdline_user_args()
 	for i in range(args.size()):
 		var a: String = args[i]
@@ -54,6 +55,11 @@ func _ready() -> void:
 			var bits: PackedStringArray = args[i + 1].split(",")
 			if bits.size() == 2:
 				tp = Vector2(float(bits[0]), float(bits[1]))
+		elif a == "--day-t" and i + 1 < args.size():
+			# Rush-hour gate (issue #268): park the clock on a commute
+			# plateau (e.g. 0.35417 = 08:30) so the wave is measured at
+			# its ceiling, not whatever hour the boot happens to land on.
+			day_t = clampf(float(args[i + 1]), 0.0, 1.0)
 		elif a == "--draws":
 			draws = true
 
@@ -68,6 +74,8 @@ func _ready() -> void:
 	if tp.x != INF and main.get("player") != null:
 		var p: Node3D = main.get("player")
 		p.position = Vector3(tp.x, p.position.y, tp.y)
+	if day_t >= 0.0 and "day_t" in main:
+		main.day_t = day_t
 
 	for i in range(warmup):
 		await get_tree().process_frame
