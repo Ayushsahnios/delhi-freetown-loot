@@ -239,6 +239,7 @@ func _ready() -> void:
 	_quality_low = QualityScript.effective_low(_quality_mode)
 	LodScript.tier_scale = QualityScript.LOW_LOD_SCALE if _quality_low else 1.0
 	PedestrianScript.crowd_scale = QualityScript.LOW_CROWD_SCALE if _quality_low else 1.0
+	TrafficScript.density_scale = QualityScript.LOW_CROWD_SCALE if _quality_low else 1.0
 	QualityScript.apply_sun(sun, _quality_low)
 	_weather = WeatherScript.new()
 	add_child(_weather)
@@ -309,8 +310,10 @@ func _ready() -> void:
 	_monsoon.setup(WORLD, PITCH, ROAD, GRID + 1)
 	_monsoon.register_traffic(_traffic)
 	# Preset crowd cap (issue 270): static, so the LOW target applies on
-	# the first life-pattern tick without touching spawn logic.
+	# the first life-pattern tick without touching spawn logic. The
+	# traffic wave ceiling rides the same static (issue #268).
 	PedestrianScript.crowd_scale = QualityScript.LOW_CROWD_SCALE if _quality_low else 1.0
+	TrafficScript.density_scale = QualityScript.LOW_CROWD_SCALE if _quality_low else 1.0
 	_peds = PedestrianScript.new()
 	add_child(_peds)
 	_peds.setup(WORLD, PITCH, ROAD, GRID + 1)
@@ -336,6 +339,7 @@ func _ready() -> void:
 	add_child(_daily_life)
 	_daily_life.setup_shutters(_anim_shutter_mm, _anim_shutter_xfs)
 	_daily_life.register_life(_peds, _food)
+	_daily_life.register_traffic(_traffic)
 	_audio = AudioScript.new()
 	add_child(_audio)
 	_audio.setup()
@@ -1751,6 +1755,7 @@ func apply_quality_now(mode: String) -> void:
 	LodScript.tier_scale = QualityScript.LOW_LOD_SCALE if _quality_low else 1.0
 	LodScript.rescale(self, QualityScript.LOW_LOD_SCALE if _quality_low else 1.0)
 	PedestrianScript.crowd_scale = QualityScript.LOW_CROWD_SCALE if _quality_low else 1.0
+	TrafficScript.density_scale = QualityScript.LOW_CROWD_SCALE if _quality_low else 1.0
 	QualityScript.apply_sun(sun, _quality_low)
 	if _quality_mode == "auto":
 		if _quality_watch == null and _playing:
@@ -1769,6 +1774,7 @@ func _auto_quality_drop() -> void:
 	LodScript.tier_scale = QualityScript.LOW_LOD_SCALE
 	LodScript.rescale(self, QualityScript.LOW_LOD_SCALE)
 	PedestrianScript.crowd_scale = QualityScript.LOW_CROWD_SCALE
+	TrafficScript.density_scale = QualityScript.LOW_CROWD_SCALE
 	QualityScript.apply_sun(sun, true)
 	if _quality_watch != null:
 		_quality_watch.queue_free()
