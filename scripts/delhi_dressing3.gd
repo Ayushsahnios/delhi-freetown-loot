@@ -266,25 +266,28 @@ static func _sweet_shop(b: MeshTools, x: float, z: float) -> void:
 	## a doorway in the east face — inside, a glass mithai counter
 	## against the back wall, brass jars on a shelf, worn floor tiles.
 	var y := Roads.CURB_H
-	# Floor: worn concrete patch inside the walls.
-	b.add_box(Vector3(3.15, 0.04, 2.95), Vector3(x, y + 0.02, z), SHOP_FLOOR)
-	# Back wall (west) + the two ends.
-	b.add_box(Vector3(0.25, 2.7, 3.2), Vector3(x - 1.575, y + 1.35, z), SHOP_WALL)
-	b.add_box(Vector3(3.4, 2.7, 0.25), Vector3(x, y + 1.35, z - 1.475), SHOP_WALL)
-	b.add_box(Vector3(3.4, 2.7, 0.25), Vector3(x, y + 1.35, z + 1.475), SHOP_WALL)
+	# Floor: worn concrete patch inside the walls (beveled, cluster 2).
+	b.add_bev_box(Vector3(3.15, 0.04, 2.95), Vector3(x, y + 0.02, z), 0.03, SHOP_FLOOR)
+	# Back wall (west) + the two ends — chamfered masonry.
+	b.add_bev_box(Vector3(0.25, 2.7, 3.2), Vector3(x - 1.575, y + 1.35, z), 0.025, SHOP_WALL)
+	b.add_bev_box(Vector3(3.4, 2.7, 0.25), Vector3(x, y + 1.35, z - 1.475), 0.025, SHOP_WALL)
+	b.add_bev_box(Vector3(3.4, 2.7, 0.25), Vector3(x, y + 1.35, z + 1.475), 0.025, SHOP_WALL)
 	# East face: two segments flanking a 1.2 m doorway + lintel above.
-	b.add_box(Vector3(0.25, 2.1, 1.0), Vector3(x + 1.575, y + 1.05, z - 1.1), SHOP_WALL)
-	b.add_box(Vector3(0.25, 2.1, 1.0), Vector3(x + 1.575, y + 1.05, z + 1.1), SHOP_WALL)
-	b.add_box(Vector3(0.25, 0.6, 1.2), Vector3(x + 1.575, y + 2.4, z), SHOP_WALL)
-	b.add_box(Vector3(3.7, 0.12, 3.5), Vector3(x, y + 2.76, z), SHOP_ROOF)
-	# Counter against the back wall: glass top with mithai trays on it.
-	b.add_box(Vector3(0.5, 0.95, 2.2), Vector3(x - 1.4, y + 0.475, z + 0.15), COUNTER)
-	b.add_box(Vector3(0.6, 0.1, 2.3), Vector3(x - 1.4, y + 1.0, z + 0.15), GLASS)
+	b.add_bev_box(Vector3(0.25, 2.1, 1.0), Vector3(x + 1.575, y + 1.05, z - 1.1), 0.025, SHOP_WALL)
+	b.add_bev_box(Vector3(0.25, 2.1, 1.0), Vector3(x + 1.575, y + 1.05, z + 1.1), 0.025, SHOP_WALL)
+	b.add_bev_box(Vector3(0.25, 0.6, 1.2), Vector3(x + 1.575, y + 2.4, z), 0.025, SHOP_WALL)
+	b.add_bev_box(Vector3(3.7, 0.12, 3.5), Vector3(x, y + 2.76, z), 0.03, SHOP_ROOF)
+	# Counter against the back wall: beveled body, glass top, and round
+	# lathe mithai trays instead of flat boxes (cluster 2).
+	b.add_bev_box(Vector3(0.5, 0.95, 2.2), Vector3(x - 1.4, y + 0.475, z + 0.15), 0.03, COUNTER)
+	b.add_bev_box(Vector3(0.6, 0.1, 2.3), Vector3(x - 1.4, y + 1.0, z + 0.15), 0.02, GLASS)
+	var tray := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.21, 0.0),
+			Vector2(0.21, 0.10), Vector2(0.16, 0.16), Vector2(0.0, 0.16)])
 	for s in 5:
-		b.add_box(Vector3(0.42, 0.16, 0.42),
-				Vector3(x - 1.4, y + 1.08, z - 0.85 + s * 0.5), MITHAI[s % 4])
+		b.add_lathe(tray, Vector3(x - 1.4, y + 1.0, z - 0.85 + s * 0.5),
+				MITHAI[s % 4], MeshTools.FINISH_MATTE, 10)
 	# Brass sweet jars on a back-wall shelf ledge.
-	b.add_box(Vector3(0.2, 0.05, 2.4), Vector3(x - 1.72, y + 1.7, z + 0.15), SHOP_WALL)
+	b.add_bev_box(Vector3(0.2, 0.05, 2.4), Vector3(x - 1.72, y + 1.7, z + 0.15), 0.02, SHOP_WALL)
 	for j in 4:
 		var jm := CylinderMesh.new()
 		jm.top_radius = 0.13
@@ -292,14 +295,18 @@ static func _sweet_shop(b: MeshTools, x: float, z: float) -> void:
 		jm.height = 0.4
 		b.add_mesh(jm, Transform3D(Basis(),
 				Vector3(x - 1.68, y + 1.93, z - 0.85 + j * 0.66)), JAR_BRASS)
-	# Striped awning on two poles over the doorway.
-	for pole_z in [-1.15, 1.15]:
-		b.add_box(Vector3(0.1, 2.6, 0.1), Vector3(x + 2.05, y + 1.3, z + pole_z),
-				Color(0.35, 0.25, 0.16))
+	# Striped awning on two round poles over the doorway: curved tarp
+	# bands (arc shells) instead of flat slats (cluster 2).
+	var pole := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.05, 0.0),
+			Vector2(0.05, 2.6), Vector2(0.0, 2.6)])
+	for pz in [-1.15, 1.15]:
+		b.add_lathe(pole, Vector3(x + 2.05, y, z + pz),
+				Color(0.35, 0.25, 0.16), MeshTools.FINISH_MATTE, 7)
 	for s in 4:
 		var col := AWNING_A if s % 2 == 0 else AWNING_B
-		b.add_box(Vector3(1.15, 0.08, 0.72),
-				Vector3(x + 1.62, y + 2.62, z - 1.08 + s * 0.72), col)
+		b.add_arc_shell(1.15, 0.72, 0.05,
+				Vector3(x + 1.62, y + 2.60, z - 1.08 + s * 0.72), col,
+				MeshTools.FINISH_MATTE, 4)
 
 static func _dhaba(b: MeshTools, x: float, z: float) -> void:
 	## Roadside dhaba corner (walk-in, issue #183): clay tandoor with a
@@ -312,16 +319,31 @@ static func _dhaba(b: MeshTools, x: float, z: float) -> void:
 	td.bottom_radius = 0.75
 	td.height = 1.2
 	b.add_mesh(td, Transform3D(Basis(), Vector3(x - 1.2, y + 0.6, z - 1.0)), TANDOOR)
-	b.add_box(Vector3(0.5, 0.14, 0.5), Vector3(x - 1.2, y + 1.22, z - 1.0),
-			EMBER, MeshTools.FINISH_GLOSS)
-	# Wood pile beside it: stacked logs.
+	# Tandoor ember cap: round glow disc instead of a flat box.
+	var ember := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.25, 0.0),
+			Vector2(0.25, 0.14), Vector2(0.0, 0.14)])
+	b.add_lathe(ember, Vector3(x - 1.2, y + 1.15, z - 1.0), EMBER,
+			MeshTools.FINISH_GLOSS, 10)
+	# Wood pile beside it: crisscrossed round logs on three layers.
+	var lg := CylinderMesh.new()
+	lg.top_radius = 0.105
+	lg.bottom_radius = 0.105
+	lg.height = 0.9
+	lg.radial_segments = 7
 	for w in 3:
-		b.add_box(Vector3(0.9, 0.22, 0.9), Vector3(x + 0.4, y + 0.13 + w * 0.24,
-				z - 1.3), WOOD)
+		var ly: float = y + 0.105 + w * 0.21
+		for k in 3:
+			var off: float = -0.28 + k * 0.28
+			if w % 2 == 0:
+				b.add_mesh(lg, Transform3D(Basis(Vector3(0, 0, 1), PI / 2.0),
+						Vector3(x + 0.4, ly, z - 1.3 + off)), WOOD)
+			else:
+				b.add_mesh(lg, Transform3D(Basis(Vector3(1, 0, 0), PI / 2.0),
+						Vector3(x + 0.4 + off, ly, z - 1.3)), WOOD)
 	# Service counter (issue #183) along the east edge, serving face to
-	# the west: wooden body, woven top, tawa griddle, paratha + plates.
-	b.add_box(Vector3(0.9, 0.92, 1.8), Vector3(x + 1.55, y + 0.46, z - 0.1), CHARPAI)
-	b.add_box(Vector3(1.0, 0.06, 1.9), Vector3(x + 1.55, y + 0.95, z - 0.1), WEAVE)
+	# the west: beveled wooden body, woven top, tawa griddle, parathas.
+	b.add_bev_box(Vector3(0.9, 0.92, 1.8), Vector3(x + 1.55, y + 0.46, z - 0.1), 0.03, CHARPAI)
+	b.add_bev_box(Vector3(1.0, 0.06, 1.9), Vector3(x + 1.55, y + 0.95, z - 0.1), 0.02, WEAVE)
 	var tawa := CylinderMesh.new()
 	tawa.top_radius = 0.28
 	tawa.bottom_radius = 0.28
@@ -342,13 +364,15 @@ static func _dhaba(b: MeshTools, x: float, z: float) -> void:
 		pc.height = 0.025
 		b.add_mesh(pc, Transform3D(Basis(),
 					Vector3(x + 1.42, y + 1.01 + pl * 0.03, z + 0.05)), PLATE)
-	# Charpai: frame + woven top.
-	b.add_box(Vector3(1.9, 0.28, 0.9), Vector3(x + 0.4, y + 0.5, z + 1.0), CHARPAI)
-	b.add_box(Vector3(1.7, 0.08, 0.7), Vector3(x + 0.4, y + 0.62, z + 1.0), WEAVE)
+	# Charpai: beveled frame + woven top on round lathe legs.
+	b.add_bev_box(Vector3(1.9, 0.28, 0.9), Vector3(x + 0.4, y + 0.5, z + 1.0), 0.03, CHARPAI)
+	b.add_bev_box(Vector3(1.7, 0.08, 0.7), Vector3(x + 0.4, y + 0.62, z + 1.0), 0.025, WEAVE)
+	var cleg := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.05, 0.0),
+			Vector2(0.05, 0.55), Vector2(0.0, 0.55)])
 	for lx in [-0.8, 0.8]:
 		for lz in [-0.35, 0.35]:
-			b.add_box(Vector3(0.12, 0.55, 0.12),
-					Vector3(x + 0.4 + lx, y + 0.27, z + 1.0 + lz), CHARPAI)
+			b.add_lathe(cleg, Vector3(x + 0.4 + lx, y, z + 1.0 + lz), CHARPAI,
+					MeshTools.FINISH_MATTE, 6)
 	# Seating nook (issue #218): a second charpai west of the counter and
 	# a round steel table with two stools — beveled frames and cylinder
 	# legs per the de-box rule, matching the slice-3 nook vocabulary.
@@ -396,11 +420,16 @@ static func _dhaba(b: MeshTools, x: float, z: float) -> void:
 		seat.radial_segments = 8
 		b.add_mesh(seat, Transform3D(Basis(),
 				Vector3(st.x, y + 0.16, st.y)), WOOD)
-	# Tin roof on four bamboo poles over the whole corner.
+	# Tin roof: one curved corrugated shell on four round bamboo poles
+	# (cluster 2 — was a flat slab on square posts).
+	var bam := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.06, 0.0),
+			Vector2(0.06, 2.5), Vector2(0.0, 2.5)])
 	for px in [-1.6, 1.6]:
 		for pz in [-1.5, 1.5]:
-			b.add_box(Vector3(0.12, 2.5, 0.12), Vector3(x + px, y + 1.25, z + pz), BAMBOO)
-	b.add_box(Vector3(4.0, 0.08, 3.7), Vector3(x, y + 2.55, z), TIN)
+			b.add_lathe(bam, Vector3(x + px, y, z + pz), BAMBOO,
+					MeshTools.FINISH_MATTE, 7)
+	b.add_arc_shell(4.0, 3.7, 0.16, Vector3(x, y + 2.48, z), TIN,
+			MeshTools.FINISH_MATTE, 7)
 
 static func _temple_gate(b: MeshTools, x: float, z: float) -> void:
 	## Small masonry gateway on the shrine approach: two pillars, a
