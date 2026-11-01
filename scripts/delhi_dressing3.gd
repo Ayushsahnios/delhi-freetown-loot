@@ -432,25 +432,43 @@ static func _dhaba(b: MeshTools, x: float, z: float) -> void:
 			MeshTools.FINISH_MATTE, 7)
 
 static func _temple_gate(b: MeshTools, x: float, z: float) -> void:
-	## Small masonry gateway on the shrine approach: two pillars, a
-	## stepped lintel, a brass bell under the arch and a marigold strand.
+	## Small masonry gateway on the shrine approach: two round lathe
+	## pillars on plinths, a stepped chamfered lintel, a brass bell
+	## under the arch and a strand of ball-profile marigolds (cluster 3).
 	var y := Roads.CURB_H
+	# Pillar vocabulary (cluster 3): lathe shaft with flared foot and
+	# neck ring; plinth + capital discs replace the flat square posts.
+	var shaft := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.42, 0.0),
+			Vector2(0.46, 0.30), Vector2(0.44, 2.80), Vector2(0.50, 3.05),
+			Vector2(0.44, 3.20), Vector2(0.0, 3.20)])
+	var disc := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.65, 0.0),
+			Vector2(0.65, 0.25), Vector2(0.0, 0.25)])
 	for px in [-2.6, 2.6]:
-		b.add_box(Vector3(1.1, 3.2, 1.1), Vector3(x + px, y + 1.6, z), GATE_STONE)
-		b.add_box(Vector3(1.3, 0.25, 1.3), Vector3(x + px, y + 3.3, z), GATE_RED)
-	b.add_box(Vector3(6.4, 0.5, 1.2), Vector3(x, y + 3.55, z), GATE_STONE)
-	b.add_box(Vector3(4.6, 0.45, 1.0), Vector3(x, y + 4.0, z), GATE_RED)
-	b.add_box(Vector3(2.6, 0.4, 0.9), Vector3(x, y + 4.4, z), GATE_STONE)
-	# Brass bell hanging under the lintel.
+		b.add_lathe(shaft, Vector3(x + px, y, z), GATE_STONE,
+				MeshTools.FINISH_MATTE, 10)
+		b.add_lathe(disc, Vector3(x + px, y, z), GATE_RED,
+				MeshTools.FINISH_MATTE, 8)
+		b.add_lathe(disc, Vector3(x + px, y + 3.20, z), GATE_RED,
+				MeshTools.FINISH_MATTE, 8)
+	# Stepped lintel: chamfered masonry slabs (bev-box vocabulary).
+	b.add_bev_box(Vector3(6.4, 0.5, 1.2), Vector3(x, y + 3.55, z), 0.06, GATE_STONE)
+	b.add_bev_box(Vector3(4.6, 0.45, 1.0), Vector3(x, y + 4.0, z), 0.05, GATE_RED)
+	b.add_bev_box(Vector3(2.6, 0.4, 0.9), Vector3(x, y + 4.4, z), 0.05, GATE_STONE)
+	# Brass bell hanging under the lintel on a thin turned rod.
 	var bc := CylinderMesh.new()
 	bc.top_radius = 0.08
 	bc.bottom_radius = 0.26
 	bc.height = 0.4
 	b.add_mesh(bc, Transform3D(Basis(), Vector3(x, y + 3.0, z)), BELL)
-	b.add_box(Vector3(0.05, 0.3, 0.05), Vector3(x, y + 3.32, z), BELL)
-	# Marigold strand looping between the pillar tops.
+	var rod := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.03, 0.0),
+			Vector2(0.03, 0.30), Vector2(0.0, 0.30)])
+	b.add_lathe(rod, Vector3(x, y + 3.15, z), BELL,
+			MeshTools.FINISH_GLOSS, 6)
+	# Marigold strand looping between the pillar tops: ball-profile
+	# blossoms instead of cubes (cluster 3).
 	for f in 7:
 		var t := (f + 1) / 8.0
 		var fy := y + 3.45 - sin(PI * t) * 0.35
-		b.add_box(Vector3(0.16, 0.16, 0.16),
-				Vector3(x - 2.6 + 5.2 * t, fy, z), MARIGOLD)
+		b.add_lathe(MeshTools.ball_profile(0.09, 3),
+				Vector3(x - 2.6 + 5.2 * t, fy - 0.09, z), MARIGOLD,
+				MeshTools.FINISH_MATTE, 7)
