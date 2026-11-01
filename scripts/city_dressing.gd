@@ -252,22 +252,27 @@ static func _shrine(b: MeshTools, x: float, z: float) -> void:
 	## Roadside chabutra shrine: stone platform + step, small red
 	## niche with a warm figure, saffron canopy on two posts, marigold
 	## garland row and a hanging brass bell. Respectful, decorative.
-	b.add_box(Vector3(1.5, 0.22, 1.5), Vector3(x, 0.21, z), SHRINE_STONE)
-	b.add_box(Vector3(0.8, 0.12, 0.5), Vector3(x, 0.16, z + 1.0), SHRINE_STONE)
-	b.add_box(Vector3(0.55, 0.65, 0.16), Vector3(x, 0.64, z - 0.60), SHRINE_RED)
-	b.add_box(Vector3(0.18, 0.28, 0.08), Vector3(x, 0.64, z - 0.50),
+	## Cluster 5: bevel/round vocabulary — chamfered platform, niche and
+	## figure, lathe posts, one curved arc-shell canopy, ball-profile
+	## garland blossoms.
+	b.add_bev_box(Vector3(1.5, 0.22, 1.5), Vector3(x, 0.21, z), 0.04, SHRINE_STONE)
+	b.add_bev_box(Vector3(0.8, 0.12, 0.5), Vector3(x, 0.16, z + 1.0), 0.03, SHRINE_STONE)
+	b.add_bev_box(Vector3(0.55, 0.65, 0.16), Vector3(x, 0.64, z - 0.60), 0.025, SHRINE_RED)
+	b.add_bev_box(Vector3(0.18, 0.28, 0.08), Vector3(x, 0.64, z - 0.50), 0.02,
 			Color(0.96, 0.78, 0.34))
+	var post := PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.045, 0.0),
+			Vector2(0.045, 1.30), Vector2(0.0, 1.30)])
 	for sx in [-0.55, 0.55]:
-		b.add_box(Vector3(0.08, 1.30, 0.08),
-				Vector3(x + sx, 0.97, z - 0.50), SHRINE_WOOD)
-	for side in [-1, 1]:
-		var roof := BoxMesh.new()
-		roof.size = Vector3(1.15, 0.05, 0.62)
-		b.add_mesh(roof, Transform3D(Basis(Vector3(1, 0, 0), 0.42 * side),
-				Vector3(x, 1.76, z - 0.14 - 0.22 * side)), SHRINE_RED)
+		b.add_lathe(post, Vector3(x + sx, 0.32, z - 0.50), SHRINE_WOOD,
+				MeshTools.FINISH_MATTE, 7)
+	# Curved canopy over the niche: one arc shell replaces the two
+	# pitched flat slabs (cluster 5).
+	b.add_arc_shell(1.15, 1.10, 0.14, Vector3(x, 1.72, z - 0.14), SHRINE_RED,
+			MeshTools.FINISH_MATTE, 5)
 	for i in 5:
-		b.add_box(Vector3(0.06, 0.06, 0.06),
-				Vector3(x - 0.30 + 0.15 * i, 1.02, z - 0.38), MARIGOLD)
+		b.add_lathe(MeshTools.ball_profile(0.045, 3),
+				Vector3(x - 0.30 + 0.15 * i, 0.98, z - 0.38), MARIGOLD,
+				MeshTools.FINISH_MATTE, 6)
 	var bell := CylinderMesh.new()
 	bell.top_radius = 0.05
 	bell.bottom_radius = 0.03
