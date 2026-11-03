@@ -2,9 +2,10 @@
 
 **An indie free-roam loot game set in Delhi** — an original
 open-world homage to the PS2-era classics, built 100% from scratch on
-[Godot 4](https://godotengine.org) (MIT-licensed engine). No third-party
-assets: every building, character, vehicle, sound and song is generated
-procedurally in code.
+[Godot 4](https://godotengine.org) (MIT-licensed engine). The city itself is
+procedural — buildings, vehicles, sound and songs are generated in code —
+while humans and props pull from vetted CC0 packs, each one licensed and
+listed in [LICENSES.md](LICENSES.md).
 
 **v1.0 is live** — free roam from minute one. Read the
 [release notes](PLAN.md#8--changelog).
@@ -122,14 +123,23 @@ changes. Full-city capture index: [docs/screenshots.md](docs/screenshots.md).
 
 ## Attribution
 
-Everything in this repository is original work. City geometry,
-characters, vehicles, props, audio and music are generated
-procedurally by our own code; the only external dependency is the
-[Godot Engine](https://godotengine.org) (MIT license). Should any CC0
-asset pack ever be adopted, it will be credited here by name. Game
-*mechanics* take inspiration from the open-world genre; no code,
-assets, audio, names, or trademarks from any commercial game are used
-anywhere in this project.
+Everything in this repository is either **original procedural work**
+(city geometry, vehicles, props, audio, music and all code) or a
+**vetted CC0 / OFL external asset**, listed here and in
+[LICENSES.md](LICENSES.md):
+
+| Asset | License | Source |
+|---|---|---|
+| Rigged pedestrian meshes | CC0 1.0 | Quaternius "Animated Men" / "Animated Women" packs |
+| Noto Sans Devanagari font | SIL OFL 1.1 | Google Fonts |
+
+New external assets go through the intake process in LICENSES.md:
+license verified at the source, a license file committed next to the
+asset, and CI's asset gate enforcing both — plus a size budget. No
+Mixamo, nothing from commercial games. Game *mechanics* take
+inspiration from the open-world genre; no code, assets, audio, names
+or trademarks from any commercial game are used anywhere in this
+project.
 
 ## Roadmap
 

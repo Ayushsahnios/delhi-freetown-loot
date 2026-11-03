@@ -23,6 +23,11 @@ jobs:
       - name: Headless import
         run: godot --headless --import .
 
+      - name: Asset license + size gate (issue 295)
+        run: |
+          chmod +x scripts/asset_gate.sh
+          scripts/asset_gate.sh
+
       - name: Loudness balance check (audio mix)
         run: |
           timeout 180 godot --headless --path . res://scenes/loudness_check.tscn
