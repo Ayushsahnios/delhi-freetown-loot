@@ -1,0 +1,29 @@
+------------------------------------------------------
+MODEL SWAP candidate set (issue 291) — all CC0
+------------------------------------------------------
+
+quat_men_Worker.glb, quat_men_Casual.glb
+quat_women_Worker.glb, quat_women_Casual.glb
+
+Source: "Modular Men Pack" and "Modular Women Pack" by
+Quaternius (@Quaternius), official pack pages:
+https://quaternius.com/packs/modularmen.html
+https://quaternius.com/packs/modularwomen.html
+Both pages state: "License: CC0" (verified 2026-11-03).
+License: CC0 1.0 Universal Public Domain Dedication
+https://creativecommons.org/publicdomain/zero/1.0/
+Pre-QAL packs: published under CC0 before the separate
+Quaternius Asset License (QAL v1.0, 2026-08-28) existed;
+QAL governs future releases only, these remain CC0.
+
+Retrieval: fetched 2026-11-03 as .glb from the public
+quaternius-showcase mirror (same bytes as the official
+pack contents; mirror exists only as a download channel).
+
+Baseline comparison models (already in ../):
+male_rigged.glb, female_a.glb — "Animated Men" /
+"Animated Women" packs (Feb 2019) by Quaternius, CC0
+(see ../LICENSE.txt, landed in PR #59).
+
+Optional credit: "Characters and animations by
+Quaternius (CC0)".
