@@ -7,6 +7,7 @@ generated procedurally by this project's own code.
 | Asset | Folder | License | Source |
 |---|---|---|---|
 | Rigged pedestrian meshes (`male_rigged.glb`, `female_a.glb` … `female_d.glb`) | `assets/characters/` | CC0 1.0 Universal | "Animated Men" / "Animated Women" packs (Feb 2019) by Quaternius |
+| Model-swap candidate humans (`quat_men_*.glb`, `quat_women_*.glb`) | `assets/characters/candidates/` | CC0 1.0 Universal | "Modular Men" / "Modular Women" packs by Quaternius (pre-QAL CC0, verified 2026-11-03; see folder `LICENSE.txt`) |
 | Noto Sans Devanagari Bold (UI font) | `assets/fonts/` | SIL Open Font License 1.1 | Google Fonts |
 
 ## Policy
