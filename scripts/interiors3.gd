@@ -109,7 +109,46 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 				at + Vector3(0, Roads.CURB_H + size.y * 0.5, 0))
 		solid.add_child(shape)
 	root.add_child(solid)
+	# First wired CC0 props (issue #293): pharmacy bookcases + dhaba
+	# sidewalk seating from the vendored Quaternius furniture set (CC0 —
+	# assets/props/furniture/LICENSE.txt, LICENSES.md).
+	var fy := Roads.CURB_H + 0.04
+	_cc0_prop(root, "BookCase", Transform3D(Basis(),
+			Vector3(sx - 0.75, fy, sz - 0.95)), Vector3(0.5, 1.6, 0.8))
+	_cc0_prop(root, "BookCaseBooks", Transform3D(Basis(Vector3.UP, PI),
+			Vector3(sx - 0.2, fy, sz + 0.95)), Vector3(0.5, 1.6, 0.8))
+	_cc0_prop(root, "Table", Transform3D(Basis(),
+			Vector3(dx + 0.2, fy, dz - 2.5)), Vector3(1.15, 0.7, 1.05))
+	_cc0_prop(root, "Stool", Transform3D(Basis(),
+			Vector3(dx - 0.55, fy, dz - 2.65)), Vector3(0.45, 0.6, 0.45))
+	_cc0_prop(root, "Stool", Transform3D(Basis(),
+			Vector3(dx + 0.95, fy, dz - 2.65)), Vector3(0.45, 0.6, 0.45))
 	return root
+
+
+static func _cc0_prop(root: Node3D, obj_name: String, xf: Transform3D,
+		coll: Vector3) -> void:
+	## One vendored CC0 prop (issue #293): the wavefront OBJ importer
+	## keeps the MTL colors, so each prop draws as its own
+	## MeshInstance3D with a box collider (slice-1 rule: nothing at
+	## street level is walk-through).
+	var mesh := load("res://assets/props/furniture/%s.obj" % obj_name) as Mesh
+	if mesh == null:
+		push_warning("CC0 prop missing: " + obj_name)
+		return
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.transform = xf
+	root.add_child(mi)
+	var solid := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = coll
+	shape.shape = box
+	shape.transform = xf * Transform3D(Basis(), Vector3(0, coll.y * 0.5, 0))
+	solid.add_child(shape)
+	root.add_child(solid)
 
 
 static func _chemist(b: MeshTools, x: float, z: float) -> void:

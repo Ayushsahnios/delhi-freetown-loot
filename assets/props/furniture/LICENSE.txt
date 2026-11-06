@@ -1,0 +1,23 @@
+------------------------------------------------------
+MODEL SWAP furniture set (issue 293) — all CC0
+------------------------------------------------------
+
+Table.obj, Chair.obj, ChairCushioned.obj, Stool.obj,
+Vase.obj, Plant.obj, BookCase.obj, BookCaseBooks.obj
+(+ .mtl material sidecars)
+
+Source: "Furniture Pack - Oct 2017" by
+Quaternius (@Quaternius), official pack page:
+https://quaternius.com/packs/furniture.html
+The pack page states "License: CC0" (verified 2026-11-04).
+License: CC0 1.0 Universal Public Domain Dedication
+https://creativecommons.org/publicdomain/zero/1.0/
+Pre-QAL pack: published October 2017 under CC0, before
+the separate Quaternius Asset License (QAL v1.0,
+2026-08-28) existed; QAL governs future releases only —
+this pack remains CC0.
+
+Retrieval: fetched 2026-11-04 via the pack page's
+official download link (OBJ export).
+
+Optional credit: "Furniture by Quaternius (CC0)".

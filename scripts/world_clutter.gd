@@ -199,6 +199,15 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 	_prop(root, _sack_mesh(JUTE_DARK), [sacks[1], sacks[4]],
 			Vector3(1.3, 0.9, 1.0))
 	_prop(root, _tray_mesh(), trays, Vector3(0.7, 1.0, 0.7))
+	# Issue 293 first CC0 slice: a Quaternius stool (CC0, LICENSES.md)
+	# beside each chai point — extra seating, same multimesh + collider
+	# pattern as everything else in this file.
+	var cc0_stool := load("res://assets/props/furniture/Stool.obj") as ArrayMesh
+	if cc0_stool != null:
+		var cc0_seats: Array[Transform3D] = []
+		for t: Transform3D in trays:
+			cc0_seats.append(t * Transform3D(Basis(), Vector3(0.7, 0.0, 0.15)))
+		_prop(root, cc0_stool, cc0_seats, Vector3(0.45, 0.6, 0.45))
 	# Issue 163 new prop kinds: water-drum clusters and woven charpai
 	# cots — people-scale street furniture, same multimesh + collider
 	# pattern as everything else.
