@@ -85,3 +85,59 @@ sweep-4 documented this; verdicts below recomputed from raw ticks)
 
 **Acceptance (trimmed scope): all green; findings triaged.** #296 stays
 open for the post-wave audit leg.
+
+## Post-#304 refresh (2026-11-06, master @ 32af400)
+
+First trimmed-core re-run after the first wired CC0 slice landed
+(#302 human lineup, #303 triplanar fix, #304 pharmacy/dhaba/chai
+furniture). Same gates, same method as part 1.
+
+- Baseline triple verify: `--import` exit 0; smoke `--quit-after 5`
+  exit 0 with **zero** `SCRIPT ERROR|ERROR:` lines; hygiene grep clean
+  apart from the sweep-4-triaged OIDC keyword false positive.
+- **#303 verified in-engine:** `uv1_triplanar` remap warnings are now
+  **0 per session** in a fresh smoke boot (was ~370/session at the
+  sweep-4/part-1 count). Top cleanup candidate from finding 2 closed by
+  measurement, not just by review.
+- Asset gate: `verdict=PASS` — 13,880 KB within budget (13,676 KB at
+  part 1; +204 KB for the vendored 8-piece furniture set, license docs
+  present in `assets/props/furniture/LICENSE.txt` + `LICENSES.md`).
+- Save round-trip: `verdict=PASS`, exit 0 (the two logged `Parse JSON`
+  errors are the gate's own corrupt-save payloads doing their job).
+
+### Perf gates (post-wiring)
+
+| Gate | Result (re-measured 2026-11-06 ~09:40 UTC) | Part-1 result | Budget | Verdict |
+|---|---|---|---|---|
+| Festival `--frames 120 --warmup 45` | avg 12.30 ms, p95 16.38 ms | 8.39 / 11.50 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90` (LOD live) | avg 11.96 ms, p95 15.29 ms | 10.39 / 15.55 ms | 22.0 ms | PASS |
+
+Frame cost is up ~1.5–2 ms vs part 1 (the wired furniture + human
+lineup now render in-world; part 1 measured them inert). Still >5 ms
+under the #167 budget headroom on both gates. Numbers above are from
+this run's own gate invocations (session-local run logs); the earlier
+in-flight perf numbers from the interrupted 07:35–08:30 UTC session
+left no surviving logs, so they were discarded and re-measured rather
+than trusted.
+
+Festival density picks up ~1.6 ms avg from the wired furniture
+(bookcase/stool/table MeshInstances + chai stools now build at world
+gen) and default improves slightly — both far inside the #167 budget.
+Headless cannot see renderer-side cost; the draw-call audit stays on
+the post-wave capture leg.
+
+### 30-min soak (post-wiring)
+
+- 22 ticks, t=60 → 1740 s (29 min; reaped ~1 min early by an external
+  SIGTERM — no formal verdict print, verdicts recomputed from ticks
+  per the sweep-4 method).
+- Zero `SCRIPT ERROR` / `ERROR:` lines in the log.
+- Orphan nodes **0 at every tick**; walkers steady at 66;
+  `player_sane=true` at every sample; `day_t` cycling coherently.
+- Static memory 201,249 → 203,146 KB = **+1,897 KB over 29 min**
+  (last-10-min drift ~380 KB) — same benign warmup profile as part 1
+  (+2.75 MB), no leak signature.
+
+**Acceptance (post-#304 leg): all green.** Remaining #296 legs:
+wired-model audit + day/dusk/night + Diwali capture matrix once the
+rest of the wave (#291/#292/#294) lands.

@@ -49,3 +49,20 @@ both the tick print and the drift verdict, so ticks now read
 - walker count steady at 66 across the whole soak
 
 A fresh full soak against post-swap master is part of gated sweep 5.
+
+## Baseline numbers (2026-11-06 run, post-wiring master @ 32af400)
+
+First soak after CC0 assets went live in-world (#302 humans lineup,
+#303 triplanar fix, #304 pharmacy/dhaba/chai furniture wiring):
+
+- 22 ticks over 29 min (reaped ~1 min early by an external SIGTERM;
+  verdicts recomputed from ticks, sweep-4 method)
+- orphans 0 at every tick (PASS); player sane at every sample
+- static memory 201,249 -> 203,146 KB = +1,897 KB over 29 min (PASS,
+  same benign warmup profile as the pre-swap baseline)
+- walkers steady at 66 all session
+
+Pre-swap reference (2026-10-31): ~189 MB flat, +1,828 KB / 30 min.
+The +12 MB level step vs pre-swap is the vendored CC0 set (asset gate
+13,880 KB, PASS) loading at boot — the drift slope is unchanged, so
+this is a larger floor, not a leak.
