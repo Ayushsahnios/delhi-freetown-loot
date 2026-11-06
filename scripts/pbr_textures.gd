@@ -165,5 +165,10 @@ static func apply_weathering(m: StandardMaterial3D, strength := 1.0) -> void:
 	m.normal_enabled = true
 	m.normal_texture = grit_normal()
 	m.normal_scale = 0.4 * strength
-	m.uv1_triplanar_enabled = true
+	# Godot 4.4+ rename: uv1_triplanar_enabled -> uv1_triplanar, plus the new
+	# uv1_world_triplanar flag (pre-4.4 triplanar was always world-space).
+	# The old name hit the SpatialMaterial compat _set path: silently dropped
+	# with a remap warning x370/session, weathering OFF since the 4.7 move.
+	m.uv1_triplanar = true
+	m.uv1_world_triplanar = true
 	m.uv1_scale = Vector3(0.33, 0.33, 0.33)
