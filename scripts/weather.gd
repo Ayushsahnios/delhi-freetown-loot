@@ -22,6 +22,7 @@ var wetness := 0.0    # 0 dry .. 1 soaked — roads and grip follow this
 var intensity := 0.0  # 0..1 rain strength right now
 var cloud := 0.0      # 0..1 cloud cover for sky dimming
 var label := "Clear"
+var _pinned := ""     # "" rolling plan · "clear"/"rain" frozen (QA, refs #296)
 
 var _rng := RandomNumberGenerator.new()
 var _plan_day := -1
@@ -64,6 +65,9 @@ func tick(delta: float, day_t: float, cam: Camera3D) -> void:
 
 func _roll_plan(day_t: float) -> void:
 	## A fresh monsoon plan at every wrap of the day cycle.
+	if _pinned != "":
+		_prev_day_t = day_t
+		return
 	var wrapped := _plan_day >= 0 and day_t < _prev_day_t - 0.5
 	if _plan_day < 0 or wrapped:
 		_plan_day += 1
@@ -72,6 +76,23 @@ func _roll_plan(day_t: float) -> void:
 		_plan_end = minf(_plan_start + _rng.randf_range(MIN_WINDOW, MAX_WINDOW), 0.97)
 	_prev_day_t = day_t
 
+
+func debug_pin(state: String) -> void:
+	## Deterministic weather for QA captures (refs #296, sweep-5
+	## finding 3): "clear" freezes the cycle bone-dry, "rain" locks a
+	## full-strength squall over the whole day. "" resumes rolling.
+	_pinned = state
+	if state == "rain":
+		_plan_day += 1
+		_plan_rain = true
+		_plan_start = -1.0  # window covers the entire day cycle
+		_plan_end = 2.0
+	elif state == "clear":
+		_plan_day += 1
+		_plan_rain = false
+		intensity = 0.0
+		cloud = 0.0
+		wetness = 0.0
 
 func debug_force_window(start: float, end: float) -> void:
 	## Deterministic rain window for the headless squall gate (issue
@@ -85,6 +106,10 @@ func debug_force_window(start: float, end: float) -> void:
 func _update_label() -> void:
 	if intensity > 0.15:
 		label = "Monsoon"
+	elif intensity > 0.02:
+		# Particles emit from 0.02 — the HUD must never say "Clear"
+		# while rain streaks are visible (sweep-5 finding 3, refs #296).
+		label = "Drizzle"
 	elif cloud > 0.45:
 		label = "Dark clouds"
 	elif wetness > 0.25:

@@ -301,3 +301,27 @@ remains the canonical driver.
 
 **Acceptance (post-#306 leg): all green, one watch item.** Remaining
 #296 scope unchanged: full post-wave audit leg once #292-#294 land.
+
+## Weather-state check — finding 3 resolved (2026-11-07, refs #296)
+
+Diagnostic built this leg: a `--weather` knob on the capture driver
+(`clear` pins the weather state machine bone-dry, `rain` locks a full
+squall over the whole day) plus a live weather-state print at capture
+time (label / intensity / cloud / wetness) for audit trails. Decisive
+pair at the gate-day vantage (`--tp 167,-170 --look 167,-201 --day 0.5`):
+
+| Shot | Weather state at capture | Streaks |
+|---|---|---|
+| gate-day (original, #308 leg) | not instrumented then | faint vertical streaks |
+| gate-day re-run, pinned clear | Clear · intensity 0.000 · cloud 0.000 · wetness 0.000 | clean — streaks gone |
+
+Vision verdict: the streaks WERE rain. Root cause of the "HUD says
+Clear while rain renders" desync: `_update_label` reported "Clear" up
+to intensity 0.15 while rain particles emit from intensity > 0.02 —
+and the capture driver's forced `--day` can land inside the rolled
+(65%-per-day) monsoon window, so faint rain rendered with the HUD
+still reading Clear. Fixes: a "Drizzle" label band (0.02–0.15) so the
+HUD never says Clear while streaks render, and the `--weather` pin
+knob for deterministic captures (any future baseline re-shot can hold
+weather fixed instead of rolling the dice). Raw PNGs + engine logs in
+`.agent/sweep5cap/` (gitignored); re-run with the flags table above.

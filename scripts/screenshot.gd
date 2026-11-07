@@ -23,6 +23,11 @@ extends Node
 ##   --noglow       disable environment glow (issue #104 discriminator: on
 ##                 the compatibility renderer glow composites in LDR, which
 ##                 can wash bright noon skies out to white under software GL)
+##   --weather S   pin the weather state machine (refs #296): "clear"
+##                 freezes it bone-dry, "rain" locks a full squall —
+##                 makes captures deterministic instead of rolling the
+##                 65%-per-day monsoon dice; the live weather state is
+##                 printed with the capture for audit trails
 
 const MAIN_SCENE := preload("res://scenes/main.tscn")
 
@@ -35,6 +40,7 @@ func _ready() -> void:
 	var card := true
 	var nclouds := false
 	var noglow := false
+	var weather := ""
 	var finale := false
 	var ending := false
 	var metro := false
@@ -52,6 +58,8 @@ func _ready() -> void:
 			nclouds = true
 		elif a == "--noglow":
 			noglow = true
+		elif a == "--weather" and i + 1 < args.size():
+			weather = String(args[i + 1])
 		elif a == "--metro":
 			metro = true
 		elif a == "--finale":
@@ -85,6 +93,11 @@ func _ready() -> void:
 
 	if day >= 0.0 and "day_t" in main:
 		main.day_t = day
+
+	if weather != "":
+		var wpin: Node = main.get("_weather")
+		if wpin != null and wpin.has_method("debug_pin"):
+			wpin.debug_pin(weather)
 
 	if nclouds:
 		var clouds: Node3D = main.get("_cloud_layer")
@@ -126,6 +139,12 @@ func _ready() -> void:
 	print("screenshot saved: ", out)
 	if main.get("player") != null:
 		print("player at: ", main.get("player").position)
+	var wstate: Node = main.get("_weather")
+	if wstate != null:
+		print("weather: ", wstate.get("label"),
+				" intensity=%.3f" % wstate.get("intensity"),
+				" cloud=%.3f" % wstate.get("cloud"),
+				" wetness=%.3f" % wstate.get("wetness"))
 	get_tree().quit()
 
 
