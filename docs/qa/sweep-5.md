@@ -141,3 +141,54 @@ the post-wave capture leg.
 **Acceptance (post-#304 leg): all green.** Remaining #296 legs:
 wired-model audit + day/dusk/night + Diwali capture matrix once the
 rest of the wave (#291/#292/#294) lands.
+
+## Capture leg — aimed-capture matrix + vision audit (2026-11-07, refs #296)
+
+Setup: post-wiring master lineage (`dea3b28` + the `--look` aimed-capture
+flag from this PR; runtime code otherwise identical to master). xvfb +
+software GL via `scripts/screenshot.gd`. NOTE: the Nov 1-14 festival
+window is active by date, so every capture includes Diwali dressing;
+there is no `--no-festival` capture knob yet (proposal below).
+
+### Matrix results (rc = engine exit 0, PNG written)
+
+| Vantage / time | rc | Notes |
+|---|---|---|
+| bazaar day / dusk / night | 0 ×3 | via /tmp runner lineage |
+| cp day / dusk / night | 0 ×3 | aimed captures (`--look`) |
+| chandni-day | 0 | aimed |
+| purani-night | 0 | aimed; festival lights read well |
+| gate-day | INCOMPLETE | engine reaped at the shift wrap mid world-build (log ends at station-yard mesh build, no PNG) |
+
+8 of 9 planned shots landed; raw PNGs live in the lane workdir
+(`.agent/sweep5cap/`, gitignored) — reproducible with the flags above.
+
+### Vision audit findings (LLM pass over the 8 PNGs + pharmacy test shot)
+
+1. **Day/dusk frames washed out** — sky blows to white haze, background
+   detail lost; worst at bazaar (HUD 19:59 reads as flat noon haze).
+   Suspect exposure/tone-mapping under the compatibility renderer +
+   software GL (#104 lineage); needs a hardware-GL cross-check before
+   code changes — flagged, not fixed here.
+2. **Dusk grade mismatch** — evening hours render a daylight grade.
+3. **Duplicated identical green foliage blobs** on stall tops (bazaar
+   day + dusk) — same asset instanced twice symmetric.
+4. **Festival-light coverage gap** — purani-night shows glowing strings
+   (best frame); pharmacy awning dots render unlit; cp/bazaar night have
+   none despite the "Diwali rush!" ticker.
+5. **Weather-state mismatch** — pharmacy test shot renders rain streaks
+   while the HUD weather line reads "Clear".
+6. **Wallet/rent arithmetic** — DAY'S BOOKS shows Rent −120 with wallet
+   Rs 0 (clamped display or a real bug — needs an economy check).
+7. **Twin desk props** duplicated symmetric at the cp spawn.
+
+Triage: none block the current master lineage; all deferred to the
+post-wave audit leg. Follow-up proposals: `--no-festival` capture knob,
+night festival-light pass at cp/bazaar, de-dup foliage blobs, dusk
+grade fix, weather-state check.
+
+### Next shift
+
+Complete gate-day + the remaining baseline vantages (purani-day,
+chandni-dusk, gate-night vs `docs/screenshots/` baselines), then run the
+full post-wave audit once #292-#294 land.

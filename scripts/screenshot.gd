@@ -30,6 +30,7 @@ func _ready() -> void:
 	var out := "/tmp/shot.png"
 	var frames := 90
 	var tp := Vector2(INF, INF)
+	var look := Vector2(INF, INF)
 	var day := -1.0
 	var card := true
 	var nclouds := false
@@ -63,6 +64,10 @@ func _ready() -> void:
 			var bits := String(args[i + 1]).split(",")
 			if bits.size() == 2:
 				tp = Vector2(float(bits[0]), float(bits[1]))
+		elif a == "--look" and i + 1 < args.size():
+			var lb := String(args[i + 1]).split(",")
+			if lb.size() == 2:
+				look = Vector2(float(lb[0]), float(lb[1]))
 		elif a == "--day" and i + 1 < args.size():
 			day = clampf(float(args[i + 1]), 0.0, 1.0)
 
@@ -94,6 +99,12 @@ func _ready() -> void:
 	if tp.x != INF and main.get("player") != null:
 		var p: Node3D = main.get("player")
 		p.position = Vector3(tp.x, p.position.y, tp.y)
+		# Aimed captures (sweep-5 capture matrix, refs #296): point the
+		# player at a world spot so the follow cam frames it — the chase
+		# anchor sits behind the player's -Z and looks over the shoulder.
+		if look.x != INF:
+			p.look_at(Vector3(look.x, p.global_position.y, look.y),
+					Vector3.UP)
 
 	if metro and main.has_method("_capture_board_metro"):
 		main._capture_board_metro()
