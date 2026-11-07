@@ -188,12 +188,35 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 			Vector3(1.7, 1.2, 0.6))
 	_prop(root, _bicycle_mesh(BIKE_BLUE), [bikes[1], bikes[3], bikes[4]],
 			Vector3(1.7, 1.2, 0.6))
-	_prop(root, _crate_mesh(WOOD), [crates[0], crates[3], crates[5]],
-			Vector3(0.8, 1.0, 0.8))
-	_prop(root, _crate_mesh(WOOD_DARK), [crates[1], crates[6]],
-			Vector3(0.8, 1.0, 0.8))
-	_prop(root, _crate_mesh(WOOD_PALE), [crates[2], crates[4]],
-			Vector3(0.8, 1.0, 0.8))
+	# Issue 293 market-goods slice: the bazaar/kerb crate stacks swap
+	# from box-assembled wood stacks to KayKit Restaurant Bits CC0
+	# produce crates (assets/props/marketgoods/, LICENSES.md). One
+	# deterministic cluster -> kind map, all 7 cluster transforms and
+	# their (0.8, 1.0, 0.8) colliders unchanged; the procedural
+	# _crate_mesh stays as the automatic fallback if a glTF ever fails
+	# to load.
+	var crate_kinds := {
+		"carrots": [crates[0], crates[5]],
+		"onions": [crates[1], crates[6]],
+		"potatoes": [crates[2]],
+		"tomatoes": [crates[3]],
+		"lettuce": [crates[4]],
+	}
+	var crate_fallback: Array[Transform3D] = []
+	for kind: String in crate_kinds:
+		var stack := _kaykit_stack(
+				"res://assets/props/marketgoods/crate_%s.gltf" % kind)
+		if stack == null:
+			for t: Transform3D in crate_kinds[kind]:
+				crate_fallback.append(t)
+			continue
+		var xfs: Array[Transform3D] = []
+		for t: Transform3D in crate_kinds[kind]:
+			xfs.append(t)
+		_prop(root, stack, xfs, Vector3(0.8, 1.0, 0.8))
+	if not crate_fallback.is_empty():
+		_prop(root, _crate_mesh(WOOD), crate_fallback,
+				Vector3(0.8, 1.0, 0.8))
 	_prop(root, _sack_mesh(JUTE), [sacks[0], sacks[2], sacks[3]],
 			Vector3(1.3, 0.9, 1.0))
 	_prop(root, _sack_mesh(JUTE_DARK), [sacks[1], sacks[4]],
@@ -431,6 +454,74 @@ static func _crate_mesh(wood: Color) -> ArrayMesh:
 			FRUIT[0])
 	b.add_box(Vector3(0.34, 0.14, 0.34), Vector3(-0.04, 1.15, 0.02), FRUIT[2])
 	return b.build_mesh()
+
+
+static func _kaykit_first_mesh(path: String) -> Mesh:
+	## First MeshInstance3D mesh inside a KayKit glTF — glTFs import
+	## as PackedScene, not ArrayMesh, so instantiate, lift the mesh,
+	## then free the instance.
+	var ps := load(path) as PackedScene
+	if ps == null:
+		return null
+	var inst := ps.instantiate()
+	var found: Mesh = null
+	var queue: Array[Node] = [inst]
+	while not queue.is_empty():
+		var n: Node = queue.pop_back()
+		if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+			found = (n as MeshInstance3D).mesh
+			break
+		for c: Node in n.get_children():
+			queue.append(c)
+	inst.free()
+	return found
+
+
+static func _kaykit_stack(produce_path: String) -> ArrayMesh:
+	## One market-goods cluster: plain KayKit crate base + produce
+	## crate on top, scaled from the 2x2 m glTF units down to the
+	## ~0.84 m street footprint (pair ~0.7 m tall, safely under the
+	## 1.0 m cluster collider). All surfaces merge into one ArrayMesh
+	## so each cluster stays a single multimesh instance + collider.
+	var plain := _kaykit_first_mesh("res://assets/props/marketgoods/crate.gltf")
+	var produce := _kaykit_first_mesh(produce_path)
+	if plain == null or produce == null:
+		return null
+	var out := ArrayMesh.new()
+	const K := 0.42
+	_add_crate_surfaces(out, plain,
+			Transform3D(Basis(Vector3.UP, 0.10), Vector3.ZERO), K)
+	_add_crate_surfaces(out, produce,
+			Transform3D(Basis(Vector3.UP, -0.14),
+					Vector3(0.03, 0.80 * K, -0.02)), K)
+	return out
+
+
+static func _add_crate_surfaces(out: ArrayMesh, src: Mesh, xf: Transform3D,
+		s: float) -> void:
+	## Copy every surface of src into out, scaled by s and offset by
+	## xf (yaw only), keeping the imported materials.
+	for surf in src.get_surface_count():
+		var arrays := src.surface_get_arrays(surf)
+		var verts := arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array
+		if verts == null or verts.is_empty():
+			continue
+		var moved := PackedVector3Array()
+		moved.resize(verts.size())
+		for i in verts.size():
+			moved.set(i, xf.basis * (verts[i] * s) + xf.origin)
+		arrays[Mesh.ARRAY_VERTEX] = moved
+		var norms := arrays[Mesh.ARRAY_NORMAL] as PackedVector3Array
+		if norms != null and norms.size() == verts.size():
+			var spun := PackedVector3Array()
+			spun.resize(norms.size())
+			for i in norms.size():
+				spun.set(i, (xf.basis * norms[i]).normalized())
+			arrays[Mesh.ARRAY_NORMAL] = spun
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var mat := src.surface_get_material(surf)
+		if mat != null:
+			out.surface_set_material(out.get_surface_count() - 1, mat)
 
 
 static func _sack_mesh(jute: Color) -> ArrayMesh:
