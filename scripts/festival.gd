@@ -35,7 +35,12 @@ var _night := 0.0
 
 static func is_festival() -> bool:
 	## Nov 1-14 window, or forced via --festival for captures/gates.
+	## --no-festival overrides BOTH (refs #296 sweep-5): captures inside
+	## the date window can hold the city undressed for baseline diffing
+	## against the festival-free state instead of waiting for Nov 15.
 	for a in OS.get_cmdline_user_args():
+		if a == "--no-festival":
+			return false
 		if a == "--festival":
 			return true
 	var d := Time.get_date_dict_from_system()
