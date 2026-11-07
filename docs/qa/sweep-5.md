@@ -192,3 +192,59 @@ grade fix, weather-state check.
 Complete gate-day + the remaining baseline vantages (purani-day,
 chandni-dusk, gate-night vs `docs/screenshots/` baselines), then run the
 full post-wave audit once #292-#294 land.
+
+## Capture leg completion — final 4 matrix shots + baseline deltas (2026-11-07, refs #296)
+
+Second shift of the capture leg (master @ `f8608c7`). Same setup: xvfb +
+software GL via `scripts/screenshot.gd`, aimed captures with `--tp/--look`,
+festival window still date-active (Diwali dressing in every frame).
+
+### Matrix completion (rc = engine exit 0, PNG written)
+
+| Vantage / time | Flags | rc | PNG |
+|---|---|---|---|
+| gate-day | tp 167,-170 · look 167,-201 · day 0.5 | 0 | 421 KB |
+| purani-day | tp -102,75 · look -109,75 · day 0.5 | 0 | 636 KB |
+| chandni-dusk | tp -56,75 · look -63,75 · day 0.8 | 0 | 582 KB |
+| gate-night | tp 167,-170 · look 167,-201 · day 0.0 | 0 | 367 KB |
+
+**Capture matrix now 12/12** (8 prior + 4 here, gate-day recovered from the
+reaped shot). Raw PNGs + engine logs in `.agent/sweep5cap/` (gitignored);
+reproducible with the flags table above.
+
+### Vision audit vs `docs/screenshots/` baselines
+
+1. **Night/dusk renders correctly in the new aimed shots and BEATS the
+   baselines** — chandni-dusk shows a true dark-blue evening with warm
+   emissive stall lamps, Hindi signboards and visible festival string
+   lights/bunting; gate-night frames the floodlit arch head-on against a
+   dark sky with lit windows. Both old baseline night frames are
+   washed-out white. The earlier "dusk grade mismatch" finding is NOT
+   reproduced by the aimed `--day 0.8` capture (dark evening grade
+   rendered correctly) — likely a vantage/exposure artifact of the
+   earlier bazaar dusk shot; hardware-GL cross-check proposal stands.
+2. **Day washout persists (finding 1 confirmed again)** — gate-day is
+   heavily desaturated into pale sepia/cream with no visible shadow
+   direction; consistent with the #104-lineage exposure/tone-map issue
+   under compatibility + software GL. Flagged, not fixed.
+3. **Weather-state mismatch confirmed (second sighting)** — faint
+   vertical rain streaks in gate-day while HUD reads Day · Clear; the
+   pharmacy test-shot report from the last shift is no longer a
+   one-off. Needs a weather-state check (proposal below).
+4. **Framing notes (tooling, not art regressions)** — gate-day: the
+   over-shoulder cam puts the player mesh large in frame at this offset;
+   purani-day: tp -102,75 lands inside the old-city courtyard enclosure
+   (dome overhead, boxed-in vantage) — use a street-corner offset next
+   time to match the baseline vantage.
+5. **purani-day duplicates** — twin identical blue stall canopies
+   flanking the player; matches the prior de-dup-foliage/stall-props
+   follow-up (de-dup pass proposal).
+6. Minor: gate-night bottom third near-black (flat dark ground), lone
+   walker with odd proportions at plaza center.
+
+Triage: none block master; items 2/3/5 fold into the existing follow-up
+proposals (hardware-GL cross-check, weather-state check, de-dup pass)
+which stay queued for the post-wave audit leg.
+
+**Acceptance: matrix complete (12/12), audit deltas recorded.** Remaining
+#296 scope unchanged: full post-wave audit leg once #292-#294 land.
