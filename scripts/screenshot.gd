@@ -28,6 +28,10 @@ extends Node
 ##                 makes captures deterministic instead of rolling the
 ##                 65%-per-day monsoon dice; the live weather state is
 ##                 printed with the capture for audit trails
+##   --no-festival (refs #296 sweep-5) strips the Diwali dressing even
+##                 inside the Nov 1-14 window — see scripts/festival.gd
+##                 is_festival(); pair a pinned-weather shot with a
+##                 --no-festival shot for clean before/after baselines
 
 const MAIN_SCENE := preload("res://scenes/main.tscn")
 

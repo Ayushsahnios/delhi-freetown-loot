@@ -325,3 +325,63 @@ HUD never says Clear while streaks render, and the `--weather` pin
 knob for deterministic captures (any future baseline re-shot can hold
 weather fixed instead of rolling the dice). Raw PNGs + engine logs in
 `.agent/sweep5cap/` (gitignored); re-run with the flags table above.
+
+## Pinned-clear capture matrix + `--no-festival` knob (2026-11-07, refs #296)
+
+Two follow-ups from the capture leg, one slice (master @ `aeaf162`).
+
+### `--no-festival` capture knob
+
+`scripts/festival.gd is_festival()` now returns false on a `--no-festival`
+user arg, overriding BOTH `--festival` and the Nov 1-14 date window
+(usage documented in `scripts/screenshot.gd`). Inside the window this
+holds the city undressed for festival-vs-plain baseline diffing without
+waiting for Nov 15. Downstream gates (food surge, radio, night glow) all
+key off the same `_festival == null` path — unchanged.
+
+Decisive pair at cp day (`--tp -17,-17 --look -34,-34 --day 0.5
+--weather clear`): the festival shot carries the festival banner ticker,
+the `--no-festival` shot does not (vision-audited); PNG deltas 619,764
+vs 606,832 bytes. Festival props at this vantage were already below
+daytime visibility (finding 4, coverage gap) — a purani-night
+festival/no-fest pair is queued for the post-wave audit leg, where the
+strings/diyas actually read on camera.
+
+### Pinned-clear matrix refresh (all `--weather clear`)
+
+| Shot | Flags | rc | PNG |
+|---|---|---|---|
+| cp-day | tp -17,-17 · look -34,-34 · day 0.5 | 0 | 620 KB |
+| cp-day-nofest | same + `--no-festival` | 0 | 607 KB |
+| cp-dusk | tp -17,-17 · look -34,-34 · day 0.8 | 0 | 380 KB |
+| cp-night | tp -17,-17 · look -34,-34 · day 0.0 | 0 | 379 KB |
+| chandni-day | tp -56,75 · look -63,75 · day 0.5 | 0 | 586 KB |
+| chandni-dusk | tp -56,75 · look -63,75 · day 0.8 | 0 | 677 KB |
+| purani-day | tp -102,75 · look -109,75 · day 0.5 | 0 | 740 KB |
+| purani-night | tp -102,75 · look -109,75 · day 0.0 | 0 | 526 KB |
+| gate-night | tp 167,-170 ·look 167,-201 · day 0.0 | 0 | 194 KB |
+
+Every capture log prints `weather: Clear intensity=0.000 cloud=0.000
+wetness=0.000` — the monsoon dice no longer touch baselines. Raw
+PNGs + engine logs in `.agent/sweep5cap2/` (gitignored), captured
+21:28–21:43 UTC by an interrupted shift and re-corroborated on adoption
+(all sizes match, weather lines present, zero `SCRIPT ERROR|ERROR:`
+lines); cp pair re-vision-audited on adoption: the `Diwali night!`
+ticker segment is present in the festival shot and stripped in the
+`--no-festival` shot, zero rain streaks, HUD reads "Delhi — Day ·
+Clear" in both. gate-day pinned-clear already exists from the #310 leg. cp look target re-picked
+(-34,-34, symmetric SW) — the original cp logs predate the `--look`
+print; the day/dusk/night triple is now self-consistent. Bazaar
+re-shots deferred: the original vantage flags are unrecoverable from
+repo artifacts (pre-`--look` runner) — re-pick a bazaar vantage via
+block-center math in the post-wave leg.
+
+Vision spot-check (cp pair): zero rain streaks, zero weather artifacts,
+HUD "Clear" in both — finding 3's fix holds across the re-run matrix.
+Day-washout (finding 1) still present at cp-day as expected
+(#104-lineage, unfixed).
+
+**Acceptance: deterministic pinned-clear baseline set (9 shots here +
+gate-day from #310), `--no-festival` knob live.** Remaining #296 scope
+unchanged: full post-wave audit leg once #292-#294 land (add to it:
+purani-night festival/no-fest pair, bazaar pinned-clear re-shots).
