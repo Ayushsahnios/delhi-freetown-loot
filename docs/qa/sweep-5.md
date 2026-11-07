@@ -248,3 +248,56 @@ which stay queued for the post-wave audit leg.
 
 **Acceptance: matrix complete (12/12), audit deltas recorded.** Remaining
 #296 scope unchanged: full post-wave audit leg once #292-#294 land.
+
+## Post-#306 refresh (2026-11-07, master @ `6bea43c`)
+
+Re-measured gates after the market-goods slice (#306: CC0 produce
+crates wired into bazaar clusters) — the first in-world geometry the
+post-#304 numbers predate. #307/#308 were tooling/docs-only and don't
+affect runtime. Same gates, same method as the post-#304 leg.
+
+- Baseline triple verify: `--import` exit 0; smoke `--quit-after 5`
+  exit 0 with zero `SCRIPT ERROR|ERROR:` lines; hygiene grep clean
+  apart from the sweep-4-triaged CI-permission false positive (and the
+  gitignored `.agent/MISSION.md` itself, uncommitted).
+- Save round-trip (`save_check.tscn`): `verdict=PASS`, exit 0.
+
+### Perf gates (post-market-goods)
+
+| Gate | Result (re-measured 2026-11-07 ~09:55 UTC) | Post-#304 | Budget | Verdict |
+|---|---|---|---|---|
+| Festival `--frames 120 --warmup 45` | avg 11.95 ms, p95 20.38 ms | 12.30 / 16.38 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90` (LOD live) | avg 10.32 ms, p95 14.51 ms | 11.96 / 15.29 ms | 22.0 ms | PASS |
+
+Festival avg is flat-to-slightly-better (run-to-run noise band), but
+festival **p95 rose 16.38 → 20.38 ms** — the produce crates add
+peak-frame cost at festival density exactly where the budget measures.
+Default improved on both metrics. Both gates PASS; festival p95
+headroom is now ~1.6 ms — flagged as a **watch item** for the
+post-wave leg: remaining wave slices (#292-#294) add more geometry,
+and if p95 trends past ~21 ms the festival budget itself needs a look.
+
+### 30-min soak (post-market-goods)
+
+Vendored `tools/qa/soak273.tscn` driver (units-fixed per #301), 30 min
+headless on this branch's tree (`6bea43c` + docs-only edits, runtime =
+master): **SUMMARY passes=3 fails=0, 25 ticks, zero
+`SCRIPT ERROR|ERROR:` lines.**
+
+- Player alive and playing after 30 min — PASS.
+- Orphan-node drift +0 (0 → 0) — PASS.
+- Static-memory drift +1754 KB (202,927 → 204,682 KB) vs the 200,000 KB
+  drift budget (~0.9% used) — PASS. +744 KB of it is first-minute
+  warmup; the remaining ~+1.0 MB accrues near-linearly over 28 min.
+- Walkers steady at 66 the whole run; day_t cycling 0.08→0.83 normally.
+
+Units postmortem: the first soak attempt this leg (11:25 UTC) launched
+the old gitignored `.agent/soak273.gd` lineage, which prints raw
+`MEMORY_STATIC` bytes as `mem_kb` — the exact mislabel #301 fixed in
+the vendored driver. It false-FAILED at "+1761924 KB" (actually
++1.7 MB of benign warmup drift). The stale `.agent` copy is now
+units-patched to match the vendored one; `tools/qa/soak273.tscn`
+remains the canonical driver.
+
+**Acceptance (post-#306 leg): all green, one watch item.** Remaining
+#296 scope unchanged: full post-wave audit leg once #292-#294 land.
