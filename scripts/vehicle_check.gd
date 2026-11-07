@@ -3,6 +3,8 @@ extends Node
 ## refresh: spoked wheels with a tread band, the matte/gloss material
 ## split, the dusk lamp-glow curve, per-kind exhaust offsets, and
 ## the issue #269 heavy-three meshes (surfaces, gloss, tri counts).
+## Issue #294 Part 1a: also gates the panelled street trio — every
+## lofted hull must carry number plates (≥ 2 PLATE surfaces).
 ## Usage:
 ##   godot --headless --path . res://scenes/vehicle_check.tscn
 ## Exits 0 when everything passes, 2 with a FAILED report otherwise.
@@ -80,8 +82,35 @@ func _ready() -> void:
 			problems.append("heavy kind " + kind + " has no clearcoat gloss surface")
 		print("heavy %s: %d surfaces, %d tris" % [kind, hmesh.get_surface_count(), tris])
 
+	# 6. Issue #294 Part 1a: the panelled street trio — hatchback, van
+	# and tempo each carry number plates. Surfaces merge by material, so
+	# the gate reads the PLATE surface triangle budget: one plate box is
+	# 12 tris — ≥ 24 means front + rear are both present.
+	for kind in ["hatch", "van", "tempo"]:
+		var tb := MeshTools.new()
+		if kind == "hatch":
+			Vehicles.build_hatchback_body(tb, Vehicles.PAINTS[0], false)
+		elif kind == "van":
+			Vehicles.build_van_body(tb, Vehicles.PAINTS[1], false)
+		else:
+			Vehicles.build_tempo_body(tb, Vehicles.PAINTS[2], false)
+		var tm := tb.build_mesh()
+		var plate_tris := 0
+		var street_tris := 0
+		for i in tm.get_surface_count():
+			var sm: StandardMaterial3D = tm.surface_get_material(i)
+			var sidx = tm.surface_get_arrays(i)[Mesh.ARRAY_INDEX]
+			if sidx != null:
+				street_tris += int(sidx.size() / 3.0)
+			if sm != null and sm.albedo_color.is_equal_approx(Vehicles.PLATE):
+				plate_tris += int(sidx.size() / 3.0)
+		if plate_tris < 24:
+			problems.append("kind %s plate surface has %d tris — expected ≥ 24 (front + rear plates)"
+					% [kind, plate_tris])
+		print("street %s: %d tris, plate geometry %d tris" % [kind, street_tris, plate_tris])
+
 	if problems.is_empty():
-		print("VEHICLE CHECK PASS — wheels, gloss split, lamp glow, exhaust offsets, heavy fleet")
+		print("VEHICLE CHECK PASS — wheels, gloss split, lamp glow, exhaust offsets, heavy fleet, street trio plates")
 		get_tree().quit(0)
 	else:
 		for p in problems:

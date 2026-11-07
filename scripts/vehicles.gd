@@ -172,6 +172,16 @@ static func build_hatchback_body(b: MeshTools, paint: Color, interior := true) -
 	_panel(b, Vector3(0.3, 0.14, 0.07), Vector3(0.58, 0.92, 1.955), TAIL, 0.0, MeshTools.FINISH_GLOSS)
 	_panel(b, Vector3(0.4, 0.16, 0.3), Vector3(-0.5, 0.33, 1.65), TRIM)  # muffler (issue #166)
 	_cyl_z(b, 0.045, 0.35, Vector3(-0.55, 0.34, 1.9), TRIM)  # tailpipe
+	# Issue #294 Part 1a: door scribes, handle bars and number plates so
+	# the lofted hull reads panelled, not printed — thin TRIM strips at
+	# the fender and B-pillar bases, stub FRAME handles, PLATE rectangles
+	# proud of both bumpers.
+	for sx in [-1.0, 1.0]:
+		_panel(b, Vector3(0.02, 0.55, 0.02), Vector3(0.945 * sx, 0.78, -0.95), TRIM)  # fender seam
+		_panel(b, Vector3(0.02, 0.55, 0.02), Vector3(0.945 * sx, 0.78, 0.15), TRIM)  # door seam at B-pillar base
+		_cyl_x(b, 0.02, 0.18, Vector3(0.95 * sx, 1.0, -0.05), FRAME)  # door handle
+	_panel(b, Vector3(0.5, 0.14, 0.03), Vector3(0, 0.44, -2.125), PLATE)  # number plate (front)
+	_panel(b, Vector3(0.5, 0.14, 0.03), Vector3(0, 0.44, 2.125), PLATE)  # number plate (rear)
 	if interior:
 		add_car_interior(b)
 
@@ -206,6 +216,16 @@ static func build_van_body(b: MeshTools, paint: Color, interior := true) -> void
 	_panel(b, Vector3(0.03, 0.30, 0.50), Vector3(0.965, 1.90, -1.62), GLASS, 0.0, MeshTools.FINISH_GLOSS)
 	_panel(b, Vector3(0.35, 0.16, 0.35), Vector3(-0.58, 0.46, 1.8), TRIM)  # muffler (issue #166)
 	_cyl_z(b, 0.05, 0.4, Vector3(-0.62, 0.48, 2.0), TRIM)  # tailpipe
+	# Issue #294 Part 1a: cab door scribes + stub handles, a centre split
+	# seam on the cargo doors and number plates front and rear — the
+	# cab-plus-box reads assembled rather than moulded.
+	for sx in [-1.0, 1.0]:
+		_panel(b, Vector3(0.02, 0.85, 0.02), Vector3(1.05 * sx, 1.18, -1.30), TRIM)  # cab door front seam
+		_panel(b, Vector3(0.02, 0.85, 0.02), Vector3(1.05 * sx, 1.18, -1.02), TRIM)  # cab door rear seam
+		_cyl_x(b, 0.02, 0.18, Vector3(1.06 * sx, 1.30, -1.12), FRAME)  # door handle
+	_panel(b, Vector3(0.02, 1.6, 0.02), Vector3(0, 1.55, 2.06), TRIM)  # cargo door split
+	_panel(b, Vector3(0.55, 0.15, 0.03), Vector3(0, 0.45, -2.155), PLATE)  # number plate (front)
+	_panel(b, Vector3(0.55, 0.15, 0.03), Vector3(0, 0.75, 2.07), PLATE)  # number plate (rear)
 	if interior:
 		add_van_interior(b)
 
@@ -269,6 +289,14 @@ static func build_tempo_body(b: MeshTools, paint: Color, interior := true) -> vo
 	_panel(b, Vector3(0.3, 0.15, 0.07), Vector3(0.7, 1.1, 2.42), TAIL, 0.0, MeshTools.FINISH_GLOSS)
 	_tempo_roof_rack(b)
 	_cyl_z(b, 0.05, 0.42, Vector3(-0.75, 0.55, 2.2), TRIM)  # tailpipe
+	# Issue #294 Part 1a: sliding-door scribes around the blank front
+	# bay, stub handle bars and number plates front and rear.
+	for sx in [-1.0, 1.0]:
+		_panel(b, Vector3(0.02, 0.75, 0.02), Vector3(1.05 * sx, 0.92, -1.42), TRIM)  # door front seam
+		_panel(b, Vector3(0.02, 0.75, 0.02), Vector3(1.05 * sx, 0.92, -0.38), TRIM)  # door rear seam
+		_cyl_x(b, 0.02, 0.18, Vector3(1.07 * sx, 1.05, -0.55), FRAME)  # door handle
+	_panel(b, Vector3(0.5, 0.14, 0.03), Vector3(0, 0.6, -2.345), PLATE)  # number plate (front)
+	_panel(b, Vector3(0.5, 0.14, 0.03), Vector3(0, 0.75, 2.30), PLATE)  # number plate (rear)
 	if interior:
 		add_tempo_interior(b)
 
