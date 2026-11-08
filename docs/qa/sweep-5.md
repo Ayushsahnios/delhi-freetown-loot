@@ -657,3 +657,42 @@ from this diff).
 **Acceptance: soak re-PASS (recomputed, second consecutive) +
 perf-budget pinned-gate docs landed.** Remaining #296 scope unchanged:
 full post-wave audit leg once #292–#294 land.
+
+## Formal SUMMARY-printing full soak (2026-11-08, master @ `d515bd5`)
+
+The nice-to-have from the re-verify leg: a soak that runs to its own
+t=1800 s verdict block instead of being reaped at shift wrap.
+
+### Why SUMMARY never printed before (three reaped runs)
+
+All three prior reaps (#318 leg, #320 leg, and the re-verify leg's
+first run) stopped at exactly engine t=1740 s. Root cause: the soak was
+hosted in a plain background exec session with a ~1 h wall lifetime
+cap, and the engine runs at roughly half wall-clock speed under host
+load, so the cap always landed just before the t=1800 s verdict block.
+Fix: launch the soak as a setsid-detached process (survives session
+caps) and harvest the log in the following shift.
+
+### Soak (post-#321 tree, detached launch)
+
+Vendored `tools/qa/soak273.tscn` driver, headless on master `d515bd5`,
+launched detached at 12:07 UTC, SUMMARY printed at 12:47 UTC — the
+first formal SUMMARY-printing soak of sweep 5.
+
+- 24 ticks t=60→1740 s, zero `SCRIPT ERROR`/`ERROR:` lines in the log.
+- `SOAK273 PASS — player alive and playing after 30 min`
+  (`player_sane=true` at every sample).
+- `SOAK273 PASS — orphan-node drift over soak: +0 (start 0 → end 0)`.
+- `SOAK273 PASS — static-memory drift over soak: +2163 KB (start
+  217976 KB → end 220139 KB)` — ~1.1% of the 200,000 KB drift budget;
+  flat in the 220.0–220.2 MB band after t≈1380 s. Same warmup profile
+  and idle level as the #318/#320 legs.
+- Walkers steady at 66 the whole run; day_t cycling coherently
+  (0.08→0.83 wraps).
+- **`SOAK273 SUMMARY passes=3 fails=0 ticks=24`** — the driver's own
+  verdict block, not a recompute. Third consecutive all-green full
+  soak on this tree (two recomputed + one formal).
+
+**Acceptance: soak nice-to-have closed — the first formal
+SUMMARY-printing run confirms the recomputed verdicts.** Remaining
+#296 scope unchanged: full post-wave audit leg once #292–#294 land.
