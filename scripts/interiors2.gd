@@ -10,11 +10,15 @@ extends Node
 ## [B] bribe spot, and it sells paan through the same wallet/HP path.
 ## De-box directive: every wall is a chamfered prism, counters are
 ## beveled, bottles and pots are lathe profiles, canopies arc shells.
+## Issue #293 shop-interiors slice: the grain sacks, paan stool and
+## reading bench swap for vendored CC0 props (Quaternius furniture
+## OBJs + KayKit produce crates) — wired in build(), colliders on all.
 
 const Chars := preload("res://scripts/characters.gd")
 const ShadowBlob := preload("res://scripts/shadowblob.gd")
 const MeshTools := preload("res://scripts/meshtools.gd")
 const Roads := preload("res://scripts/roads.gd")
+const Clutter := preload("res://scripts/world_clutter.gd")
 
 const DOOR_HALF_X := 1.6
 const DOOR_HALF_Z := 1.5
@@ -34,7 +38,6 @@ const KIRANA_ROOF := Color(0.55, 0.30, 0.16)
 const KIRANA_COUNTER := Color(0.58, 0.40, 0.22)
 const KIRANA_GLASS := Color(0.80, 0.86, 0.84)
 const KIRANA_BOARD := Color(0.12, 0.38, 0.55)
-const SACK := Color(0.72, 0.62, 0.42)
 const PACKET_COLORS := [
 	Color(0.88, 0.30, 0.18), Color(0.95, 0.78, 0.20),
 	Color(0.25, 0.55, 0.30), Color(0.90, 0.88, 0.84),
@@ -158,6 +161,32 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 				at + Vector3(0, Roads.CURB_H + size.y * 0.5, 0))
 		solid.add_child(shape)
 	root.add_child(solid)
+	# Issue #293 shop-interiors slice: the last capsule/cylinder/box
+	# dressing inside the three shops swaps for the vendored CC0 sets —
+	# KayKit produce-crate stacks by the kirana counter with a
+	# Quaternius vase on it, a CC0 stool and doorway plant at the paan
+	# shop, a cushioned reading chair in the bookstore. One collider
+	# per prop; deterministic placements, all inside the shop floors.
+	var yy := Roads.CURB_H
+	var carrots := Clutter._kaykit_stack(
+			"res://assets/props/marketgoods/crate_carrots.gltf")
+	_cc0_mesh_prop(root, carrots, Transform3D(
+			Basis(Vector3.UP, PI * 0.10),
+			Vector3(kx - 0.75, yy, kz - 1.05)), Vector3(0.8, 0.8, 0.8))
+	var onions := Clutter._kaykit_stack(
+			"res://assets/props/marketgoods/crate_onions.gltf")
+	_cc0_mesh_prop(root, onions, Transform3D(
+			Basis(Vector3.UP, -PI * 0.12),
+			Vector3(kx + 0.2, yy, kz - 1.02)), Vector3(0.8, 0.8, 0.8))
+	_cc0_furniture(root, "Vase", Transform3D(Basis(),
+			Vector3(kx - 1.6, yy + 0.95, kz - 0.7)), Vector3(0.3, 0.4, 0.3))
+	_cc0_furniture(root, "Stool", Transform3D(Basis(),
+			Vector3(px + 0.85, yy, pz + 0.75)), Vector3(0.45, 0.6, 0.45))
+	_cc0_furniture(root, "Plant", Transform3D(Basis(Vector3.UP, PI * 0.25),
+			Vector3(px + 1.0, yy, pz + 0.95)), Vector3(0.45, 0.7, 0.45))
+	_cc0_furniture(root, "ChairCushioned", Transform3D(
+			Basis(Vector3.UP, PI * 0.5), Vector3(bx + 1.55, yy, bz + 0.9)),
+			Vector3(0.7, 0.9, 0.7))
 	return root
 
 
@@ -236,14 +265,9 @@ static func _kirana_shop(b: MeshTools, x: float, z: float) -> void:
 		b.add_mesh(tin, Transform3D(Basis(),
 				Vector3(x - 1.5, y + 1.11 + t * 0.17, z + 0.75)),
 				BOOK_COLORS[t * 3])
-	# Grain sacks: two capsule sacks slumped by the counter end.
-	var sack := CapsuleMesh.new()
-	sack.radius = 0.3
-	sack.height = 0.7
-	for s in 2:
-		var xf := Transform3D(Basis(Vector3.UP, PI * 0.5 + s * 0.4),
-				Vector3(x - 0.9 + s * 0.55, y + 0.28, z - 1.05))
-		b.add_mesh(sack, xf, SACK)
+	# Grain sacks: swapped for CC0 produce-crate stacks (issue #293) —
+	# wired in build() from the vendored KayKit market-goods set.
+
 	# Blue general-store board over the doorway.
 	b.add_bev_box(Vector3(0.12, 0.5, 2.2),
 			Vector3(x + 2.08, y + 2.45, z), 0.02, KIRANA_BOARD)
@@ -296,13 +320,9 @@ static func _paan_shop(b: MeshTools, x: float, z: float) -> void:
 	b.add_mesh(jar, Transform3D(Basis(),
 			Vector3(x - 0.7, y + 1.1, z + 0.85)), LIME,
 			MeshTools.FINISH_GLOSS)
-	# Stool by the doorway for the loiterers.
-	var stool := CylinderMesh.new()
-	stool.top_radius = 0.22
-	stool.bottom_radius = 0.18
-	stool.height = 0.45
-	b.add_mesh(stool, Transform3D(Basis(),
-			Vector3(x + 0.85, y + 0.225, z + 0.75)), PAAN_COUNTER)
+	# Stool by the doorway: swapped for the CC0 furniture stool
+	# (issue #293) — wired in build().
+
 	# Deep green PAAN board over the roof edge, over the doorway.
 	b.add_bev_box(Vector3(0.12, 0.45, 1.9),
 			Vector3(x + 1.5, y + 2.62, z), 0.02, PAAN_BOARD)
@@ -347,16 +367,37 @@ static func _book_shop(b: MeshTools, x: float, z: float) -> void:
 			z - 1.1), 0.05, DESK)
 	b.add_bev_box(Vector3(0.3, 0.18, 0.4), Vector3(x + 1.3, y + 0.99,
 			z - 1.35), 0.02, BOOK_COLORS[1])
-	# Reading bench inside the door.
-	b.add_bev_box(Vector3(0.45, 0.1, 1.7), Vector3(x + 1.55, y + 0.45,
-			z + 0.9), 0.03, SHELF_WOOD)
-	for bz in [-0.7, 0.7]:
-		var leg := CylinderMesh.new()
-		leg.top_radius = 0.05
-		leg.bottom_radius = 0.05
-		leg.height = 0.42
-		b.add_mesh(leg, Transform3D(Basis(),
-				Vector3(x + 1.55, y + 0.21, z + 0.9 + bz)), PAAN_COUNTER)
+	# Reading bench inside the door: swapped for the CC0 cushioned
+	# chair (issue #293) — wired in build().
+
+
+static func _cc0_mesh_prop(root: Node3D, mesh: Mesh, xf: Transform3D,
+		coll: Vector3) -> void:
+	## One vendored CC0 prop (issue #293): own MeshInstance3D plus a
+	## truthful box collider sitting on the prop origin — the slice-1
+	## interiors3 pattern, kept walk-solid at floor level.
+	if mesh == null:
+		return
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.transform = xf
+	root.add_child(mi)
+	var solid := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = coll
+	shape.shape = box
+	shape.transform = xf * Transform3D(Basis(), Vector3(0, coll.y * 0.5, 0))
+	solid.add_child(shape)
+	root.add_child(solid)
+
+
+static func _cc0_furniture(root: Node3D, obj_name: String,
+		xf: Transform3D, coll: Vector3) -> void:
+	## Quaternius furniture OBJ (wavefront importer keeps MTL colors).
+	_cc0_mesh_prop(root, load(
+			"res://assets/props/furniture/%s.obj" % obj_name) as Mesh, xf, coll)
 
 
 func setup(world: float, pitch: float, road_w: float, food: Node) -> void:
