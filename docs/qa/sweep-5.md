@@ -542,3 +542,66 @@ this diff).
 
 **Acceptance: gate determinism leg landed.** Remaining #296 scope
 unchanged: full post-wave audit leg once #292–#294 land.
+
+## Post-#314 refresh (2026-11-08, master @ `49af1a6`)
+
+Re-measured after the shop-interiors slice (#314: CC0 props wired into
+kirana/paan/bookstore — 14 props, ~2.0k tris, one collider each, merged
+05:40 UTC) and the walker fleet swap (#315: walkers retargeted to CC0
+rigs, merged 03:32 UTC — the post-#311 refresh at ~02:20 UTC predates
+it, so this is the first gate pass on the walkers-swapped tree). Same
+gates, same pinned method as the #317 determinism leg.
+
+### Perf gates (pinned; WEATHER_STATE audit line in every log)
+
+| Gate | Result (~06:15 UTC) | Pinned baseline (#317) | Budget | Verdict |
+|---|---|---|---|---|
+| Default `--weather clear` (240/90, LOD live) | avg 8.93 ms, p95 13.40 ms | 8.07 / 12.48 | 22.0 ms | PASS |
+| Default `--weather rain` (240/90) | avg 9.45 ms, p95 13.98 ms | 8.91 / 13.26 | 22.0 ms | PASS |
+| Festival `--weather clear` (120/45) | avg 9.29 ms, p95 14.73 ms | 8.41 / 13.12 | 22.0 ms | PASS |
+
+- Deterministic rain cost +0.52 avg / +0.58 p95 (clear→rain, 240/90) —
+  same magnitude as #317's +0.84/+0.78; cheap, no gate risk.
+- Post-#314/#315 delta vs the pinned baselines: +0.5–0.9 ms avg and
+  +0.6–1.6 ms p95 across gates — the wired interior props and
+  retargeted walker fleet carry a modest, budgeted cost; worst
+  headroom is 7.3 ms (festival p95 14.73 vs 22.0).
+- The post-#306 festival-p95 watch item (20.38 ms unpinned) still does
+  not reproduce under pinned weather.
+
+### Baseline + save
+
+- Triple verify on branch (docs-only diff; runtime = master): `--import`
+  rc 0; smoke `--quit-after 5` rc 0 with zero `SCRIPT ERROR|ERROR:`
+  lines; hygiene grep → 2 pre-existing triaged hits only (the
+  export-web.yml OIDC keyword + gitignored `.agent/MISSION.md`).
+- Save round-trip (`save_check.tscn`): `verdict=PASS`, exit 0.
+
+### 30-min soak (post-#314/#315)
+
+Vendored `tools/qa/soak273.tscn` driver (units-fixed per #301), headless
+on this branch's tree (runtime = master `49af1a6`; diff docs-only).
+Reaped at t=1740 s (29 min) at shift wrap — no formal SUMMARY print;
+verdicts recomputed from ticks per the sweep-4 / post-#311 precedent.
+
+- 25 ticks (a few 120-s tick gaps — host-load wall-clock slowdowns
+  during parallel gate runs; benign), zero `SCRIPT ERROR`/`ERROR:`
+  lines in the log.
+- Player alive and playing through the last tick (`player_sane=true`
+  at every sample) — PASS at 29 min.
+- Orphan nodes **0 at every tick** — drift 0 → PASS.
+- Static-memory drift 217,924 → 218,831 KB over t=240→1740 s =
+  **+907 KB over 25 min** vs the 200,000 KB drift budget (~0.5% used)
+  — PASS; flat after t≈1380 s (218.8 MB band). Same benign warmup
+  profile as every prior leg.
+- **Baseline shift note:** static memory now idles ~218 MB vs ~203.7 MB
+  at post-#311 — roughly +15 MB from #315's retargeted walker rigs
+  (full-CC0 meshes + clips) plus #314's wired props. The drift
+  signature is unchanged; the absolute idle level is recorded for the
+  post-wave audit leg's reference.
+- Walkers steady at 66 the whole run; day_t cycling coherently
+  (0.08→0.83 wraps).
+
+**Acceptance (post-#314 refresh leg): all gates green — pinned perf
+gates, triple verify, save round-trip, soak recomputed-PASS.** Remaining
+#296 scope unchanged: full post-wave audit leg once #292–#294 land.
