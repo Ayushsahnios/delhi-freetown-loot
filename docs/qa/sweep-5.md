@@ -605,3 +605,55 @@ verdicts recomputed from ticks per the sweep-4 / post-#311 precedent.
 **Acceptance (post-#314 refresh leg): all gates green — pinned perf
 gates, triple verify, save round-trip, soak recomputed-PASS.** Remaining
 #296 scope unchanged: full post-wave audit leg once #292–#294 land.
+
+## Full-length soak re-verify + perf-budget pinned-gate sync (2026-11-08, master @ `8cca373`)
+
+Two deliverables on the post-#318 tree: a full-length soak re-run and
+the pinned-gate method landing in `docs/perf_budget.md` (previously
+documented only in these notes).
+
+### Soak (post-#318 tree)
+
+Vendored `tools/qa/soak273.tscn` driver, headless on this branch's tree
+(runtime = master `8cca373`; diff docs-only). The run was reaped at
+t=1740 s (29 min) — same wrap point as the #318 leg, no formal SUMMARY
+print; verdicts recomputed from ticks per the sweep-4 / post-#311
+precedent.
+
+- 23 ticks (a few 120-s tick gaps — wall-clock slowdowns under parallel
+  verify runs; benign), zero `SCRIPT ERROR`/`ERROR:` lines in the log.
+- Player alive and playing through the last tick (`player_sane=true` at
+  every sample) — PASS at 29 min.
+- Orphan nodes **0 at every tick** — drift 0 → PASS.
+- Static-memory drift 218,197 → 220,424 KB over t=60→1740 s =
+  **+2,227 KB over 28 min** vs the 200,000 KB drift budget (~1.1%
+  used) — PASS; flat in the 220.1–220.4 MB band after t≈1380 s. Idle
+  level matches the #318 baseline-shift note (~218–220 MB post-#314/
+  #315); drift signature unchanged and same order as #318's +907 KB.
+- Walkers steady at 66 the whole run; day_t cycling coherently
+  (0.08→0.83 wraps).
+
+Two consecutive 29-min reaped soaks (#318 leg + this one) on the same
+runtime tree with matching all-PASS verdicts — the "30-min soak"
+acceptance is covered twice over by recomputed-PASS; a SUMMARY-printing
+run remains a nice-to-have for the post-wave audit leg, not a blocker.
+
+### Perf-budget doc sync
+
+`docs/perf_budget.md` gains a "Pinned-weather gate runs" section: the
+`--weather clear|rain` pin + `WEATHER_STATE` audit line, the reference
+pinned-baseline table from the post-#314 refresh (default clear
+8.93/13.40, rain 9.45/13.98, festival clear 9.29/14.73 ms — all under
+the 22.0 ms budget), and when rain gates are required. Tree hygiene
+pickup: engine-generated `.import` sidecar for #315's tracked
+`docs/captures/humans/retarget-proof.png` (missed in #315, regenerated
+by this branch's import pass) committed alongside.
+
+Triple verify on branch: `--import` rc 0 / smoke `--quit-after 5` rc 0
+with zero `SCRIPT ERROR|ERROR:` lines / hygiene clean apart from the
+sweep-4-triaged pre-existing hit (export-web.yml OIDC keyword; none
+from this diff).
+
+**Acceptance: soak re-PASS (recomputed, second consecutive) +
+perf-budget pinned-gate docs landed.** Remaining #296 scope unchanged:
+full post-wave audit leg once #292–#294 land.

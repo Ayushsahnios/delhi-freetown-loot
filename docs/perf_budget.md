@@ -32,6 +32,28 @@ gate ever fails without an obvious cause, re-measure locally with
 `--no-lod` before moving the budget; the number is a regression
 tripwire, not a target.
 
+## Pinned-weather gate runs (sweep 5 determinism)
+
+Weather randomizes per boot, so unpinned gate numbers carry an
+uncontrolled cost term. `perf_check.tscn` accepts `--weather clear|rain`
+(issue #296 / sweep 5): the boot weather is pinned deterministically and
+a `WEATHER_STATE label=… intensity=…` audit line in the log proves the
+pin took.
+
+Reference pinned baselines on the post-swap tree (2026-11-08, master
+`8cca373`; 240/90 default, 120/45 festival, LOD live):
+
+| Gate (pinned) | avg ms | p95 ms | Budget |
+|---|---|---|---|
+| default `--weather clear` | 8.93 | 13.40 | 22.0 |
+| default `--weather rain` | 9.45 | 13.98 | 22.0 |
+| festival `--weather clear` | 9.29 | 14.73 | 22.0 |
+
+Deterministic rain cost is ~+0.5–0.9 ms avg (clear→rain) — cheap, no
+gate risk. Gate PRs should measure `--weather clear` (the reference
+baseline) plus `--weather rain` when touching weather, particles, or
+wet-look shaders. Full history: `docs/qa/sweep-5.md`.
+
 ## What the gate catches — and what it does not
 
 - **Catches:** simulation cost — GDScript tick work, physics steps,
