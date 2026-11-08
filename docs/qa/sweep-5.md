@@ -510,3 +510,35 @@ precedent as the post-#304 leg).
 post-#306 festival-p95 watch item did not reproduce (unpinned-weather
 caveat noted above). Remaining #296 scope unchanged: full post-wave
 audit leg once #292–#294 land.
+
+## Perf-gate determinism leg: `--weather` pin in perf_check (2026-11-08, master @ `1e9b99a`)
+
+Closes the "candidate follow-up" from the post-#311 refresh:
+`perf_check.gd` now parses `--weather clear|rain` (same `debug_pin`
+the capture driver uses) and prints a `WEATHER_STATE` audit line with
+every verdict. Gates stop rolling the 65%-per-day monsoon dice;
+numbers below are the first deterministic (pinned) gate baselines.
+
+| Gate (all pinned) | avg / p95 ms | Unpinned sample (post-#311) | Budget | Verdict |
+|---|---|---|---|---|
+| Default `--weather clear` (240/90, LOD live) | 8.07 / 12.48 | 8.54 / 13.45 | 22.0 ms | PASS |
+| Default `--weather rain` (240/90) | 8.91 / 13.26 | (never measured) | 22.0 ms | PASS |
+| Festival `--weather clear` (120/45) | 8.41 / 13.12 | 10.21 / 15.30 | 22.0 ms | PASS |
+
+- **Deterministic rain cost: +0.84 ms avg / +0.78 ms p95** (clear →
+  rain, same frames/warmup) — squall particles + wetness + cloud at
+  default-gate settings. Cheap; no gate risk.
+- Pinned-clear runs sit ~0.5–1.8 ms under the unpinned post-#311
+  sample, consistent with that boot carrying partial weather cost —
+  the unpinned band is now quantified from both sides.
+- Going forward: gate PRs should measure `--weather clear` (the
+  reference baseline) plus `--weather rain` when touching weather,
+  particles, or wet-look shaders. `WEATHER_STATE` in the log is the
+  audit proof the pin took (e.g. `Monsoon intensity=0.840` above).
+
+Triple verify on branch: import rc 0 / smoke 0 error lines / hygiene
+clean apart from the sweep-4-triaged pre-existing hits (none from
+this diff).
+
+**Acceptance: gate determinism leg landed.** Remaining #296 scope
+unchanged: full post-wave audit leg once #292–#294 land.
