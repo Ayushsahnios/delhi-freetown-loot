@@ -93,8 +93,13 @@ const WALK_W := 2.2   ## sidewalk band width (roads.gd WALK_TILE)
 ## scale together, so a LOW street carries ~60 % of the bodies at every
 ## hour of the day cycle without touching spawn logic.
 static var crowd_scale := 1.0
+## Issue 291 Phase 2 — the walker fleet rides the auto-picked Worker
+## pair (women first: the female flag below keys off "not the last
+## model", so the ordering carries the identity rolls). The legacy
+## rigs stay in tree for vendors, interiors and the legend trio until
+## their own swap lands.
 const MODELS := [
-	Chars.FEMALE_A, Chars.FEMALE_B, Chars.FEMALE_C, Chars.FEMALE_D, Chars.MALE,
+	Chars.WORKER_F, Chars.WORKER_M,
 ]
 
 var _peds: Array[Dictionary] = []

@@ -11,9 +11,25 @@ const FEMALE_B := "res://assets/characters/female_b.glb"
 const FEMALE_C := "res://assets/characters/female_c.glb"
 const FEMALE_D := "res://assets/characters/female_d.glb"
 
+## CC0 swap candidates (issue #291, vendored by #299): Quaternius
+## Modular bodies on the v2 universal rig. Rigged but UNANIMATED —
+## idle/walk/run are retargeted from the female rigs at spawn by
+## anim_retarget.gd. Owner auto-pick (Option A): Worker pair walks
+## the streets, Casual pair backs the legends.
+const WORKER_M := "res://assets/characters/candidates/quat_men_Worker.glb"
+const WORKER_F := "res://assets/characters/candidates/quat_women_Worker.glb"
+const CASUAL_M := "res://assets/characters/candidates/quat_men_Casual.glb"
+const CASUAL_F := "res://assets/characters/candidates/quat_women_Casual.glb"
+
+func is_candidate(path: String) -> bool:
+	return String(path).contains("/candidates/")
+
 ## Procedural liveliness layer (issue 122): every spawned body gets a
 ## seeded LivelyRig on its skeleton.
 const LIVELY := preload("res://scripts/lively.gd")
+
+## Clip retarget for the unanimated candidate bodies (issue #291).
+const AnimRetarget := preload("res://scripts/anim_retarget.gd")
 
 ## Procedural fabric grain (issue #153): garment slots get woven
 ## albedo + roughness textures instead of flat single colors — the
@@ -62,6 +78,11 @@ func spawn(path: String, height: float) -> Node3D:
 	if rendered > 0.001 and absf(rendered - target) > 0.01:
 		model.scale = Vector3.ONE * (target / rendered)
 	model.rotation.y = PI
+	# Issue 291: the candidate bodies ship unanimated — graft the
+	# retargeted idle/walk/run clips before the liveliness layer so the
+	# walker driver finds a player with real gait clips.
+	if is_candidate(path):
+		AnimRetarget.attach(model)
 	# Issue 158: normalize oversized heads toward the art-ref proportion
 	# band (PS2-era ~6.5-7 heads tall). The universal male rig reads a
 	# head ~12% too large against its shoulders next to art-ref-1.jpg;
@@ -253,7 +274,7 @@ func tint(holder: Node3D, shirt: Color, pants: Color, skin: Color,
 				mesh.surface_set_material(s, fb)
 				changed = true
 				continue
-			var role := _role(String(base.resource_name))
+			var role := _surface_role(mi, base)
 			if role == "":
 				## Eyes keep their authored look.
 				continue
@@ -959,6 +980,12 @@ func dress(holder: Node3D, id: Dictionary) -> void:
 	tint(holder, id["shirt"], id["pants"], id["skin"], id["hair"],
 			int(id.get("print", 0)), int(id.get("print_var", 0)))
 	_wardrobe(holder, id)
+	if _has_modeled_face(holder):
+		# Issue 291: the candidate bodies ship complete faces (modeled
+		# eyes, brows, hair and hats) — procedural face kits, hair pieces
+		# and headwear would double every feature, so they stay as
+		# authored and only the tint/wardrobe layers above apply.
+		return
 	_footwear(holder, id)
 	if _has_authored_hair(holder):
 		# Issue #153: authored-hair rigs (the female walkers) get faces
@@ -1295,6 +1322,26 @@ func _has_authored_hair(holder: Node3D) -> bool:
 	return false
 
 
+## Issue 291: the candidate bodies carry fully modeled faces (eye and
+## brow materials, modeled hair and hard hats). Detected by material
+## name — the v1 rigs never name a surface "Eye".
+func _has_modeled_face(holder: Node3D) -> bool:
+	if holder.get_child_count() == 0:
+		return false
+	var model: Node3D = holder.get_child(0)
+	if model == null or not is_candidate(String(model.scene_file_path)):
+		return false
+	for mi_node in holder.find_children("*", "MeshInstance3D", true, false):
+		var mi: MeshInstance3D = mi_node
+		if mi.mesh == null:
+			continue
+		for s in mi.mesh.get_surface_count():
+			var base = mi.mesh.surface_get_material(s)
+			if base != null and String(base.resource_name).to_lower() == "eye":
+				return true
+	return false
+
+
 ## Face features (issue #123): readable low-poly faces — one sclera
 ## band with two dark pupils and a pair of brows in the walker's hair
 ## shade, all bone-attached so they ride every head nod. Sized off the
@@ -1603,6 +1650,35 @@ func _role(mat_name: String) -> String:
 	if n == "skin" or n.ends_with("_skin"):
 		return "skin"
 	return ""
+
+
+## Issue 291: mesh-aware roles for the Quaternius Modular candidates,
+## whose material names ("Worker_Vest", "Brown2", …) repeat across
+## meshes with different meanings. Legs read as pants, the vest as
+## the tintable shirt slot; helmets, boots, belts and faces stay
+## authored so the worker/casual reads survive the identity tints.
+func _surface_role(mi: MeshInstance3D, base: Material) -> String:
+	# Mesh-aware rules apply to the candidates only; every other rig
+	# keeps the legacy material-name classification.
+	if not String(mi.scene_file_path).contains("/candidates/"):
+		return _role(String(base.resource_name))
+	var mesh := String(mi.name).to_lower()
+	var n := String(base.resource_name).to_lower()
+	if mesh.contains("legs"):
+		return "skin" if n == "skin" else "pants"
+	if mesh.contains("body"):
+		if n.contains("vest"):
+			return "shirt"
+		if n == "skin":
+			return "skin"
+		return ""
+	if mesh.contains("head"):
+		if n == "skin":
+			return "skin"
+		if n == "eyebrows" or n.contains("hair") or n == "darkbrown":
+			return "hair"
+		return ""
+	return _role(String(base.resource_name))
 
 
 func _bone_span(model: Node3D) -> float:
