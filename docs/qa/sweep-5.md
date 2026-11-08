@@ -747,3 +747,33 @@ run here.
 reproducing watch item: festival-gate avg +~2 ms, PASS with headroom).
 Remaining #296 scope unchanged: full post-wave audit leg once
 #292–#294 land.
+
+## Post-#319 soak — second formal SUMMARY-printing run (2026-11-08, post-`056fc8b` tree)
+
+Harvest of the detached soak promised by the post-#319 refresh leg:
+launched 16:02 UTC via the #322 setsid-detached method on the
+`issue-296-post319-refresh` tree (runtime identical to master `056fc8b`;
+branch diff was docs-only), SUMMARY printed 16:56 UTC.
+
+- 22 ticks t=60 → 1740 s, zero `SCRIPT ERROR` / `ERROR:` lines in the
+  36-line log.
+- `SOAK273 PASS — player alive and playing after 30 min`
+  (`player_sane=true` at every sample; walkers steady at 66; `day_t`
+  cycling coherently 0.08→0.83 wraps).
+- `SOAK273 PASS — orphan-node drift over soak: +0 (start 0 → end 0)`.
+- `SOAK273 PASS — static-memory drift over soak: +1978 KB (start
+  219592 KB → end 221570 KB)` — ~1.0% of the 200,000 KB drift budget;
+  flat in the 221.4–221.6 MB band after t≈1380 s. Idle level and
+  warmup profile match the #318/#320/#322 legs (~218–221 MB band).
+- **`SOAK273 SUMMARY passes=3 fails=0 ticks=22`** — the driver's own
+  verdict block, not a recompute.
+
+Second consecutive formal SUMMARY-printing all-PASS soak (after the
+#322 leg's first), and the first one on post-#319 geometry — the
+legend-trio CC0 Casual bodies show no soak-visible regression (no new
+orphans, no drift-signature change, no error lines). Post-#319 soak
+coverage: gates PASS (prior leg) + soak driver-verdict PASS (here).
+
+**Acceptance: post-#319 refresh fully green — gates, save, legend,
+and now the formal soak.** Remaining #296 scope unchanged: full
+post-wave audit leg once #292–#294 land.
