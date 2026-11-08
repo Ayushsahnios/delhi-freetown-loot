@@ -1736,8 +1736,17 @@ func _portrait_card(def: Dictionary) -> Control:
 	var model := _chars.spawn(path, float(def.get("height", 1.72)))
 	_chars.dress_legend(model, _wardrobe.dress_def(def))
 	vp.add_child(model)
-	_chars.play(_chars.anim_names(model), _chars.get_player(model), "idle",
-			float(def.get("anim_rate", 1.0)))
+	# Title cards deliberately do NOT play the retargeted idle clip
+	# (issue #291): AnimationPlayer-driven playback of the retargeted
+	# clips blanks the skinned candidate bodies inside own-world
+	# SubViewports under llvmpipe/OpenGL — every card renders empty
+	# navy panels and the #152 distinctness gate fails at 0.00. Probes:
+	# skipping playback renders all three bodies (gate 7.37); deferring
+	# playback 5 frames still blanks them; the clip keys themselves are
+	# all finite + normalized, and LivelyRig's direct bone-pose writes
+	# (spawn) keep animating — so the cards stay subtly alive while the
+	# bodies pose in bind rest. Street playback is unaffected (worker
+	# pair ships since #315).
 	var cam := Camera3D.new()
 	cam.fov = 30.0
 	cam.transform = Transform3D(
