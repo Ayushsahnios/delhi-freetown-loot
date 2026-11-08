@@ -449,3 +449,64 @@ cross-check, de-dup pass — widened).
 **Acceptance: both queued capture legs landed (5/5 clean, deterministic
 matrix now 15 shots).** Remaining #296 scope unchanged: full post-wave
 audit leg once #292–#294 land.
+
+## Post-#311 refresh (2026-11-08, master @ `785dee9`)
+
+Re-measured gates after the first post-#306 geometry slice (#311
+vehicle detail 1a: door scribes, stub handles, number plates on the
+street trio) plus the #310 weather/HUD and #312 capture-knob changes;
+#313 was docs-only. Same gates, same method as the post-#306 leg.
+
+Method note: `perf_check.gd` does not pin weather (the `--weather`
+knob lives on the capture driver only) and `weather.gd` calls
+`_rng.randomize()` at boot, so every gate runs with a freshly rolled
+monsoon plan — rain-at-boot carries particle + wetness cost. Gate
+numbers are a sample of the weather band, not a pinned condition.
+Candidate follow-up: parse `--weather` in `perf_check.gd` too.
+
+### Perf gates (post-vehicle-detail-1a)
+
+| Gate | Result (2026-11-08 ~02:20 UTC) | Post-#306 | Budget | Verdict |
+|---|---|---|---|---|
+| Festival `--frames 120 --warmup 45` | avg 10.21 ms, p95 15.30 ms | 11.95 / 20.38 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90` (LOD live) | avg 8.54 ms, p95 13.45 ms | 10.32 / 14.51 ms | 22.0 ms | PASS |
+| Default `--no-festival` `--frames 240 --warmup 90` | avg 8.26 ms, p95 12.62 ms | (new baseline) | 22.0 ms | PASS |
+
+Both headline gates improved ~1.8–3.9 ms avg vs post-#306 despite the
+added vehicle detail — #311's scribes/handles/plates are cheap on the
+sim side, and this run booted outside a rain window. The post-#306
+festival p95 watch item (20.38 ms, ~1.6 ms headroom) did NOT
+reproduce: p95 is back to 15.30 ms (~6.7 ms headroom). Given the
+unpinned weather band above, treat that as "not reproducing", not
+proven-fixed — if it recurs on a rain-boot run, pin gate weather
+before re-triaging.
+
+First `--no-festival` perf baseline (the #312 knob reaches any scene —
+`festival.gd` reads cmdline user args directly): festival dressing
+costs ~+1.95 ms avg / +2.83 ms p95 at default-gate settings on this
+master — the reference number for the queued night-festival-light
+proposal to re-measure against.
+
+### 30-min soak (post-vehicle-detail-1a)
+
+Vendored `tools/qa/soak273.tscn` driver, 30-min headless run on this
+branch's tree (runtime = master `785dee9`; diff is docs-only). The
+host reaped the process at t=1740 s (29 min) — no formal SUMMARY
+print; verdicts recomputed from ticks per the sweep-4 method (same
+precedent as the post-#304 leg).
+
+- 23 ticks (two 60-s tick gaps — wall-clock slowdowns under host
+  load; benign), zero `SCRIPT ERROR` / `ERROR:` lines in the log.
+- Player alive and playing through the last tick (`player_sane=true`
+  at every sample) — PASS at 29 min.
+- Orphan drift 0 → 0 — PASS.
+- Static-memory drift 201,711 → 203,654 KB = **+1,943 KB over 29 min**
+  vs the 200,000 KB drift budget (~1.0% used) — PASS. Same benign
+  warmup profile as every prior leg (first-minutes rise, then flat
+  ~203.5–203.7 MB).
+- Walkers steady at 66 the whole run; day_t cycling 0.08→0.83.
+
+**Acceptance (post-#311 refresh leg): all gates green** — the
+post-#306 festival-p95 watch item did not reproduce (unpinned-weather
+caveat noted above). Remaining #296 scope unchanged: full post-wave
+audit leg once #292–#294 land.
