@@ -11,6 +11,11 @@ extends Node
 ##   godot --headless --path . res://scenes/perf_check.tscn \
 ##       -- --frames 240 --warmup 90 --budget 22 --no-lod --tp -57,75
 ##
+## --weather S pins the weather state machine (refs #296): "clear"
+##                 freezes it bone-dry, "rain" locks a full squall — gates
+##                 stop rolling the 65%-per-day monsoon dice and become
+##                 reproducible; the live weather state prints with the
+##                 verdict for audit trails.
 ## --tp X,Z optionally parks the player at a world position before the
 ## warmup (same knob as screenshot.tscn), so density changes to the
 ## crowd-zone strips (issue #181) can be measured AT a strip, not only
@@ -34,6 +39,7 @@ func _ready() -> void:
 	var draws := false
 	var tp := Vector2(INF, INF)
 	var day_t := -1.0
+	var weather := ""
 	var args := OS.get_cmdline_user_args()
 	for i in range(args.size()):
 		var a: String = args[i]
@@ -60,6 +66,12 @@ func _ready() -> void:
 			# plateau (e.g. 0.35417 = 08:30) so the wave is measured at
 			# its ceiling, not whatever hour the boot happens to land on.
 			day_t = clampf(float(args[i + 1]), 0.0, 1.0)
+		elif a == "--weather" and i + 1 < args.size():
+			# Deterministic gates (refs #296): pin the weather state machine
+			# the same way the capture driver does — unpinned boots roll a
+			# fresh monsoon plan, so rain-at-boot runs silently pay particle
+			# + wetness cost and gate numbers bounce around the weather band.
+			weather = String(args[i + 1])
 		elif a == "--draws":
 			draws = true
 
@@ -76,6 +88,10 @@ func _ready() -> void:
 		p.position = Vector3(tp.x, p.position.y, tp.y)
 	if day_t >= 0.0 and "day_t" in main:
 		main.day_t = day_t
+	if weather != "":
+		var wpin: Node = main.get("_weather")
+		if wpin != null and wpin.has_method("debug_pin"):
+			wpin.debug_pin(weather)
 
 	for i in range(warmup):
 		await get_tree().process_frame
@@ -111,6 +127,11 @@ func _ready() -> void:
 	var p95: float = stamps[int(clampf(stamps.size() * 0.95, 0.0,
 			stamps.size() - 1.0))]
 	var passed := avg <= budget
+	var wstate: Node = main.get("_weather")
+	if wstate != null:
+		print("WEATHER_STATE label=%s intensity=%.3f cloud=%.3f wetness=%.3f" % [
+				wstate.get("label"), wstate.get("intensity"),
+				wstate.get("cloud"), wstate.get("wetness")])
 	print("PERF_CHECK frames=%d avg_ms=%.2f p95_ms=%.2f budget_ms=%.1f verdict=%s" \
 			% [frames, avg, p95, budget, "PASS" if passed else "FAIL"])
 	get_tree().quit(0 if passed else 1)
