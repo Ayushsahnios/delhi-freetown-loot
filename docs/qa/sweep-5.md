@@ -696,3 +696,54 @@ first formal SUMMARY-printing soak of sweep 5.
 **Acceptance: soak nice-to-have closed — the first formal
 SUMMARY-printing run confirms the recomputed verdicts.** Remaining
 #296 scope unchanged: full post-wave audit leg once #292–#294 land.
+
+## Post-#319 refresh (2026-11-08, master @ `056fc8b`)
+
+First refresh on a post-#319 tree: the legend trio CC0 Casual body
+swap (#319, merged 13:12 UTC) is the only geometry change since the
+post-#318/#321 legs — the #322 soak ran on `d515bd5`, pre-#319. Same
+gates, same pinning (`--weather clear`, `WEATHER_STATE` audited Clear
+0.000/0.000/0.000 in every log), branch diff docs-only.
+
+### Perf gates (pinned clear, post-#319)
+
+| Gate | Result (~15:45–15:58 UTC) | Post-#314 | Budget | Verdict |
+|---|---|---|---|---|
+| Festival `--frames 120 --warmup 45` | avg 11.61 ms, p95 23.63 ms | 9.29 / 14.73 | 22.0 ms | PASS |
+| Festival re-run (p95 check) | avg 11.13 ms, p95 15.07 ms | — | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90` | avg 9.08 ms, p95 13.41 ms | 8.93 / 13.40 | 22.0 ms | PASS |
+| Default `--no-festival` | avg 9.18 ms, p95 13.46 ms | 8.26 / 12.62 (post-#311, unpinned) | 22.0 ms | PASS |
+
+- **Default gate unchanged** (+0.15 ms avg vs post-#314) — the CC0
+  legend bodies add no measurable default-scene cost.
+- **Festival-gate avg up ~+1.8–2.3 ms, reproducing across two runs**
+  (11.61 / 11.13 vs 9.29). Most plausible carrier is #319 (GLB bodies
+  now spawning through title/player/legend paths exercised by the
+  festival vantage); still PASS with ≥10.4 ms headroom. Watch item,
+  not a blocker.
+- First run's p95 23.63 ms exceeded the 22.0 line but the re-run came
+  back at 15.07 ms — single-run hitch not reproducing (same
+  post-#306-watch-item pattern; the gate's pass criterion is avg,
+  p95 is informational).
+- Festival-vs-no-festival delta at default settings is ~0 today
+  (9.08 vs 9.18) vs post-#311's +1.95 ms — that reference number was
+  measured unpinned-weather, so treat it as superseded by the pinned
+  post-#314 pair, not as a festival-cost change.
+
+### Save + legend gates (post-#319)
+
+- `save_check.tscn` → `verdict=PASS` (rc 0).
+- `legend_check.tscn` → `LEGEND_CHECK PASS trio built, tailored,
+  distinct` (rc 0) — the #319-touched gate is green on this tree.
+
+### 30-min soak (post-#319)
+
+Launched 16:02 UTC via the #322 setsid-detached method on this
+branch's tree (runtime = master `056fc8b`); harvest + verdicts land in
+the next shift's leg per the detached-soak handoff. Not claimed as
+run here.
+
+**Acceptance: pinned gates, save, legend all green post-#319** (one
+reproducing watch item: festival-gate avg +~2 ms, PASS with headroom).
+Remaining #296 scope unchanged: full post-wave audit leg once
+#292–#294 land.
