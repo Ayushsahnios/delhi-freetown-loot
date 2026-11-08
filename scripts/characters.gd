@@ -21,6 +21,11 @@ const WORKER_F := "res://assets/characters/candidates/quat_women_Worker.glb"
 const CASUAL_M := "res://assets/characters/candidates/quat_men_Casual.glb"
 const CASUAL_F := "res://assets/characters/candidates/quat_women_Casual.glb"
 
+## Issue 291 Phase 2 (Option A auto-pick): the Casual pair backs the
+## legends — riya rides the women's body, sardarji and monty the men's.
+static func legend_model(id: String) -> String:
+	return CASUAL_F if id == "riya" else CASUAL_M
+
 func is_candidate(path: String) -> bool:
 	return String(path).contains("/candidates/")
 
@@ -422,14 +427,22 @@ func dress_legend(holder: Node3D, def: Dictionary) -> void:
 const BODY_BUILDS := {
 	"sardarji": {
 		# Barrel chest: ribcage and shoulders flare wide, the weight of
-		# the frame carried forward of the hips.
+		# the frame carried forward of the hips. v2 universal-rig keys
+		# (issue 291 legend swap): the Casual bodies run Abdomen->Torso
+		# with no spine chain, so both key sets stay listed and each
+		# rig applies only the bones it has.
+		"abdomen": Vector3(1.10, 1.0, 1.12),
+		"torso": Vector3(1.16, 1.0, 1.17),
 		"spine_01": Vector3(1.10, 1.0, 1.14),
 		"spine_02": Vector3(1.16, 1.0, 1.17),
 		"spine_03": Vector3(1.13, 1.0, 1.10),
 	},
 	"monty": {
 		# Lean: narrow through ribs and waist, shoulders held narrow —
-		# clothes hang off him.
+		# clothes hang off him. v2 universal-rig keys (issue 291
+		# legend swap), see sardarji.
+		"abdomen": Vector3(0.92, 1.0, 0.94),
+		"torso": Vector3(0.90, 1.0, 0.92),
 		"spine_01": Vector3(0.93, 1.0, 0.95),
 		"spine_02": Vector3(0.90, 1.0, 0.92),
 		"spine_03": Vector3(0.90, 1.0, 0.90),
@@ -1667,10 +1680,17 @@ func _surface_role(mi: MeshInstance3D, base: Material) -> String:
 	if mesh.contains("legs"):
 		return "skin" if n == "skin" else "pants"
 	if mesh.contains("body"):
-		if n.contains("vest"):
-			return "shirt"
+		# Casual pair (issue 291 legend swap): the single cloth top
+		# reads as the tintable shirt slot; eye/eyebrow strips packed
+		# on the body mesh stay authored so the face survives.
 		if n == "skin":
 			return "skin"
+		if mesh.contains("casual"):
+			if n == "eye" or n == "eyebrows":
+				return ""
+			return "shirt"
+		if n.contains("vest"):
+			return "shirt"
 		return ""
 	if mesh.contains("head"):
 		if n == "skin":

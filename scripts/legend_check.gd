@@ -1,7 +1,10 @@
 extends Node
-## Legend body-build + tailoring check (issue 161) — acceptance gate
-## for the distinct-silhouettes pass. Spawns the three legends exactly
-## as the game dresses them (title-screen path) and verifies headless:
+## Legend body-build + tailoring check (issues 161 + 291 Phase 2) —
+## acceptance gate for the distinct-silhouettes pass. The legends now
+## ride the CC0 Casual candidate pair (v2 universal rig: Abdomen->Torso
+## chain, Shoulder.L/R clavicle proxies — no spine_02 or clavicle_l).
+## Spawns the three legends exactly as the game dresses them
+## (title-screen path) and verifies headless:
 ##   (A) every legend's torso chain carries its build pose scale
 ##   (B) the barrel chest reads in bone geometry: Sardar Ji's shoulder
 ##       span beats Monty's by >= 12% on the same rig
@@ -36,7 +39,7 @@ func _ready() -> void:
 	_stage()
 	for i in range(Game.CHARACTERS.size()):
 		var def: Dictionary = Game.CHARACTERS[i]
-		var path: String = Chars.FEMALE_A if String(def["id"]) == "riya" else Chars.MALE
+		var path: String = _chars.legend_model(String(def["id"]))
 		var holder := _chars.spawn(path, float(def.get("height", 1.72)))
 		holder.position = Vector3((i - 1) * SPACING, 0.0, 0.0)
 		add_child(holder)
@@ -70,8 +73,8 @@ func _holder_for(id: String) -> Node3D:
 
 func _check_build_poses() -> void:
 	var expect := {
-		"sardarji": {"bone": "spine_02", "min": 1.10},
-		"monty": {"bone": "spine_02", "max": 0.95},
+		"sardarji": {"bone": "torso", "min": 1.10},
+		"monty": {"bone": "torso", "max": 0.95},
 		"riya": {"bone": "torso", "min": 1.03},
 	}
 	for id in expect.keys():
@@ -102,7 +105,9 @@ func _shoulder_span(id: String) -> float:
 	if skel == null:
 		return 0.0
 	skel.force_update_all_bone_transforms()
-	var names := ["clavicle_l", "clavicle_r"]
+	# v2 universal rig (issue 291): Shoulder.L/R are the clavicle
+	# proxies; the legacy male rig named them clavicle_l/r.
+	var names := ["shoulder.l", "shoulder.r", "clavicle_l", "clavicle_r"]
 	var pts := []
 	for i in skel.get_bone_count():
 		if names.has(skel.get_bone_name(i).to_lower()):
