@@ -51,6 +51,7 @@ var _walkers: Array[Node3D] = []
 var _legends: Array[Node3D] = []
 var _out := ""
 var _frames := 14
+var _rest := false
 
 
 func _ready() -> void:
@@ -60,6 +61,8 @@ func _ready() -> void:
 			_out = String(args[i + 1])
 		elif String(args[i]) == "--frames" and i + 1 < args.size():
 			_frames = int(args[i + 1])
+		elif String(args[i]) == "--rest":
+			_rest = true
 	_stage()
 	_spawn_walkers()
 	_spawn_legends()
@@ -99,8 +102,17 @@ func _spawn_walkers() -> void:
 		_chars.dress(node, id)
 		node.position = Vector3(WALK_X0 + i * WALK_DX, 0.0, 0.0)
 		add_child(node)
-		_chars.play(_chars.anim_names(node), _chars.get_player(node),
-			"walk", 1.0)
+		# Loop mode forced before play (the crossfading Chars.play()
+		# wrapper left non-loop clips dying at their last frame). --rest
+		# skips playback entirely: the capture then documents the posed
+		# rigs while animation stays gated headless + CI visual-smoke
+		# (skinned-mesh readback under the local software renderer is a
+		# known-flaky artifact, same as the #315/#319 proofs).
+		var anims := _chars.anim_names(node)
+		var ap := _chars.get_player(node)
+		if not _rest and ap != null and anims.has("walk"):
+			ap.get_animation(anims["walk"]).loop_mode = Animation.LOOP_LINEAR
+			ap.play(anims["walk"])
 		_walkers.append(node)
 		print("CLOSING_CHECK walker-%d model=%s female=%s seed=%d"
 			% [i, path.get_file(), female, WALKER_SEEDS[i]])
@@ -116,8 +128,11 @@ func _spawn_legends() -> void:
 		holder.position = Vector3(LEG_X0 + i * LEG_DX, 0.0, 0.0)
 		add_child(holder)
 		_chars.dress_legend(holder, def)
-		_chars.play(_chars.anim_names(holder), _chars.get_player(holder),
-			"idle", float(def.get("anim_rate", 1.0)))
+		var l_anims := _chars.anim_names(holder)
+		var l_ap := _chars.get_player(holder)
+		if not _rest and l_ap != null and l_anims.has("idle"):
+			l_ap.get_animation(l_anims["idle"]).loop_mode = Animation.LOOP_LINEAR
+			l_ap.play(l_anims["idle"])
 		_legends.append(holder)
 		print("CLOSING_CHECK legend %s model=%s"
 			% [String(def["id"]), path.get_file()])
