@@ -383,5 +383,69 @@ Day-washout (finding 1) still present at cp-day as expected
 
 **Acceptance: deterministic pinned-clear baseline set (9 shots here +
 gate-day from #310), `--no-festival` knob live.** Remaining #296 scope
-unchanged: full post-wave audit leg once #292-#294 land (add to it:
+unchanged: full post-wave audit leg once #292–#294 land (add to it:
 purani-night festival/no-fest pair, bazaar pinned-clear re-shots).
+
+## Bazaar pinned-clear re-shots + purani-night festival pair (2026-11-08, refs #296)
+
+The two queued capture additions from the last leg, master @ `dd314bf`
+(same tree as this branch; docs-only diff). Same setup: xvfb + software
+GL, `--weather clear` pinned, `--no-card`, 90 settle frames. Bazaar
+vantage re-picked via block-center math (the original pre-`--look` flags
+are unrecoverable): player at the south end of the Chandni Chowk market
+lane (block 4,7; lane axis x = −57 per `_market_lane(cx + 6, cz)` with
+cx = −63, cz = 75), looking north up the lane at the cart/stall row.
+
+| Shot | Flags | rc | PNG | Weather line |
+|---|---|---|---|---|
+| bazaar-day | tp −54,60 · look −56,85 · day 0.5 | 0 | 486 KB | Clear 0.000/0.000/0.000 |
+| bazaar-dusk | same · day 0.8 | 0 | 302 KB | Clear 0.000/0.000/0.000 |
+| bazaar-night | same · day 0.0 | 0 | 320 KB | Clear 0.000/0.000/0.000 |
+| purani-night-fest | tp −102,75 · look −109,75 · day 0.0 | 0 | 526,131 B | Clear 0.000/0.000/0.000 |
+| purani-night-nofest | same + `--no-festival` | 0 | 525,918 B | Clear 0.000/0.000/0.000 |
+
+All five logs: zero `SCRIPT ERROR|ERROR:` lines; purani-night-fest
+byte-matches the #312 matrix's 526 KB shot — pinned captures are
+reproducible across shifts. Raw PNGs + logs in `.agent/sweep5cap3/`
+(gitignored); reproduce with the flags table.
+
+### Vision audit
+
+1. **Festival dressing at purani-night is TEXT-ONLY (finding 4
+   upgraded).** The controlled festival/no-fest pair is visually
+   identical apart from the HUD ticker segment ("Diwali rush!" vs
+   "night market") — no string lights, diyas, banners, bunting or glow
+   points differ in the 3D scene; PNG delta just 213 B. The first-leg
+   note "purani-night: festival lights read well" is not reproduced at
+   this standard vantage under pinned clear — whatever glow leg 1 saw
+   was the lamp/static lighting present in BOTH shots here (that leg
+   was also unpinned, pre-`--look`). Festival geometry reads at NO
+   tested night vantage (cp, bazaar, purani) while the ticker still
+   advertises the rush. Night festival-light pass proposal now covers
+   all three landmarks, not just cp/bazaar.
+2. **Bazaar lane content reads weakly at the re-picked vantage.** The
+   chai stall's ground marker (CHAI Rs 2) and the food ticker are
+   legible, but thela carts / stall awnings / neon signage don't read
+   clearly in any of the three grades at ~10–25 m under software GL.
+   Tooling-grade limitation (day washout + llvmpipe) vs a real dressing
+   gap — fold into the hardware-GL cross-check already queued; not
+   triaged as an art regression on this evidence.
+3. **Day washout persists (finding 1, #104 lineage)** — bazaar-day at
+   HUD 13:12 is the same overexposed pale haze; night grades render
+   correct dark contrast. Dusk (20:23, day 0.8) renders the dark
+   evening grade; noted: dusk and deep-night (01:11) grades are
+   near-identical at this vantage.
+4. **Zero rain streaks across all five shots** (finding 3's fix holds
+   with `--weather clear` end to end; HUD reads Day/Night · Clear).
+5. **Repeated identical window-grid tiling** on the flanking building
+   rows in every bazaar shot — same family as the de-dup pass
+   follow-up (stall/prop duplicates); add facade-window variation to
+   that proposal's scope.
+
+Triage: nothing blocks master; items fold into the existing queued
+proposals (night festival-light pass — widened, hardware-GL
+cross-check, de-dup pass — widened).
+
+**Acceptance: both queued capture legs landed (5/5 clean, deterministic
+matrix now 15 shots).** Remaining #296 scope unchanged: full post-wave
+audit leg once #292–#294 land.
