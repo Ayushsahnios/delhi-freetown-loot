@@ -1729,7 +1729,8 @@ func _portrait_card(def: Dictionary) -> Control:
 	lamp.rotation_degrees = Vector3(-38.0, 55.0, 0.0)
 	lamp.light_energy = 1.2
 	vp.add_child(lamp)
-	var path: String = CharactersScript.FEMALE_A if String(def.get("id")) == "riya" else CharactersScript.MALE
+	# Issue 291 Phase 2: legends ride the CC0 Casual candidate pair.
+	var path: String = CharactersScript.legend_model(String(def.get("id")))
 	# Issue 161: portraits spawn at each legend's own height so the
 	# trio's distinct builds read on the cards immediately.
 	var model := _chars.spawn(path, float(def.get("height", 1.72)))
