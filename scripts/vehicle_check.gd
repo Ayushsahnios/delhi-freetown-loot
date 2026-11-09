@@ -5,6 +5,8 @@ extends Node
 ## the issue #269 heavy-three meshes (surfaces, gloss, tri counts).
 ## Issue #294 Part 1a: also gates the panelled street trio — every
 ## lofted hull must carry number plates (≥ 2 PLATE surfaces).
+## Issue #294 Part 1b: also gates mirrors + window rubber — each street
+## kind carries ≥ 2 HUB mirror blades (rickshaw ≥ 2 incl. its ornament).
 ## Usage:
 ##   godot --headless --path . res://scenes/vehicle_check.tscn
 ## Exits 0 when everything passes, 2 with a FAILED report otherwise.
@@ -109,8 +111,34 @@ func _ready() -> void:
 					% [kind, plate_tris])
 		print("street %s: %d tris, plate geometry %d tris" % [kind, street_tris, plate_tris])
 
+	# 7. Issue #294 Part 1b: mirrors + window rubber. Mirror blades ride
+	# in the HUB chrome surface (12 tris a box): the street trio carries
+	# a mirror pair (≥ 24 HUB tris incl. rickshaw ornament + its blade).
+	for kind in ["hatch", "van", "tempo", "auto"]:
+		var mb := MeshTools.new()
+		if kind == "hatch":
+			Vehicles.build_hatchback_body(mb, Vehicles.PAINTS[0], false)
+		elif kind == "van":
+			Vehicles.build_van_body(mb, Vehicles.PAINTS[1], false)
+		elif kind == "tempo":
+			Vehicles.build_tempo_body(mb, Vehicles.PAINTS[2], false)
+		else:
+			Vehicles.build_rickshaw_body(mb, true)
+		var mm := mb.build_mesh()
+		var mirror_tris := 0
+		for i in mm.get_surface_count():
+			var mmat: StandardMaterial3D = mm.surface_get_material(i)
+			var midx = mm.surface_get_arrays(i)[Mesh.ARRAY_INDEX]
+			if mmat != null and mmat.albedo_color.is_equal_approx(Vehicles.HUB) \
+					and midx != null:
+				mirror_tris += int(midx.size() / 3.0)
+		if mirror_tris < 24:
+			problems.append("kind %s mirror surface has %d tris — expected ≥ 24 (mirror pair)"
+					% [kind, mirror_tris])
+		print("mirrors %s: %d tris" % [kind, mirror_tris])
+
 	if problems.is_empty():
-		print("VEHICLE CHECK PASS — wheels, gloss split, lamp glow, exhaust offsets, heavy fleet, street trio plates")
+		print("VEHICLE CHECK PASS — wheels, gloss split, lamp glow, exhaust offsets, heavy fleet, street trio plates, part 1b mirrors")
 		get_tree().quit(0)
 	else:
 		for p in problems:
