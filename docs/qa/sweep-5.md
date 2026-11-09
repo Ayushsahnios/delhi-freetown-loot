@@ -927,3 +927,36 @@ coverage (both post-#331).
 gate series on the current tree.** Remaining #296 scope unchanged:
 full post-wave audit leg once #293 lands and #292 is adjudicated
 (blocked-on-owner per the Nov 9 Lane A handoff).
+
+## Post-#331 gate watch-item re-measure (2026-11-09, master @ `33a010a`)
+
+Same-tree follow-up on the post-#331 gate leg's watch item (default
+pinned-clear pair avg 10.05 / 9.79 ms, +1.0–1.5 ms above the 7.4–8.9 ms
+pinned band, reproduced across two boots that shift). The runtime is
+unchanged since #331 (`bdb2184`) — #332–#336 landed docs/PNG/capture-
+tool-only changes — so any shift in the numbers is host-load, not code.
+Method identical to the prior leg: sequential boots, weather pinned
+clear, `WEATHER_STATE` audit line checked in every log, zero
+`SCRIPT ERROR`/`ERROR:` lines in all three logs.
+
+| Gate (pinned clear) | avg | p95 | vs watch pair | budget | verdict |
+|---|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 8.33 ms | 12.76 ms | −1.7 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 9.08 ms | 13.36 ms | −0.7 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` | 8.95 ms | 13.33 ms | inside 8.2–8.9 band | 22.0 ms | PASS |
+
+Reading: the elevated default pair did **not** persist on identical
+runtime — both fresh readings land inside the pinned host-load band
+(8.33 / 9.08 vs the watch pair's 10.05 / 9.79), and the festival run
+sits in its usual 8.2–8.9 band. Combined with the post-#331 soak
+finding no counterpart signature (orphans 0, flat memory), the leading
+explanation is the host-load window during the #334 leg, not a real
+millisecond of chair-collider sim cost. **Watch item closed as
+not-reproducing on a same-tree re-measure**; the wave-gated audit leg
+still re-measures both gates on the fully-landed tree per its charter.
+No FAIL stands — all runs PASS with 4.5+ ms headroom.
+
+**Acceptance: watch item resolved same-tree — pinned-gate series
+continuous, no elevation carried forward.** Remaining #296 scope
+unchanged: full post-wave audit leg once #293 lands and #292 is
+adjudicated (blocked-on-owner per the Nov 9 Lane A handoff).
