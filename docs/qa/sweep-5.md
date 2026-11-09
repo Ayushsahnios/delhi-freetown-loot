@@ -810,3 +810,42 @@ scan excludes, on master since #34; noted, not touched).
 **Acceptance: post-#327 gates green — series continuous across the
 vehicle geometry landing.** Remaining #296 scope unchanged: full
 post-wave audit leg once #292–#294 land.
+
+## Post-#327 soak (2026-11-09, master @ `2e72fff`)
+
+Third formal 30-min soak leg, first on post-#327 vehicle geometry
+(mirrors + window rubber — the geometry change gated last leg via perf
+spot-check only). Catches the soak series up with the per-landing gate
+series before the wave-gated final audit leg, so the post-wave soak
+will diff against a baseline that already includes #327's per-vehicle
+node additions (mirror pair + rubber strips per spawned vehicle —
+exactly what the orphan/memory drift monitors watch).
+
+Method: same as the post-#319 leg — #322 setsid-detached method,
+vendored `tools/qa/soak273.tscn`, headless on the master tree
+(`2e72fff`), launched 06:34 UTC, engine self-exited at SUMMARY; this
+doc leg's branch diff is docs-only. Boot log clean.
+
+- 22 ticks t=60 → 1740 s, zero `SCRIPT ERROR` / `ERROR:` lines in the
+  whole log.
+- `SOAK273 PASS — player alive and playing after 30 min`
+  (`player_sane=true` at every tick; walkers steady at 66; `day_t`
+  cycling coherently through wraps).
+- `SOAK273 PASS — orphan-node drift over soak: +0 (start 0 → end 0)`
+  — #327's per-vehicle mirror/rubber nodes leak nothing.
+- `SOAK273 PASS — static-memory drift over soak: +1856 KB (start
+  219000 KB → end 220856 KB)` — ~0.9% of the 200,000 KB drift budget,
+  flat in the 220.0–220.9 MB band after t≈300 s; idle level and warmup
+  profile match the #318/#320/#322/#324 legs (~218–221 MB band).
+- **`SOAK273 SUMMARY passes=3 fails=0 ticks=22`** — the driver's own
+  verdict block, not a recompute.
+
+Third consecutive formal SUMMARY-printing all-PASS soak and the first
+on post-#327 geometry: the mirror/rubber vehicle detail shows no
+soak-visible regression (no orphans, no drift-signature change, no
+error lines). Soak coverage now level with gate coverage (both
+post-#327).
+
+**Acceptance: post-#327 soak green — soak series caught up with the
+gate series.** Remaining #296 scope unchanged: full post-wave audit
+leg once #292–#294 land.
