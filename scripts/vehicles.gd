@@ -135,6 +135,11 @@ static func build_rickshaw_body(b: MeshTools, decor := true) -> void:
 	_cyl_z(b, 0.13, 0.09, Vector3(0, 1.02, -1.80), LAMP, MeshTools.FINISH_GLOSS)  # headlamp
 	_panel(b, Vector3(0.16, 0.14, 0.42), Vector3(0.55, 0.40, 1.55), TRIM)  # muffler (issue #166)
 	_cyl_z(b, 0.045, 0.4, Vector3(0.55, 0.40, 1.78), TRIM)  # tailpipe
+	# Issue #294 Part 1b: one mirror off the left windshield post — arm +
+	# blade in the _truck_cab idiom, scaled down; the blade rides in HUB
+	# chrome so it reads (and gates) as a mirror face.
+	_cyl_x(b, 0.03, 0.22, Vector3(-0.93, 1.82, -1.11), TRIM)  # mirror arm
+	_panel(b, Vector3(0.03, 0.15, 0.10), Vector3(-1.06, 1.87, -1.09), HUB, MeshTools.FINISH_GLOSS)  # mirror blade
 	if decor:
 		add_rickshaw_decor(b)
 
@@ -182,6 +187,16 @@ static func build_hatchback_body(b: MeshTools, paint: Color, interior := true) -
 		_cyl_x(b, 0.02, 0.18, Vector3(0.95 * sx, 1.0, -0.05), FRAME)  # door handle
 	_panel(b, Vector3(0.5, 0.14, 0.03), Vector3(0, 0.44, -2.125), PLATE)  # number plate (front)
 	_panel(b, Vector3(0.5, 0.14, 0.03), Vector3(0, 0.44, 2.125), PLATE)  # number plate (rear)
+	# Issue #294 Part 1b: side mirrors at the door leading edge + window
+	# rubber — dark FRAME rails capping the side glass and windshield
+	# crown so the greenhouse reads glazed, not printed. Blades in HUB
+	# chrome, arms TRIM, _truck_cab idiom scaled down.
+	for sx in [-1.0, 1.0]:
+		_cyl_x(b, 0.035, 0.16, Vector3(0.99 * sx, 1.26, -0.82), TRIM)  # mirror arm
+		_panel(b, Vector3(0.03, 0.14, 0.09), Vector3(1.09 * sx, 1.30, -0.80), HUB, MeshTools.FINISH_GLOSS)  # mirror blade
+		_panel(b, Vector3(0.06, 0.03, 1.0), Vector3(0.74 * sx, 1.585, 0.78), FRAME)  # side-glass rubber rail (top)
+		_panel(b, Vector3(0.06, 0.03, 1.0), Vector3(0.74 * sx, 1.175, 0.78), FRAME)  # side-glass rubber rail (bottom)
+	_panel(b, Vector3(1.42, 0.05, 0.07), Vector3(0, 1.63, -0.86), FRAME, 0.55)  # windshield crown rubber
 	if interior:
 		add_car_interior(b)
 
@@ -226,6 +241,14 @@ static func build_van_body(b: MeshTools, paint: Color, interior := true) -> void
 	_panel(b, Vector3(0.02, 1.6, 0.02), Vector3(0, 1.55, 2.06), TRIM)  # cargo door split
 	_panel(b, Vector3(0.55, 0.15, 0.03), Vector3(0, 0.45, -2.155), PLATE)  # number plate (front)
 	_panel(b, Vector3(0.55, 0.15, 0.03), Vector3(0, 0.75, 2.07), PLATE)  # number plate (rear)
+	# Issue #294 Part 1b: cab side mirrors ahead of the door glass +
+	# window rubber rails capping the cab windows and windshield crown.
+	for sx in [-1.0, 1.0]:
+		_cyl_x(b, 0.04, 0.26, Vector3(1.08 * sx, 2.0, -1.95), TRIM)  # mirror arm
+		_panel(b, Vector3(0.03, 0.17, 0.11), Vector3(1.24 * sx, 2.04, -1.93), HUB, MeshTools.FINISH_GLOSS)  # mirror blade
+		_panel(b, Vector3(0.04, 0.03, 0.54), Vector3(0.965 * sx, 2.07, -1.62), FRAME)  # cab-glass rubber rail (top)
+		_panel(b, Vector3(0.04, 0.03, 0.54), Vector3(0.965 * sx, 1.73, -1.62), FRAME)  # cab-glass rubber rail (bottom)
+	_panel(b, Vector3(1.86, 0.05, 0.08), Vector3(0, 1.93, -2.21), FRAME, 0.18)  # windshield crown rubber
 	if interior:
 		add_van_interior(b)
 
@@ -297,6 +320,14 @@ static func build_tempo_body(b: MeshTools, paint: Color, interior := true) -> vo
 		_cyl_x(b, 0.02, 0.18, Vector3(1.07 * sx, 1.05, -0.55), FRAME)  # door handle
 	_panel(b, Vector3(0.5, 0.14, 0.03), Vector3(0, 0.6, -2.345), PLATE)  # number plate (front)
 	_panel(b, Vector3(0.5, 0.14, 0.03), Vector3(0, 0.75, 2.30), PLATE)  # number plate (rear)
+	# Issue #294 Part 1b: side mirrors at the driver band + rubber rails
+	# capping the window band and windshield crown.
+	for sx in [-1.0, 1.0]:
+		_cyl_x(b, 0.04, 0.30, Vector3(1.02 * sx, 1.95, -1.50), TRIM)  # mirror arm
+		_panel(b, Vector3(0.03, 0.17, 0.11), Vector3(1.20 * sx, 1.99, -1.48), HUB, MeshTools.FINISH_GLOSS)  # mirror blade
+		_panel(b, Vector3(0.06, 0.035, 3.46), Vector3(1.0 * sx, 1.90, 0.3), FRAME)  # window-band rubber rail (top)
+		_panel(b, Vector3(0.06, 0.035, 3.46), Vector3(1.0 * sx, 1.30, 0.3), FRAME)  # window-band rubber rail (bottom)
+	_panel(b, Vector3(1.96, 0.05, 0.08), Vector3(0, 1.94, -1.87), FRAME, 0.22)  # windshield crown rubber
 	if interior:
 		add_tempo_interior(b)
 
