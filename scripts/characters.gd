@@ -360,17 +360,22 @@ func attach_sardar(holder: Node3D, turban: Color, beard: Color = Color(0.13, 0.0
 			Transform3D(Basis(Vector3(1.0, 0.0, 0.0), 0.45), Vector3(0.0, 0.92 * u, 0.34 * u)))
 	# Beard: a slab tucked under the chin and swept slightly forward, with
 	# a mustache bar on the lip. Reads clearly at gameplay scale.
-	var bmat := _hair_mat(beard)
-	var chin := BoxMesh.new()
-	# Issue 152: beard slab sized to read at title-portrait scale —
-	# the first cut was too small to see against the face at 128x168.
-	chin.size = Vector3(0.62 * u, 0.62 * u, 0.18 * u)
-	_bone_mesh(att, head_xf, chin, bmat,
-			Transform3D(Basis(Vector3(1.0, 0.0, 0.0), -0.28), Vector3(0.0, 0.10 * u, 0.50 * u)))
-	var stache := BoxMesh.new()
-	stache.size = Vector3(0.48 * u, 0.09 * u, 0.13 * u)
-	_bone_mesh(att, head_xf, stache, bmat,
-			Transform3D(Basis(), Vector3(0.0, 0.33 * u, 0.54 * u)))
+	# Issue 292: ONLY on the old primitive rigs whose heads are
+	# featureless. The candidate bodies carry painted faces, and box
+	# beard slabs glued over them are exactly the puppet tell this
+	# issue strips — the turban stack above stays (it reads as cloth).
+	if not _has_modeled_face(holder):
+		var bmat := _hair_mat(beard)
+		var chin := BoxMesh.new()
+		# Issue 152: beard slab sized to read at title-portrait scale —
+		# the first cut was too small to see against the face at 128x168.
+		chin.size = Vector3(0.62 * u, 0.62 * u, 0.18 * u)
+		_bone_mesh(att, head_xf, chin, bmat,
+				Transform3D(Basis(Vector3(1.0, 0.0, 0.0), -0.28), Vector3(0.0, 0.10 * u, 0.50 * u)))
+		var stache := BoxMesh.new()
+		stache.size = Vector3(0.48 * u, 0.09 * u, 0.13 * u)
+		_bone_mesh(att, head_xf, stache, bmat,
+				Transform3D(Basis(), Vector3(0.0, 0.33 * u, 0.54 * u)))
 
 
 ## ------------------------------------------------------------------ legends
@@ -382,7 +387,7 @@ func attach_sardar(holder: Node3D, turban: Color, beard: Color = Color(0.13, 0.0
 ## portraits and street captures read three unmistakable characters:
 ##   sardarji — cream kurta + wool vest panels + dastaar + grey beard
 ##   riya     — riding palette + helmet slung on the back + ponytail
-##   monty    — glossy slicked hair + shades + gold chain + open collar
+##   monty    — shades + gold chain + open collar (authored GLB hair)
 ## Rigs with sane bone units (the universal male) get bone-riding kit
 ## that follows idle/walk nods; the authored-hair female rig keeps its
 ## tiny authoring bones (issue #82) where bone-space accessories render
@@ -402,7 +407,9 @@ func dress_legend(holder: Node3D, def: Dictionary) -> void:
 		"monty":
 			var kit := _head_kit(holder)
 			if not kit.is_empty():
-				_slick_hair(kit, def.get("hair", Color(0.05, 0.04, 0.04)))
+				# Issue 292: no crop-sphere cap over the Casual pair's
+				# authored hair — identity shade comes from tint(); only
+				# the de-slabbed shades ride the head.
 				_shades(kit)
 			var tk2 := _torso_kit(holder)
 			if not tk2.is_empty():
@@ -612,28 +619,10 @@ func _vest(tk: Dictionary, jacket: Color) -> void:
 			Transform3D(Basis(), Vector3(0.0, 0.85 * u, 0.0)))
 
 
-## Monty's slicked-back hair: the crop sphere with a low-roughness
-## finish so it reads glossy, pushed flat and slightly back.
-func _slick_hair(kit: Dictionary, hair: Color) -> void:
-	var att: BoneAttachment3D = kit["att"]
-	var xf: Transform3D = kit["xf"]
-	var u: float = kit["u"]
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = hair
-	mat.roughness = 0.22
-	# Issue 160: combed-back strand grain keeps the gloss — the detail
-	# lives in the albedo, the sheen stays authored.
-	Fabrics.apply_detail(mat, "hair", 10.0)
-	var crop := SphereMesh.new()
-	crop.radius = 0.5 * u
-	crop.height = 0.98 * u
-	_bone_mesh(att, xf, crop, mat,
-			Transform3D(Basis().scaled(Vector3(1.02, 0.66, 1.06)),
-					Vector3(0.0, 0.5 * u, -0.02 * u)))
-
-
-## One dark slab across the eyes — sunglasses that read at gameplay
-## scale and ride every head nod.
+## Monty's sunglasses, issue #292 de-slab: two rounded cylinder lenses
+## (axis on the face normal, flattened ovals) joined by a slim bar
+## bridge — worn frames on the textured face, not a painted sticker
+## slab. Still rides every head nod.
 func _shades(kit: Dictionary) -> void:
 	var att: BoneAttachment3D = kit["att"]
 	var xf: Transform3D = kit["xf"]
@@ -641,10 +630,24 @@ func _shades(kit: Dictionary) -> void:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(0.03, 0.03, 0.04)
 	mat.roughness = 0.3
-	var slab := BoxMesh.new()
-	slab.size = Vector3(0.92 * u, 0.2 * u, 0.12 * u)
-	_bone_mesh(att, xf, slab, mat,
-			Transform3D(Basis(), Vector3(0.0, 0.3 * u, 0.54 * u)))
+	for side in [-1.0, 1.0]:
+		var lens := CylinderMesh.new()
+		lens.top_radius = 0.14 * u
+		lens.bottom_radius = 0.14 * u
+		lens.height = 0.07 * u
+		lens.radial_segments = 20
+		_bone_mesh(att, xf, lens, mat,
+				Transform3D(Basis(Vector3(1.0, 0.0, 0.0), PI * 0.5)
+						* Basis().scaled(Vector3(1.15, 1.0, 1.0)),
+					Vector3(side * 0.21 * u, 0.3 * u, 0.54 * u)))
+	var bridge := CylinderMesh.new()
+	bridge.top_radius = 0.025 * u
+	bridge.bottom_radius = 0.025 * u
+	bridge.height = 0.16 * u
+	bridge.radial_segments = 10
+	_bone_mesh(att, xf, bridge, mat,
+			Transform3D(Basis(Vector3(0.0, 0.0, 1.0), PI * 0.5),
+					Vector3(0.0, 0.33 * u, 0.53 * u)))
 
 
 ## Gold chain at the collarbone plus an open-collar V of skin below

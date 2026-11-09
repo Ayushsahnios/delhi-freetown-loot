@@ -1701,7 +1701,7 @@ func _build_select_ui() -> void:
 
 func _portrait_card(def: Dictionary) -> Control:
 	## Title-screen close-up of one legend: the rigged model idles and
-	## slowly turns in its own viewport — the Sardar's turban + beard and
+	## slowly turns in its own viewport — the Sardar's turban and
 	## each legend's outfit colors show at a glance before picking.
 	var svc := SubViewportContainer.new()
 	svc.stretch = true
