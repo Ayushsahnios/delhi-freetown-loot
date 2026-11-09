@@ -23,6 +23,10 @@ extends Node
 ##   --noglow       disable environment glow (issue #104 discriminator: on
 ##                 the compatibility renderer glow composites in LDR, which
 ##                 can wash bright noon skies out to white under software GL)
+##   --no-hud      hide every HUD overlay layer (refs #293 eyeball
+##                 captures: nameplate/clock/HP+stamina rails, minimap,
+##                 touch controls, tutorial card) so captures read as
+##                 the world alone
 ##   --weather S   pin the weather state machine (refs #296): "clear"
 ##                 freezes it bone-dry, "rain" locks a full squall —
 ##                 makes captures deterministic instead of rolling the
@@ -44,6 +48,7 @@ func _ready() -> void:
 	var card := true
 	var nclouds := false
 	var noglow := false
+	var nohud := false
 	var weather := ""
 	var finale := false
 	var ending := false
@@ -62,6 +67,8 @@ func _ready() -> void:
 			nclouds = true
 		elif a == "--noglow":
 			noglow = true
+		elif a == "--no-hud":
+			nohud = true
 		elif a == "--weather" and i + 1 < args.size():
 			weather = String(args[i + 1])
 		elif a == "--metro":
@@ -112,6 +119,15 @@ func _ready() -> void:
 		var we: WorldEnvironment = main.get("world_env")
 		if we != null:
 			we.environment.glow_enabled = false
+
+	if nohud:
+		# Refs #293 acceptance pass: eyeball captures should read as
+		# the world, not the UI. Hiding the CanvasLayers (HUD rails,
+		# minimap, touch controls, tutorial card) is enough — the
+		# viewport texture then holds only the 3D scene.
+		for cl: CanvasLayer in main.find_children("*", "CanvasLayer",
+				true, false):
+			cl.visible = false
 
 	if tp.x != INF and main.get("player") != null:
 		var p: Node3D = main.get("player")
