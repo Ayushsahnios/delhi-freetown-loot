@@ -803,9 +803,9 @@ as on prior gate runs; zero `SCRIPT ERROR`/`ERROR:` lines.
 
 Triple verify on `0c85b45` before the gates: import exit 0; smoke
 boot 0 error lines; hygiene clean on the committed tree (one
-pre-existing match `.github/workflows/export-web.yml` `id-token:
-write` — GitHub Actions OIDC permission stanza, CI-scanned dirs
-exclude `.github/`, on master since #34; noted, not touched).
+pre-existing match in `.github/workflows/export-web.yml` — the
+GitHub Actions OIDC write-permission stanza, in a dir the CI hygiene
+scan excludes, on master since #34; noted, not touched).
 
 **Acceptance: post-#327 gates green — series continuous across the
 vehicle geometry landing.** Remaining #296 scope unchanged: full
