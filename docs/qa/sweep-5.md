@@ -849,3 +849,46 @@ post-#327).
 **Acceptance: post-#327 soak green — soak series caught up with the
 gate series.** Remaining #296 scope unchanged: full post-wave audit
 leg once #292–#294 land.
+
+## Post-#331 station-furniture gate spot-check (2026-11-09, master @ `74c4a11`)
+
+Interim spot-check between the post-#327 soak and the (still
+wave-gated) audit leg: #331 landed the station-furniture swap
+(slab benches -> CC0 chairs + truthful colliders, refs #293; merged
+`bdb2184`), the first station-area geometry change on the audit path
+since the #314 shop-interiors slice — so the pinned gates were re-run
+on the merged tree to keep the per-landing gate series continuous.
+(#332, the #294 closeout verdict doc + captures, is docs/PNG-only and
+needs no gate.)
+
+### Perf gates (pinned clear, post-#331; sequential runs)
+
+- **Default gate, run 1:** avg 10.05 ms / p95 15.61 ms vs 22.0 ms
+  budget — **PASS** (`WEATHER_STATE label=Clear 0.000/0.000/0.000`;
+  zero `SCRIPT ERROR`/`ERROR:` lines).
+- **Default gate, run 2:** avg 9.79 ms / p95 13.72 ms — **PASS**
+  (weather audited Clear; zero error lines).
+- **Festival gate:** avg 8.86 ms / p95 14.26 ms — **PASS** (weather
+  audited Clear; zero error lines).
+
+Reading: the festival number sits inside the 7.4–8.9 ms pinned
+host-load band; the two default readings are the highest pinned-clear
+pair to date (+1.0–1.5 ms avg vs #317's 8.07 and the post-#327 leg's
+8.49), though still 4.5+ ms inside budget and below every unpinned
+default reading this sweep (10.32–10.39 from the part-1 legs). The
+elevation reproduced across two sequential boots, so it is recorded
+as a **watch item, not noise-dismissed**: either host load or the
+truthful chair colliders carry roughly a millisecond of sim cost.
+The wave-gated audit leg will re-measure on the fully-landed tree
+and diff against this leg. No FAIL stands — all three runs PASS.
+
+Triple verify on `74c4a11` before the gates: import exit 0; smoke
+boot 0 error lines; hygiene clean on the committed tree (the
+pre-existing, CI-excluded GitHub-OIDC permission stanza noted in the
+#328 leg stands, untouched).
+
+**Acceptance: post-#331 gates green — series continuous across the
+station-furniture landing, one watch item carried into the audit
+leg.** Remaining #296 scope unchanged: full post-wave audit leg once
+#293 lands and #292 is adjudicated (blocked-on-owner per the Nov 9
+Lane A handoff).
