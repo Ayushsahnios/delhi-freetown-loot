@@ -7,6 +7,11 @@ extends Node
 ##   xvfb-run -a godot --path . --rendering-driver opengl3 \
 ##     res://scenes/screenshot.tscn -- --out /tmp/shot.png --frames 90
 ##
+## NEVER add --headless: captures need the real GL context Xvfb provides;
+## headless never renders a frame, the capture hangs, and the run only dies
+## at SIGTERM (two 15-30 min lost attempts, Nov 9). The script now refuses
+## to run headless and exits 1 immediately instead of hanging.
+##
 ## Options (after `--`):
 ##   --out PATH    output PNG path           (default /tmp/shot.png)
 ##   --title       capture the select screen (title) instead of gameplay;
@@ -40,6 +45,16 @@ extends Node
 const MAIN_SCENE := preload("res://scenes/main.tscn")
 
 func _ready() -> void:
+	# Capture-trap guard (refs #296 sweep-5 prep): fail fast and loud when
+	# launched --headless — the render texture never yields a frame there,
+	# so the settle loop below would hang until SIGTERM. Guard before any
+	# scene is instantiated so the refusal costs seconds, not minutes.
+	if DisplayServer.get_name() == "headless":
+		printerr("screenshot.gd: refusing --headless run — captures need "
+				+ "the Xvfb GL context (see usage header); "
+				+ "no frame would ever render")
+		get_tree().quit(1)
+		return
 	var out := "/tmp/shot.png"
 	var frames := 90
 	var tp := Vector2(INF, INF)
