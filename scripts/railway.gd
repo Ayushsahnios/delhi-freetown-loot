@@ -8,7 +8,9 @@ extends Node3D
 ## red-cream passenger train that arrives from beyond the map edge,
 ## dwells at the platform and departs again (the metro shuttle's
 ## trapezoid speed profile, reused for a non-rideable scene train).
-## Everything is procedural MeshTools geometry; no assets, no imports.
+## Everything is procedural MeshTools geometry, with one exception
+## (issue #293): the station chairs are vendored CC0 Quaternius
+## furniture (see assets/props/furniture/LICENSE.txt).
 ## Bilingual Devanagari text is NOT attempted here — the default font
 ## has no Devanagari glyphs; issue #131's signage system owns that layer.
 
@@ -392,10 +394,13 @@ func _build_counter(b: MeshTools) -> void:
 
 
 func _build_hall_furniture(b: MeshTools) -> void:
-	## Concourse fittings (issue #184): two slat benches backing the
-	## long walls, one luggage cluster by the north wall.
-	_hall_bench(b, 4.35, -2.0, -1.0)
-	_hall_bench(b, 8.85, -2.0, 1.0)
+	## Concourse fittings (issue #184): two CC0 chair pairs backing
+	## the long walls (issue #293 bench swap), one luggage cluster by
+	## the north wall.
+	for bay in [[4.35, -2.0, -1.0], [8.85, -2.0, 1.0]]:
+		for dz in [-0.42, 0.42]:
+			_cc0_chair(Vector3(bay[0], 0.53, bay[1] + dz),
+					-PI / 2.0 * bay[2])
 	var bx := BoxMesh.new()
 	bx.size = Vector3(0.62, 0.34, 0.46)
 	b.add_mesh(bx, Transform3D(Basis(Vector3.UP, 0.3), Vector3(5.6, 0.70, -5.5)), BUNDLE)
@@ -403,24 +408,41 @@ func _build_hall_furniture(b: MeshTools) -> void:
 	b.add_box(Vector3(0.7, 0.5, 0.22), Vector3(4.85, 0.78, -5.2), Color(0.40, 0.24, 0.12))
 
 
-func _hall_bench(b: MeshTools, x: float, z: float, side: float) -> void:
-	## Platform slat bench with its backrest against the nearest long
-	## wall (side -1 west, +1 east).
-	b.add_box(Vector3(0.5, 0.07, 1.9), Vector3(x, 0.68, z), WOOD)
-	b.add_box(Vector3(0.07, 0.55, 1.9), Vector3(x + side * 0.22, 0.95, z), WOOD)
-	for dz in [-0.8, 0.8]:
-		b.add_box(Vector3(0.42, 0.36, 0.1), Vector3(x, 0.5, z + dz), STEEL)
+const CHAIR_Y := 0.53 ## Hall and platform tile tops both sit here.
+const CHAIR_COLL := Vector3(0.5, 0.95, 0.5)
+
+func _cc0_chair(at: Vector3, yaw: float) -> void:
+	## One vendored CC0 chair (issue #293 bench swap: Quaternius
+	## furniture set, CC0 — assets/props/furniture/LICENSE.txt) in
+	## place of the old flat-slab benches (DE-BOX directive). Carries
+	## its own truthful box collider (slice-1 rule: nothing at street
+	## level is walk-through).
+	var mesh := load("res://assets/props/furniture/Chair.obj") as Mesh
+	if mesh == null:
+		push_warning("CC0 prop missing: Chair")
+		return
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.transform = Transform3D(Basis(Vector3.UP, yaw), at)
+	add_child(mi)
+	var solid := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = CHAIR_COLL
+	shape.shape = box
+	shape.position = at + Vector3(0, CHAIR_COLL.y * 0.5, 0)
+	solid.add_child(shape)
+	add_child(solid)
 
 
 func _build_furniture(b: MeshTools) -> void:
-	## Four slat benches under the canopy, five luggage clusters (white
-	## bundles + a brown suitcase), two wooden luggage trolleys.
+	## CC0 chair pairs under the canopy (issue #293 bench swap), five
+	## luggage clusters (white bundles + a brown suitcase), two wooden
+	## luggage trolleys.
 	for zz in [-12.0, -7.0, 3.0, 8.0]:
-		var x := -9.9
-		b.add_box(Vector3(0.5, 0.07, 1.9), Vector3(x, 0.68, zz), WOOD)
-		b.add_box(Vector3(0.07, 0.55, 1.9), Vector3(x - 0.22, 0.95, zz), WOOD)
-		for dz in [-0.8, 0.8]:
-			b.add_box(Vector3(0.42, 0.36, 0.1), Vector3(x, 0.5, zz + dz), STEEL)
+		for dz in [-0.42, 0.42]:
+			_cc0_chair(Vector3(-9.9, CHAIR_Y, zz + dz), PI / 2.0)
 	for spot in [[-3.4, -11.0], [-8.0, -13.5], [-4.8, 9.5], [-9.5, 3.5], [4.5, -12.0]]:
 		var x: float = spot[0]
 		var z: float = spot[1]
@@ -603,16 +625,14 @@ func _build_colliders() -> void:
 	_col(body, Vector3(8.8, 0.5, 28.0), Vector3(-6.6, 0.25, -1.0), 0.0)
 	_col(body, Vector3(8.0, 0.5, 24.0), Vector3(6.2, 0.25, -1.0), 0.0)
 	# Hollow concourse (issue #184): wall segments with the doorways
-	# (z 0.45..1.55 both long walls) left clear, end walls, counter,
-	# hall benches.
+	# (z 0.45..1.55 both long walls) left clear, end walls, counter
+	# (the hall chairs bring their own per-chair colliders).
 	for wx in [3.6, 9.6]:
 		_col(body, Vector3(0.18, 3.2, 7.95), Vector3(wx, 2.1, -3.525), 0.0)
 		_col(body, Vector3(0.18, 3.2, 3.95), Vector3(wx, 2.1, 3.525), 0.0)
 	for ez in [-7.5, 5.5]:
 		_col(body, Vector3(6.0, 3.2, 0.18), Vector3(6.6, 2.1, ez), 0.0)
 	_col(body, Vector3(2.6, 0.8, 0.85), Vector3(6.6, 0.93, 4.6), 0.0)
-	_col(body, Vector3(1.1, 0.7, 1.9), Vector3(4.35, 0.88, -2.0), 0.0)
-	_col(body, Vector3(1.1, 0.7, 1.9), Vector3(8.85, 0.88, -2.0), 0.0)
 	_col(body, Vector3(2.4, 1.7, 1.2), Vector3(0.0, 0.85, BUFFER_Z), 0.0)
 	for t in [[-3.6, -8.0], [-6.8, 11.5]]:
 		_col(body, Vector3(1.8, 1.2, 1.4), Vector3(t[0], 0.6, t[1]), 0.0)
