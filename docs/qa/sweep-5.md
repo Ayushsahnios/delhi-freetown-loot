@@ -777,3 +777,36 @@ coverage: gates PASS (prior leg) + soak driver-verdict PASS (here).
 **Acceptance: post-#319 refresh fully green — gates, save, legend,
 and now the formal soak.** Remaining #296 scope unchanged: full
 post-wave audit leg once #292–#294 land.
+
+## Post-#327 vehicle-geometry gate spot-check (2026-11-09, master @ `0c85b45`)
+
+Interim spot-check between the post-#319 refresh and the (still gated)
+post-wave audit leg: #327 landed the vehicle detail pass 1b (side
+mirrors + window rubber — first vehicle-geometry change on the audit
+path since #314), so the pinned gates were re-run once on the merged
+tree to keep the per-landing gate series continuous.
+
+### Perf gates (pinned clear, post-#327)
+
+- **Default gate:** avg 8.49 ms / p95 12.82 ms vs 22.0 ms budget —
+  **PASS** (exit 0; `WEATHER_STATE label=Clear 0.000/0.000/0.000`).
+- **Festival gate:** avg 8.17 ms / p95 12.62 ms vs 22.0 ms budget —
+  **PASS** (exit 0; weather audited Clear).
+
+Both readings sit inside the 7.4–8.9 ms host-load noise band the
+post-#319 refresh documented (7.38/7.88 avg then; #317 baselines
+8.07–8.91) — the mirror/rubber delta (~hundreds of tris per vehicle)
+shows no gate movement. Runs were sequential, not parallel, per the
+host-load lesson from the 15:45–15:58 Nov 8 window. Known benign
+headless exit warning (`ObjectDB instances leaked at exit`) present
+as on prior gate runs; zero `SCRIPT ERROR`/`ERROR:` lines.
+
+Triple verify on `0c85b45` before the gates: import exit 0; smoke
+boot 0 error lines; hygiene clean on the committed tree (one
+pre-existing match in `.github/workflows/export-web.yml` — the
+GitHub Actions OIDC write-permission stanza, in a dir the CI hygiene
+scan excludes, on master since #34; noted, not touched).
+
+**Acceptance: post-#327 gates green — series continuous across the
+vehicle geometry landing.** Remaining #296 scope unchanged: full
+post-wave audit leg once #292–#294 land.
