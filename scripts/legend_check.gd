@@ -131,11 +131,14 @@ func _check_shoulder_spans() -> void:
 
 func _check_tailoring() -> void:
 	# Procedural-mesh floors per legend: turban kit + vest + tailoring
-	# for Sardar Ji, rider gear + jacket tailoring for Riya, identity +
-	# shirt tailoring for Monty. The build gates above carry the
-	# correctness load; these floors catch a tailoring branch silently
-	# not attaching.
-	var floors := {"sardarji": 18, "riya": 7, "monty": 11}
+	# for Sardar Ji, rider gear + jacket tailoring for Riya, shades +
+	# shirt tailoring for Monty. Issue 292 strip, measured post-cut:
+	# sardarji loses the chin + mustache slabs (20 -> 18), monty loses
+	# the cap-hair sphere but the de-slabbed shades are now two lenses
+	# + bridge (11 -> 12); beard/hair live in the authored GLB bodies.
+	# The build gates above carry the correctness load; these floors
+	# catch a tailoring branch silently not attaching.
+	var floors := {"sardarji": 18, "riya": 7, "monty": 12}
 	for id in floors.keys():
 		var count := _mesh_count(_holder_for(id))
 		print("LEGEND_CHECK %s procedural meshes: %d" % [id, count])
