@@ -892,3 +892,38 @@ station-furniture landing, one watch item carried into the audit
 leg.** Remaining #296 scope unchanged: full post-wave audit leg once
 #293 lands and #292 is adjudicated (blocked-on-owner per the Nov 9
 Lane A handoff).
+
+## Post-#331 station-furniture soak (2026-11-09, master @ `0f35771`)
+
+Fourth formal SUMMARY-printing soak, reaped from the detached run
+launched ~10:31 UTC on the current master tree (runtime unchanged
+since #331 `bdb2184`: #332–#334 landed docs/PNG/capture-tool-only
+changes). Detached-per-`setsid` launch per the #322 method; engine
+self-exited at t=1800 s and printed its own verdict block.
+
+- 24 ticks t=60–1740 s; `orphans=0` at every tick; walkers steady at
+  66; `player_sane=true` throughout; zero `SCRIPT ERROR`/`ERROR:`
+  lines in the log.
+- `SOAK273 PASS — player alive and playing after 30 min`
+- `SOAK273 PASS — orphan-node drift over soak: +0 (start 0 → end 0)`
+- `SOAK273 PASS — static-memory drift over soak: +753 KB (start
+  219224 KB → end 219978 KB)` — ~0.4% of the 200,000 KB drift
+  budget, flat in the 219.2–220.0 MB band from the first tick; idle
+  level and warmup profile match the #318/#320/#322/#324/#330 legs
+  (~218–221 MB band).
+- **`SOAK273 SUMMARY passes=3 fails=0 ticks=24`** — the driver's own
+  verdict block, not a recompute.
+
+Fourth consecutive formal SUMMARY-printing all-PASS soak and the
+first on post-#331 geometry: the CC0 station chairs + truthful
+colliders show no soak-visible regression (no orphan nodes, no
+drift-signature change, no error lines). The post-#331 gate watch
+item (default-pair avg +1.0–1.5 ms, gate leg above) has no
+counterpart on the soak side — orphans and memory stay flat; the
+audit leg will re-measure both. Soak coverage level with gate
+coverage (both post-#331).
+
+**Acceptance: post-#331 soak green — soak series caught up with the
+gate series on the current tree.** Remaining #296 scope unchanged:
+full post-wave audit leg once #293 lands and #292 is adjudicated
+(blocked-on-owner per the Nov 9 Lane A handoff).
