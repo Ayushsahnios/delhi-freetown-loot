@@ -32,6 +32,11 @@ extends Node
 ##                 captures: nameplate/clock/HP+stamina rails, minimap,
 ##                 touch controls, tutorial card) so captures read as
 ##                 the world alone
+##   --no-beacon   hide mission-giver beacons (refs #293 attempt-12:
+##                 the START HERE ring/beam/Label3D stands on the thana
+##                 plaza in every eastward shopfront sightline and
+##                 dominates street-side frames; --no-hud hides HUD
+##                 layers only, not world-space markers)
 ##   --cam-elev M  lift the capture camera M meters above its chase
 ##                 spot, re-aiming at the same subject (refs #293
 ##                 attempt-8 doorway shot: a ~3 m vantage clears the
@@ -70,6 +75,7 @@ func _ready() -> void:
 	var nclouds := false
 	var noglow := false
 	var nohud := false
+	var nobeacon := false
 	var camelev := 0.0
 	var weather := ""
 	var finale := false
@@ -91,6 +97,8 @@ func _ready() -> void:
 			noglow = true
 		elif a == "--no-hud":
 			nohud = true
+		elif a == "--no-beacon":
+			nobeacon = true
 		elif a == "--cam-elev" and i + 1 < args.size():
 			camelev = clampf(float(args[i + 1]), 0.5, 30.0)
 		elif a == "--weather" and i + 1 < args.size():
@@ -152,6 +160,23 @@ func _ready() -> void:
 		for cl: CanvasLayer in main.find_children("*", "CanvasLayer",
 				true, false):
 			cl.visible = false
+
+	if nobeacon:
+		# Refs #293 attempt-12: the START HERE intro beacon (ring, beam
+		# and world-space Label3D, missions.gd _spawn_giver) stands on
+		# the thana plaza in every eastward shopfront sightline, and
+		# --no-hud hides CanvasLayers only — not 3D mission markers.
+		# Hide every giver's visuals the same way _show_giver(id, false)
+		# does; the per-frame giver tick skips hidden rings, so the
+		# state holds for the whole settle window.
+		var missions: Node = main.get("_missions")
+		if missions != null:
+			var givers: Dictionary = missions.get("_givers")
+			for id in givers:
+				var g: Dictionary = givers[id]
+				for part in ["ring", "beam", "label"]:
+					if g.has(part) and g[part] != null:
+						(g[part] as Node3D).visible = false
 
 	if tp.x != INF and main.get("player") != null:
 		var p: Node3D = main.get("player")
