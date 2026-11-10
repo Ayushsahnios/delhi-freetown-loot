@@ -88,9 +88,16 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 		for side_z: float in [-1.0, 1.0]:
 			var line := cz - side_z * (half_block - TREE_IN)
 			for t in TREE_SPOTS:
+				var tx: float = cx + t
+				# Issue #293: the south-kerb spot at +13 on the police
+				# block lands ~2 m off the paan shop's east doorway and
+				# its canopy roofs the doorway sightline. Shift that one
+				# tree west along the kerb, clear of the shop front.
+				if block == Vector2i(7, 5) and side_z > 0.0 and t == 13.0:
+					tx = cx - 5.5
 				var xf := Transform3D(
 						Basis(Vector3.UP, (PI / 2.0 if flip % 2 == 0 else -PI / 2.0)),
-						Vector3(cx + t, Roads.CURB_H, line))
+						Vector3(tx, Roads.CURB_H, line))
 				if flip % 2 == 0:
 					peepal_xfs.append(xf)
 				else:

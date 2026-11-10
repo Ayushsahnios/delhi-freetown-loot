@@ -187,6 +187,16 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 	_cc0_furniture(root, "ChairCushioned", Transform3D(
 			Basis(Vector3.UP, PI * 0.5), Vector3(bx + 1.55, yy, bz + 0.9)),
 			Vector3(0.7, 0.9, 0.7))
+	# Issue #293: warm counter light inside the paan shop so the glass
+	# top, betel trays and brass pot read from the doorway. Shadow-free
+	# omni under the roof — no collider, no tris, perf-neutral.
+	var paan_bulb := OmniLight3D.new()
+	paan_bulb.light_color = Color(1.0, 0.82, 0.58)
+	paan_bulb.light_energy = 1.15
+	paan_bulb.omni_range = 5.5
+	paan_bulb.shadow_enabled = false
+	paan_bulb.position = Vector3(px - 0.3, Roads.CURB_H + 2.0, pz)
+	root.add_child(paan_bulb)
 	return root
 
 
