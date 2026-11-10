@@ -32,6 +32,12 @@ extends Node
 ##                 captures: nameplate/clock/HP+stamina rails, minimap,
 ##                 touch controls, tutorial card) so captures read as
 ##                 the world alone
+##   --cam-elev M  lift the capture camera M meters above its chase
+##                 spot, re-aiming at the same subject (refs #293
+##                 attempt-8 doorway shot: a ~3 m vantage clears the
+##                 stall-side trunk/canopy and crops the spawn-beacon
+##                 text; the main controllers freeze for the capture
+##                 frame so the chase ease cannot pull it back down)
 ##   --weather S   pin the weather state machine (refs #296): "clear"
 ##                 freezes it bone-dry, "rain" locks a full squall —
 ##                 makes captures deterministic instead of rolling the
@@ -64,6 +70,7 @@ func _ready() -> void:
 	var nclouds := false
 	var noglow := false
 	var nohud := false
+	var camelev := 0.0
 	var weather := ""
 	var finale := false
 	var ending := false
@@ -84,6 +91,8 @@ func _ready() -> void:
 			noglow = true
 		elif a == "--no-hud":
 			nohud = true
+		elif a == "--cam-elev" and i + 1 < args.size():
+			camelev = clampf(float(args[i + 1]), 0.5, 30.0)
 		elif a == "--weather" and i + 1 < args.size():
 			weather = String(args[i + 1])
 		elif a == "--metro":
@@ -168,6 +177,20 @@ func _ready() -> void:
 
 	for i in range(frames):
 		await get_tree().process_frame
+
+	if camelev > 0.0:
+		# Refs #293 attempt 8 (doorway shot): lift the settled chase cam
+		# M meters, re-aim at the player's head (the chase look point),
+		# and freeze main's per-frame controllers — the chase ease would
+		# otherwise pull the camera back down before the capture frame.
+		var cam = main.get("camera")
+		var pl: Node3D = main.get("player")
+		if cam is Camera3D and pl != null:
+			cam.global_position += Vector3.UP * camelev
+			cam.look_at(pl.global_position + Vector3(0.0, 1.45, 0.0))
+			main.set_process(false)
+			main.set_physics_process(false)
+			await get_tree().process_frame
 
 	var img := get_viewport().get_texture().get_image()
 	img.save_png(out)
