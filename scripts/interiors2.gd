@@ -202,10 +202,11 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 
 static func _shop_room(b: MeshTools, x: float, z: float, hx: float,
 		hz: float, wall_h: float, lintel_h: float, wall: Color,
-		floor: Color, roof: Color) -> void:
+		floor: Color, roof: Color, door_half := 0.75) -> void:
 	## One walk-in room on the slice-3 chemist pattern: chamfered wall
 	## prisms with a doorway in the +X face under a chamfered lintel,
-	## a worn floor slab and a roof plate.
+	## a worn floor slab and a roof plate. door_half widens the opening
+	## (paan shop reads from the street at 1.0 — issue #293).
 	var y := Roads.CURB_H
 	b.add_prism(MeshTools.chamfer_footprint(hx, hz, 0.12),
 			Vector3(x, 0.0, z), y, y + 0.04, floor)
@@ -215,14 +216,14 @@ static func _shop_room(b: MeshTools, x: float, z: float, hx: float,
 			Vector3(x, 0.0, z - hz - 0.05), y, y + wall_h, wall)
 	b.add_prism(MeshTools.chamfer_footprint(hx + 0.2, 0.125, 0.08),
 			Vector3(x, 0.0, z + hz + 0.05), y, y + wall_h, wall)
-	var seg := hz - 0.75
+	var seg := hz - door_half
 	b.add_prism(MeshTools.chamfer_footprint(0.125, seg * 0.5, 0.08),
-			Vector3(x + hx + 0.05, 0.0, z - 0.75 - seg * 0.25), y,
+			Vector3(x + hx + 0.05, 0.0, z - door_half - seg * 0.25), y,
 			y + lintel_h, wall)
 	b.add_prism(MeshTools.chamfer_footprint(0.125, seg * 0.5, 0.08),
-			Vector3(x + hx + 0.05, 0.0, z + 0.75 + seg * 0.25), y,
+			Vector3(x + hx + 0.05, 0.0, z + door_half + seg * 0.25), y,
 			y + lintel_h, wall)
-	b.add_prism(MeshTools.chamfer_footprint(0.125, 0.8, 0.08),
+	b.add_prism(MeshTools.chamfer_footprint(0.125, door_half + 0.05, 0.08),
 			Vector3(x + hx + 0.05, 0.0, z), y + lintel_h,
 			y + wall_h, wall)
 	b.add_prism(MeshTools.chamfer_footprint(hx + 0.3, hz + 0.3, 0.14),
@@ -300,8 +301,10 @@ static func _paan_shop(b: MeshTools, x: float, z: float) -> void:
 	## glass display of betel trays, a brass paan pot, lime paste jar,
 	## the deep green PAAN board and a stool by the door.
 	var y := Roads.CURB_H
+	# Doorway widened 1.5→2.0 m (issue #293): the glass counter,
+	# betel trays and brass pot read from the street/doorway shots.
 	_shop_room(b, x, z, 1.4, 1.3, 2.4, 1.9, PAAN_WALL,
-			PAAN_FLOOR, PAAN_ROOF)
+			PAAN_FLOOR, PAAN_ROOF, 1.0)
 	# Display counter along the back wall: beveled body, glass top.
 	b.add_bev_box(Vector3(0.5, 0.95, 2.0), Vector3(x - 1.0, y + 0.475,
 			z), 0.05, PAAN_COUNTER)
