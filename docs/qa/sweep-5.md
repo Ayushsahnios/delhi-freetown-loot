@@ -960,3 +960,46 @@ No FAIL stands — all runs PASS with 4.5+ ms headroom.
 continuous, no elevation carried forward.** Remaining #296 scope
 unchanged: full post-wave audit leg once #293 lands and #292 is
 adjudicated (blocked-on-owner per the Nov 9 Lane A handoff).
+
+## Post-#340 world-geometry gate + save spot-check (2026-11-13, master @ `e27d3bc`)
+
+Interim spot-check on the post-#340/#341 tree: #340 (paan doorway
+sightline — kerbside banyan shift + warm interior fill, refs #293) is
+the first world-geometry change on the audit path since #331's station
+furniture; #341 is screenshot-tooling only. Triple verify on `e27d3bc`
+(import exit 0 · 5-frame smoke zero `SCRIPT ERROR`/`ERROR:` lines ·
+hygiene clean with the two known triaged non-issues: the CI-excluded
+GitHub-OIDC permission stanza from #32 and the gitignored `.agent/`
+local file) was run green this pass (Lane D ~05:55 UTC re-check); this
+leg re-runs the pinned gates and the save round-trip to keep both
+series continuous across the #340 landing.
+
+### Perf gates (pinned clear, post-#340; sequential boots)
+
+| Gate | avg | p95 | budget | verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 8.82 ms | 13.08 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 9.08 ms | 13.60 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` | 8.65 ms | 14.64 ms | 22.0 ms | PASS |
+
+`WEATHER_STATE label=Clear 0.000/0.000/0.000` audited in all three
+logs; zero `SCRIPT ERROR`/`ERROR:` lines in all three. Reading: the
+post-#340 pair sits exactly in the post-#337 re-measure band (default
+8.33–9.08 avg, festival 8.65 inside its 8.2–8.9 band) — the banyan
+shift + interior fill carry no measurable sim cost; the pinned-gate
+series stays level across the world-geometry landing. No watch item.
+
+### Save round-trip (post-#340)
+
+`save_check.tscn` → **verdict=PASS, all 21 expectations met** (hp
+float, pos array, missions dict, nested chars round-trip; corrupt-
+primary falls back to backup, recovery write/read ok). The two engine
+`ERROR: Parse JSON failed` lines in the log are the gate's own
+deliberately-corrupted saves being correctly rejected (negative-test
+expectations), not runtime failures — same behavior as the CI gate.
+
+**Acceptance: post-#340 gates + save green — both interim series
+continuous across the #340 geometry landing.** Remaining #296 scope
+unchanged: full post-wave audit leg (crowds/legends/portraits/interiors
+re-audit + capture matrix + soak on the fully-landed tree) once #293
+lands and #292 is adjudicated.
