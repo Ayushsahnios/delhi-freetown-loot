@@ -265,7 +265,8 @@ func _title_shot(main: Node, out: String, frames: int,
 	if closeup:
 		# Refs #292: the acceptance is close-up portraits — capture the
 		# face crops while the views are still live, before the gate.
-		await _closeup_cards(views, names, out)
+		await _closeup_cards(views, names,
+				main.get("_portrait_models"), out)
 	var worst := 1.0e9
 	for a in range(cards.size()):
 		for b in range(a + 1, cards.size()):
@@ -292,7 +293,8 @@ func _title_shot(main: Node, out: String, frames: int,
 ## poses stay live), so two frames after the re-aim the texture holds
 ## the tight framing; the distinctness gate above still runs on the
 ## standard mid-shot cards.
-func _closeup_cards(views: Array, names: Array, out: String) -> void:
+func _closeup_cards(views: Array, names: Array, models: Array,
+		out: String) -> void:
 	for idx in range(views.size()):
 		var vp: SubViewport = views[idx]
 		var cams := vp.find_children("*", "Camera3D", true, false)
@@ -308,8 +310,27 @@ func _closeup_cards(views: Array, names: Array, out: String) -> void:
 		# fills the frame.
 		var face_y := h - 0.25
 		cam.fov = 22.0
-		cam.global_position = Vector3(0.0, face_y + 0.06, 0.85)
-		cam.look_at(Vector3(0.0, face_y - 0.01, 0.0))
+		# Handoff audit 22:15 Nov-13: a FIXED +Z station crops whatever
+		# the title idle happens to show — the select screen rotates
+		# every legend holder at 0.7 rad/s (main.gd _process), so two of
+		# three crops landed back-of-head. Orbit instead: read each
+		# holder's live global basis, flatten to the floor, and park the
+		# camera on the FACE bearing at portrait distance (spawn() authors
+		# holders facing -Z, so forward = -basis.z).
+		var focus := Vector3(0.0, face_y - 0.01, 0.0)
+		var station := Vector3(0.0, face_y + 0.06, 0.85)
+		var rig: Node3D = models[idx] if idx < models.size() else null
+		if rig != null:
+			var fwd := -rig.global_transform.basis.z
+			fwd.y = 0.0
+			fwd = fwd.normalized() \
+					if fwd.length_squared() > 0.0001 \
+					else Vector3(0.0, 0.0, -1.0)
+			focus = Vector3(rig.global_position.x, face_y - 0.01,
+					rig.global_position.z)
+			station = focus + fwd * 0.85 + Vector3.UP * 0.07
+		cam.global_position = station
+		cam.look_at(focus)
 		await get_tree().process_frame
 		await get_tree().process_frame
 		var label := String(names[idx]) if idx < names.size() else str(idx)
