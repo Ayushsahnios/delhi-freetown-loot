@@ -52,6 +52,12 @@ extends Node
 ##                 inside the Nov 1-14 window — see scripts/festival.gd
 ##                 is_festival(); pair a pinned-weather shot with a
 ##                 --no-festival shot for clean before/after baselines
+##   --closeup     with --title: after the standard card trio, re-frame
+##                 each portrait SubViewport camera tight on the face
+##                 and save an extra face crop per legend (refs #292:
+##                 the swap's acceptance is *close-up* portraits that
+##                 read as people, not puppets — title-card framing is
+##                 a mid-shot; files land as <out-base>-closeup-*.png)
 
 const MAIN_SCENE := preload("res://scenes/main.tscn")
 
@@ -82,6 +88,7 @@ func _ready() -> void:
 	var ending := false
 	var metro := false
 	var title := false
+	var closeup := false
 	var args := OS.get_cmdline_user_args()
 	for i in range(args.size()):
 		var a: String = args[i]
@@ -111,6 +118,8 @@ func _ready() -> void:
 			ending = true
 		elif a == "--title":
 			title = true
+		elif a == "--closeup":
+			closeup = true
 		elif a == "--tp" and i + 1 < args.size():
 			var bits := String(args[i + 1]).split(",")
 			if bits.size() == 2:
@@ -127,7 +136,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	if title:
-		await _title_shot(main, out, frames)
+		await _title_shot(main, out, frames, closeup)
 		return
 	if main.has_method("_start_game"):
 		main._start_game(Game.CHARACTERS[0])
@@ -235,7 +244,8 @@ func _ready() -> void:
 ## the full board plus each legend's portrait card from its own
 ## SubViewport — then quit nonzero when any pair of cards is
 ## pixel-near-identical (the all-pink-portraits regression).
-func _title_shot(main: Node, out: String, frames: int) -> void:
+func _title_shot(main: Node, out: String, frames: int,
+		closeup := false) -> void:
 	for i in range(frames):
 		await get_tree().process_frame
 	var img := get_viewport().get_texture().get_image()
@@ -252,6 +262,11 @@ func _title_shot(main: Node, out: String, frames: int) -> void:
 		card.save_png(p)
 		print("title card saved: ", p)
 		cards.append(card)
+	if closeup:
+		# Refs #292: the acceptance is close-up portraits — capture the
+		# face crops while the views are still live, before the gate.
+		await _closeup_cards(views, names,
+				main.get("_portrait_models"), out)
 	var worst := 1.0e9
 	for a in range(cards.size()):
 		for b in range(a + 1, cards.size()):
@@ -267,6 +282,62 @@ func _title_shot(main: Node, out: String, frames: int) -> void:
 	else:
 		print("title cards distinct: worst pair mean diff %.2f" % worst)
 		get_tree().quit(0)
+
+
+## Issue 292 close-up pass: re-frame each legend's portrait
+## SubViewport camera tight on the face. The card cameras sit at a
+## mid-shot distance (fov 30, 2.3 m); parking one at portrait distance
+## on the legend's face line — eye height tracks each legend's own
+## body height — yields a face-filling crop for the owner's eyeball
+## pass vs art-ref-1. The SubViewports keep rendering (LivelyRig bone
+## poses stay live), so two frames after the re-aim the texture holds
+## the tight framing; the distinctness gate above still runs on the
+## standard mid-shot cards.
+func _closeup_cards(views: Array, names: Array, models: Array,
+		out: String) -> void:
+	for idx in range(views.size()):
+		var vp: SubViewport = views[idx]
+		var cams := vp.find_children("*", "Camera3D", true, false)
+		if cams.is_empty():
+			continue
+		var cam: Camera3D = cams[0]
+		var h: float = 1.72
+		if idx < Game.CHARACTERS.size():
+			h = float(Game.CHARACTERS[idx].get("height", 1.72))
+		# Handoff audit 14:27 Nov-13: aiming at h - 0.12 lands on the
+		# hairline (hair-only crops for monty/riya). The rig head sits
+		# lower in the height field; aim at h - 0.25 so the face plane
+		# fills the frame.
+		var face_y := h - 0.25
+		cam.fov = 22.0
+		# Handoff audit 22:15 Nov-13: a FIXED +Z station crops whatever
+		# the title idle happens to show — the select screen rotates
+		# every legend holder at 0.7 rad/s (main.gd _process), so two of
+		# three crops landed back-of-head. Orbit instead: read each
+		# holder's live global basis, flatten to the floor, and park the
+		# camera on the FACE bearing at portrait distance (spawn() authors
+		# holders facing -Z, so forward = -basis.z).
+		var focus := Vector3(0.0, face_y - 0.01, 0.0)
+		var station := Vector3(0.0, face_y + 0.06, 0.85)
+		var rig: Node3D = models[idx] if idx < models.size() else null
+		if rig != null:
+			var fwd := -rig.global_transform.basis.z
+			fwd.y = 0.0
+			fwd = fwd.normalized() \
+					if fwd.length_squared() > 0.0001 \
+					else Vector3(0.0, 0.0, -1.0)
+			focus = Vector3(rig.global_position.x, face_y - 0.01,
+					rig.global_position.z)
+			station = focus + fwd * 0.85 + Vector3.UP * 0.07
+		cam.global_position = station
+		cam.look_at(focus)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var label := String(names[idx]) if idx < names.size() else str(idx)
+		var p := out.get_base_dir().path_join(
+				out.get_file().get_basename() + "-closeup-" + label + ".png")
+		vp.get_texture().get_image().save_png(p)
+		print("close-up card saved: ", p)
 
 
 ## Mean absolute per-channel difference (0..255 scale) of two images;
