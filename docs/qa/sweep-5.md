@@ -960,3 +960,31 @@ No FAIL stands — all runs PASS with 4.5+ ms headroom.
 continuous, no elevation carried forward.** Remaining #296 scope
 unchanged: full post-wave audit leg once #293 lands and #292 is
 adjudicated (blocked-on-owner per the Nov 9 Lane A handoff).
+
+## Interim refresh on master `69e8f8e` (2026-11-14, post-#342)
+
+The Nov 9 close-out left the pinned series resting on an unchanged
+runtime. Since then the world lane landed #340/#342 (paan doorway
+geometry shift + widened doorway) — the first runtime scene deltas since
+the watch item closed — plus capture-tool-only knobs (#339/#341). This
+leg re-runs the pinned gate series, regression, and save round-trip on
+the current tree so the final post-wave audit leg starts from a fresh
+baseline. Method identical to the Nov 9 leg: sequential headless boots,
+weather pinned clear, `WEATHER_STATE` audit line checked in every log,
+zero `SCRIPT ERROR`/`ERROR:` lines in all logs.
+
+| Gate (pinned clear) | avg | p95 | budget | verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 8.05 ms | 11.83 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 8.02 ms | 11.47 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` | 7.82 ms | 10.66 ms | 22.0 ms | PASS |
+
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Save round-trip (`save_check.tscn`): `verdict=PASS`, exit 0.
+
+Reading: both default runs sit just under the 8.2–8.9 ms pinned
+host-load band and the festival run lands below it — the doorway
+geometry change (#340/#342) moved nothing measurable at the gate site.
+**Acceptance: interim refresh fully green on `69e8f8e`; remaining #296
+scope unchanged** — full post-wave audit leg still gated on #293 landing
+and #292 adjudication (blocked-on-owner per the Nov 9 Lane A handoff).
