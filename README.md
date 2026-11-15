@@ -1,11 +1,14 @@
 # Delhi Freetown Loot 🪯🛺
 
-**An indie free-roam loot game set in Delhi** — an original
-open-world homage to the PS2-era classics, built 100% from scratch on
-[Godot 4](https://godotengine.org) (MIT-licensed engine). The city itself is
-procedural — buildings, vehicles, sound and songs are generated in code —
-while humans and props pull from vetted CC0 packs, each one licensed and
+**Delhi's open world — free, in your browser, out now.** No install, no
+launcher, no store page: one link, any device with a browser tab, and
+you're free-roaming the capital. An original indie homage to the PS2-era
+classics, built from scratch on [Godot 4](https://godotengine.org)
+(MIT-licensed engine) — the city procedural in code — while humans and
+props pull from vetted CC0 packs, each one licensed and
 listed in [LICENSES.md](LICENSES.md).
+
+**▶ Play now, free:** <https://ayushsahnios.github.io/delhi-freetown-loot/>
 
 **v1.0 is live** — free roam from minute one. Read the
 [release notes](PLAN.md#8--changelog).
@@ -15,6 +18,23 @@ listed in [LICENSES.md](LICENSES.md).
 | ![India Gate by day](docs/screenshots/gate-day.png) | ![Connaught Place at night](docs/screenshots/cp-night.png) |
 | ![Chandni Chowk](docs/screenshots/chandni-day.png) | ![Riding the metro](docs/screenshots/metro-interior.png) |
 | ![Bazaar crowd](docs/screenshots/crowd-bazaar-181.png) | ![The legend trio](docs/screenshots/realism-lineup-after.png) |
+
+## Out now, free, in your browser
+
+You may have seen the viral trailer for an upcoming Bengaluru-set
+open-world game — big engine, real map data, and a release still months
+out. Delhi Freetown Loot takes the other road: it shipped, and it's free.
+
+| | **Delhi Freetown Loot** | the unreleased Bengaluru project |
+|---|---|---|
+| Playable today | ✅ out now — v1.0 live | ❌ trailer only |
+| Price | free | unknown |
+| Install | none — runs in a browser tab | PC launcher / store |
+| Runs on | desktop and phone browsers | gaming PC |
+| Only-here stuff | rideable metro, monsoon squalls, Diwali window, 3 procedural radio stations | — |
+
+Facts only, no names — we genuinely wish every city its own open world.
+This one is just playable today, for everyone, for free.
 
 ## The city
 
