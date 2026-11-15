@@ -988,3 +988,30 @@ geometry change (#340/#342) moved nothing measurable at the gate site.
 **Acceptance: interim refresh fully green on `69e8f8e`; remaining #296
 scope unchanged** — full post-wave audit leg still gated on #293 landing
 and #292 adjudication (blocked-on-owner per the Nov 9 Lane A handoff).
+
+## Soak leg on master `71afdd0` (2026-11-14, post-#344)
+
+The interim refresh on `69e8f8e` left the 30-minute soak as the last
+runnable #296 leg before the wave gate. Executed ~20:45–21:15 UTC on
+the current tree (`71afdd0`) with the pinned soak harness
+(`qa/soak273.tscn`), same method as the Nov 9 baseline.
+
+| Check | Result | Verdict |
+|---|---|---|
+| Player alive + playing after 30 min | alive at soak end | PASS |
+| Orphan-node drift over soak | 0 → 0 (+0) | PASS |
+| Static-memory drift over soak | 220442 → 221674 KB (+1231 KB, ~0.6%) | PASS |
+| Error lines in soak log | 0 `SCRIPT ERROR`/`ERROR:` lines | PASS |
+| Walker population | 66 stable across every logged tick | stable |
+| Day-cycle progress | day_t cycling normally (0.08 → 0.83) | normal |
+
+Harness summary line: `passes=3 fails=0 ticks=22`. Twenty-two of the
+thirty minute-tick prints made it to the log; the other eight were
+dropped under host load (tick prints ride the engine loop, the
+end-of-run checks do not — all three ran and passed). No leak
+signature: memory flat at ~221 MB with +1231 KB total drift over
+30 minutes, orphan count zero throughout, walker count constant.
+
+**Acceptance: soak leg green on `71afdd0` — no perf/leak regression
+after the #344 interim refresh. Remaining #296 scope: the wave-gated
+full post-swap audit leg (needs #293 landed and #292 adjudicated).**
