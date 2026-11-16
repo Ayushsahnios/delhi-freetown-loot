@@ -1015,3 +1015,38 @@ signature: memory flat at ~221 MB with +1231 KB total drift over
 **Acceptance: soak leg green on `71afdd0` — no perf/leak regression
 after the #344 interim refresh. Remaining #296 scope: the wave-gated
 full post-swap audit leg (needs #293 landed and #292 adjudicated).**
+
+## Interim refresh on master `3bd12f1` (2026-11-16, post-#352)
+
+The `71afdd0` soak leg left the runnable #296 scope resting again.
+Since then the systems lane landed #352 (positioning pass —
+title-screen tagline + first-boot card refresh), the first
+runtime-visible change since the soak. Per the #344 pattern this leg
+re-runs the pinned gate series, save round-trip, and triple verify on
+the current tree: sequential headless boots, weather pinned clear,
+`WEATHER_STATE` audit line checked in every log, zero
+`SCRIPT ERROR`/`ERROR:` lines in all gate logs (the save gate's two
+intentional corrupt-feed parse prints are by-design paths, confirmed
+against `save_check.gd`).
+
+| Gate (pinned clear) | avg | p95 | budget | verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 10.40 ms | 14.73 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 8.97 ms | 13.27 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` | 8.65 ms | 12.41 ms | 22.0 ms | PASS |
+
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Hygiene: clean (single pre-existing triaged `id-token: write` OIDC
+  false positive in `export-web.yml`, excluded since #32).
+- Save round-trip (`save_check.tscn`): `verdict=PASS`, exit 0.
+
+Reading: run 1's 10.40 ms sits above the 8.2–8.9 ms pinned host-load
+band, run 2 (8.97 ms) returns to the band edge, and festival
+(8.65 ms) lands inside it — the same host-load variance signature
+documented and closed as not-reproducing in the #334 watch item.
+Nothing in #352 (title/first-boot text only) touches the sim loop,
+and every run PASSes with 11+ ms budget headroom.
+
+**Acceptance: interim refresh fully green on `3bd12f1`; remaining #296
+scope unchanged** — the wave-gated full post-swap audit leg (needs #293
+landed and #292 adjudicated) plus a final soak on the fully-landed tree.
