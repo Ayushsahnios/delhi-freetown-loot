@@ -1688,7 +1688,7 @@ func _build_select_ui() -> void:
 		box.add_child(btn)
 
 	var hint := Label.new()
-	hint.text = "WASD move · Shift run · E vehicle/metro · F mission · H horn · N radio · Q/R street food · T/Y tailor outfits · Tab switch character · M map · F9 save · X debug hurt · C debug drop · Esc pause\nGamepad · stick move · A interact · B horn · X radio · Y switch · RB sprint · LB map · D-pad food · D-pad L/R tailor · Select pause · Start save · touch pad UI on touchscreens"
+	hint.text = "WASD move · Shift run · E vehicle/metro · F mission · H horn · V bat swing · N radio · Q/R street food · T/Y tailor outfits · Tab switch character · M map · F9 save · X debug hurt · C debug drop · Esc pause\nGamepad · stick move · A interact · B horn · R3 bat · X radio · Y switch · RB sprint · LB map · D-pad food · D-pad L/R tailor · Select pause · Start save · touch pad UI on touchscreens"
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(hint)
@@ -1946,7 +1946,7 @@ func _show_controls_card() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 	var body := Label.new()
-	body.text = "The whole game, free — no install, no launcher, straight from a browser tab.\nWASD move · Shift sprint · E enter or exit vehicles · metro lifts reach the platform\nH horn · N radio · Q chai · R samosa · T buy outfits · B bribe the police\nTab switch legend · M map · P photo mode · F9 save · Esc pause\nYour first job waits at the gold START HERE beacon up the road"
+	body.text = "The whole game, free — no install, no launcher, straight from a browser tab.\nWASD move · Shift sprint · E enter or exit vehicles · metro lifts reach the platform\nH horn · V bat swing (shoves the crowd, defensive only) · N radio · Q chai · R samosa · T buy outfits · B bribe the police\nTab switch legend · M map · P photo mode · F9 save · Esc pause\nYour first job waits at the gold START HERE beacon up the road"
 	body.add_theme_font_size_override("font_size", 14)
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(body)
@@ -2031,6 +2031,14 @@ func _process(delta: float) -> void:
 			_switch_character()
 		if Input.is_action_just_pressed("horn"):
 			_audio.horn(current_auto.kind if current_auto != null else "auto")
+		if current_auto == null and not _metro_riding and Input.is_action_just_pressed("swing"):
+			# Issue #350: defensive bat swing — shove through, never hurt.
+			if player.swing_bat():
+				_peds.bat_shove(player.global_position)
+				if _police.bat_ping(player.global_position):
+					_show_toast("Police clocked the bat — heat up")
+				else:
+					_show_toast("Bat swing — crowd shoved back, nobody hurt")
 		if current_auto != null and Input.is_action_just_pressed("radio"):
 			_hud_radio.text = _radio.cycle_station()
 			_show_toast(_hud_radio.text)

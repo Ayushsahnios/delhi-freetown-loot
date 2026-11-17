@@ -65,6 +65,8 @@ func _setup_inputs() -> void:
 	_add_keys("run", [KEY_SHIFT])
 	_add_keys("interact", [KEY_E])
 	_add_keys("horn", [KEY_H])
+	# Street-defense bat swing (issue #350): V, R3 on the gamepad.
+	_add_keys("swing", [KEY_V])
 	_add_keys("radio", [KEY_N])
 	_add_keys("buy_chai", [KEY_Q])
 	_add_keys("buy_samosa", [KEY_R])
@@ -96,6 +98,7 @@ func _setup_inputs() -> void:
 	_add_joy_axis("move_right", JOY_AXIS_LEFT_X, 1.0)
 	_add_joy_buttons("interact", [JOY_BUTTON_A])
 	_add_joy_buttons("horn", [JOY_BUTTON_B])
+	_add_joy_buttons("swing", [JOY_BUTTON_RIGHT_STICK])
 	_add_joy_buttons("radio", [JOY_BUTTON_X])
 	_add_joy_buttons("switch_character", [JOY_BUTTON_Y])
 	_add_joy_buttons("run", [JOY_BUTTON_RIGHT_SHOULDER])

@@ -38,6 +38,9 @@ const TURN_WINDOW := 0.9
 const PANIC_TIME := 2.6
 const PANIC_SPEED := 8.0
 const SCATTER_RADIUS := 18.0
+## Issue #350: a bat swing only reaches the crowd right beside the
+## player — a shove, not a horn blast.
+const BAT_SHOVE_RADIUS := 5.2
 const REJOIN_SPEED := 5.5
 const REJOIN_LIMIT := 4.0
 const ZONE_EXTRA := 40
@@ -554,8 +557,8 @@ func _pair_snap(v: Dictionary, leader: Dictionary) -> void:
 
 # ---------------------------------------------------------------- panic
 
-func _scatter(origin: Vector3) -> void:
-	## Horn blast: NPCs within SCATTER_RADIUS bolt away from the sound.
+func _scatter(origin: Vector3, radius: float = SCATTER_RADIUS) -> void:
+	## Horn blast: NPCs within the radius bolt away from the sound.
 	## Hawkers hold their stalls — a vendor does not abandon the wares.
 	for v in _peds:
 		if not v.hawker.is_empty():
@@ -573,7 +576,7 @@ func _scatter(origin: Vector3) -> void:
 		_clear_pause(v)
 		var p: Vector3 = v.pos
 		var away := Vector3(p.x - origin.x, 0.0, p.z - origin.z)
-		if away.length() > SCATTER_RADIUS:
+		if away.length() > radius:
 			continue
 		if away.length() < 0.05:
 			away = Vector3(_rng.randf_range(-1.0, 1.0), 0.0, _rng.randf_range(-1.0, 1.0))
@@ -582,6 +585,12 @@ func _scatter(origin: Vector3) -> void:
 		v.cd = 1.0
 		v.panic_dir = away.normalized().rotated(Vector3.UP, _rng.randf_range(-0.6, 0.6))
 
+
+func bat_shove(origin: Vector3) -> void:
+	## Issue #350: defensive bat swing — the walkers a step away stagger
+	## back (tight radius, knock-back only, no harm states of any kind).
+	## Reuses the horn-panic machinery at shove distance.
+	_scatter(origin, BAT_SHOVE_RADIUS)
 
 func vehicle_strike(pos: Vector3, radius: float) -> int:
 	## Player auto plowed into the crowd: stricken NPCs bolt away and the
