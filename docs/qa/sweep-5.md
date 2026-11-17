@@ -1015,3 +1015,40 @@ signature: memory flat at ~221 MB with +1231 KB total drift over
 **Acceptance: soak leg green on `71afdd0` — no perf/leak regression
 after the #344 interim refresh. Remaining #296 scope: the wave-gated
 full post-swap audit leg (needs #293 landed and #292 adjudicated).**
+
+## Interim refresh on master `e255c88` (2026-11-17, post-#354)
+
+The `71afdd0` soak left the pinned series resting again. Since then the
+gameplay lane landed #354 (street-defense cricket-bat melee, knock-back
+only) — the first runtime-visible *gameplay* change since the soak leg,
+touching player/police/pedestrian scripts — while two announced refresh
+legs on `3bd12f1` never reached a PR. This leg re-runs the pinned gate
+series, import/smoke, and save round-trip on the current tree so the
+final post-wave audit leg again starts from a fresh baseline. Method
+identical to the Nov 14 leg: sequential headless boots, weather pinned
+clear, `WEATHER_STATE` audit line checked in every log, zero
+`SCRIPT ERROR`/`ERROR:` lines in import/smoke/perf logs.
+
+| Gate (pinned clear) | avg | p95 | budget | verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 10.34 ms | 20.99 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 9.87 ms | 16.67 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced; Nov 17 is outside the date window) | 9.99 ms | 14.41 ms | 22.0 ms | PASS |
+
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Save round-trip (`save_check.tscn`): `verdict=PASS`, exit 0. The two
+  `ERROR: Parse JSON failed` lines in its log are the harness's own
+  deliberate garbage/corruption inputs (issue 169 design), not
+  regressions.
+
+Reading: both default runs sit just above the 8.2–8.9 ms pinned
+host-load band (10.34 / 9.87), mirroring the #334 watch pair (10.05 /
+9.79) that closed as host-load, not-reproducing on a same-tree
+re-measure. All three gates PASS with 11.7+ ms headroom under budget
+and no error lines anywhere, so no FAIL stands; if the wave-gated final
+audit leg also reads high, it should same-tree re-measure before
+suspecting the melee — no per-run evidence of bat-swing cost here.
+
+**Acceptance: interim refresh fully green on `e255c88`; remaining #296
+scope unchanged** — full post-wave audit leg still gated on #293 landing
+and #292 adjudication (blocked-on-owner per the Nov 9 Lane A handoff).
