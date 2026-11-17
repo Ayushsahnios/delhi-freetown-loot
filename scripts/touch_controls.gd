@@ -48,7 +48,7 @@ func _build() -> void:
 
 	var rows := VBoxContainer.new()
 	rows.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	rows.offset_left = -348.0
+	rows.offset_left = -432.0
 	rows.offset_top = -212.0
 	rows.offset_right = -24.0
 	rows.offset_bottom = -24.0
@@ -64,6 +64,7 @@ func _build() -> void:
 	rows.add_child(top)
 	top.add_child(_make_button("RADIO", ["radio"], 72.0))
 	top.add_child(_make_button("HORN", ["horn"], 72.0))
+	top.add_child(_make_button("BAT", ["swing"], 72.0))
 	top.add_child(_make_button("PAUSE", ["pause"], 72.0))
 	var photo_btn := _make_button("PHOTO", [], 72.0)
 	photo_btn.pressed.connect(_on_photo_pressed)

@@ -20,6 +20,9 @@ const RAM_HEAT := 1.0
 const MAX_HEAT := 5.0
 const MAX_STARS := 5
 const SIGHT := 55.0
+## Issue #350: swinging the bat within this distance of a patrol
+## jeep reads as street trouble — one star, no more.
+const BAT_PING_RADIUS := 14.0
 const ESCAPE_TIME := 8.0
 const COOL_RATE := 0.6
 const ARREST_RADIUS := 9.0
@@ -162,6 +165,16 @@ func jeep_positions() -> Array[Vector3]:
 	for j in _jeeps:
 		pts.append(j.node.position)
 	return pts
+
+func bat_ping(pos: Vector3) -> bool:
+	## Issue #350: the bat came out a swing's length from a patrol.
+	## Brandishing close to the jeeps raises one star (respect rules
+	## apply via _raise as usual). True when the heat actually moved.
+	for p in jeep_positions():
+		if Vector3(p.x - pos.x, 0.0, p.z - pos.z).length() <= BAT_PING_RADIUS:
+			_raise(1.0)
+			return true
+	return false
 
 
 func _raise(amount: float) -> void:
