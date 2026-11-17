@@ -207,6 +207,10 @@ var _bunt_pole_xfs: Array[Vector3] = []
 var _tank_xfs: Array[Transform3D] = []
 var _ac_xfs: Array[Transform3D] = []
 var _dish_xfs: Array[Transform3D] = []
+# Issue 293 bazaar-goods slice: stall-top produce crates — mesh per
+# kind (null marks a failed load -> slab fallback) and their transforms.
+var _stall_crate_meshes: Dictionary = {}
+var _stall_crate_xfs: Dictionary = {}
 var _pillar_xfs: Array[Transform3D] = []
 var _metro_seg_xfs: Array[Transform3D] = []
 var _win_xfs: Array[Transform3D] = []
@@ -777,6 +781,11 @@ func _commit_props() -> void:
 	_add_prop_mm(CityDressingScript.tank_mesh(), _tank_xfs)
 	_add_prop_mm(CityDressingScript.ac_mesh(), _ac_xfs)
 	_add_prop_mm(CityDressingScript.dish_mesh(), _dish_xfs)
+	# Issue 293 bazaar-goods slice: one MultiMesh per produce kind for
+	# the stall-top crates collected by _stall().
+	for kind: String in _stall_crate_xfs:
+		_add_prop_mm(_stall_crate_meshes[kind],
+				_stall_crate_xfs[kind])
 	var pillar := CylinderMesh.new()
 	pillar.top_radius = 0.8
 	pillar.bottom_radius = 1.0
@@ -1283,10 +1292,33 @@ func _stall(pos: Vector3, face: float, idx: int) -> void:
 	for side in [-2.2, 2.2]:
 		_dist_box(Vector3(0.22, 5.6, 0.22), Vector3(ax, 2.8, pos.z + side),
 				Color(0.35, 0.25, 0.16))
+	# Issue 293 bazaar-goods slice: stall-top goods swap from flat fruit
+	# slabs to the KayKit Restaurant Bits CC0 produce stacks already
+	# vendored for the kerb clusters (assets/props/marketgoods/,
+	# LICENSES.md), through the proven world_clutter loader. One
+	# deterministic stall -> kind map ((idx * 2 + g) % 5); the flat
+	# slabs stay as the automatic fallback if a glTF ever fails to
+	# load. Committed as one MultiMesh per kind in _commit_props() —
+	# no colliders, same as the slabs they replace (the solid counter
+	# box already collides).
+	var kinds := ["carrots", "onions", "potatoes", "tomatoes", "lettuce"]
 	var fruit := [Color(0.95, 0.55, 0.10), Color(0.25, 0.65, 0.25), Color(0.90, 0.20, 0.20), Color(0.95, 0.85, 0.30)]
 	for g in range(2):
-		_dist_box(Vector3(1.1, 1.0, 1.3), Vector3(pos.x, 2.75, pos.z + (1.0 if g == 0 else -1.0)),
-				fruit[(idx + g) % 4])
+		var kind: String = kinds[(idx * 2 + g) % 5]
+		if not _stall_crate_meshes.has(kind):
+			_stall_crate_meshes[kind] = ClutterScript._kaykit_stack(
+					"res://assets/props/marketgoods/crate_%s.gltf" % kind)
+		var gz := pos.z + (1.0 if g == 0 else -1.0)
+		if _stall_crate_meshes[kind] != null:
+			if not _stall_crate_xfs.has(kind):
+				_stall_crate_xfs[kind] = [] as Array[Transform3D]
+			var yaw := 0.15 * face + (0.10 if g == 0 else -0.10)
+			var b := Basis(Vector3.UP, yaw).scaled(Vector3.ONE * 1.25)
+			(_stall_crate_xfs[kind] as Array[Transform3D]).append(
+					Transform3D(b, Vector3(pos.x, 2.2, gz)))
+		else:
+			_dist_box(Vector3(1.1, 1.0, 1.3), Vector3(pos.x, 2.75, gz),
+					fruit[(idx + g) % 4])
 
 
 func _bunting(street: float, bz: float) -> void:
