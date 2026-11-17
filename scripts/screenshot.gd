@@ -58,6 +58,11 @@ extends Node
 ##                 the swap's acceptance is *close-up* portraits that
 ##                 read as people, not puppets — title-card framing is
 ##                 a mid-shot; files land as <out-base>-closeup-*.png)
+##   --card M      slam the #349 busted/gaya card in after settling
+##                 ("busted" = PAKDE GAYE with a 4-star sub-line,
+##                 "gaya" = GAYA with the desat wash); ~75 frames of
+##                 title tween + bar breathing play out before the
+##                 capture, saving the full-screen README/IG card shot
 
 const MAIN_SCENE := preload("res://scenes/main.tscn")
 
@@ -88,6 +93,7 @@ func _ready() -> void:
 	var ending := false
 	var metro := false
 	var title := false
+	var cardmode := ""
 	var closeup := false
 	var args := OS.get_cmdline_user_args()
 	for i in range(args.size()):
@@ -118,6 +124,8 @@ func _ready() -> void:
 			ending = true
 		elif a == "--title":
 			title = true
+		elif a == "--card" and i + 1 < args.size():
+			cardmode = String(args[i + 1])
 		elif a == "--closeup":
 			closeup = true
 		elif a == "--tp" and i + 1 < args.size():
@@ -211,6 +219,20 @@ func _ready() -> void:
 
 	for i in range(frames):
 		await get_tree().process_frame
+
+	if cardmode != "":
+		# Issue #349 acceptance: slam the busted/gaya card in post-settle
+		# and let the title tween + bar breathing play out (~75 frames)
+		# before the capture. This runs after --no-hud, so a paired flag
+		# gives a clean world under the card.
+		var bc: Node = main.get("_busted_card")
+		if bc != null and bc.has_method("show_busted"):
+			if cardmode == "busted":
+				bc.show_busted(4, 400)
+			else:
+				bc.show_wasted()
+			for i in range(75):
+				await get_tree().process_frame
 
 	if camelev > 0.0:
 		# Refs #293 attempt 8 (doorway shot): lift the settled chase cam

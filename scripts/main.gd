@@ -28,6 +28,7 @@ const MissionScript := preload("res://scripts/missions.gd")
 const AudioScript := preload("res://scripts/audio.gd")
 const RadioScript := preload("res://scripts/radio.gd")
 const ChaseScript := preload("res://scripts/chase_music.gd")
+const BustedCardScript := preload("res://scripts/busted_card.gd")
 const ScoreScript := preload("res://scripts/score.gd")
 const LodScript := preload("res://scripts/lod.gd")
 const QualityScript := preload("res://scripts/quality.gd")
@@ -175,7 +176,6 @@ var _chaos_cd := 0.0
 var _flash: ColorRect
 var _fade: ColorRect
 var _hud_msg: Label
-var _hud_msg_sub: Label
 var _controls_card: CanvasLayer = null
 var _card_alive := 0.0
 var _flash_tween: Tween
@@ -195,6 +195,7 @@ var _road_mat: StandardMaterial3D
 var _applied_wet := -1.0
 var _touch: CanvasLayer
 var _pause: CanvasLayer
+var _busted_card: CanvasLayer
 var _credits: CanvasLayer
 var _stats_page: CanvasLayer
 ## Distance driven this session, in metres (issue #211 stats page).
@@ -388,6 +389,10 @@ func _ready() -> void:
 	_pause = PauseScript.new()
 	_pause.setup(self)
 	add_child(_pause)
+	# Issue #349: full-screen PAKDE GAYE / GAYA cards live on layer 25,
+	# above the respawn fade but under the pause menu (layer 30).
+	_busted_card = BustedCardScript.new()
+	add_child(_busted_card)
 	_credits = CreditsScript.new()
 	_credits.setup(self)
 	add_child(_credits)
@@ -1603,16 +1608,6 @@ func _build_hud() -> void:
 	_hud_msg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_msg.visible = false
 	layer.add_child(_hud_msg)
-	_hud_msg_sub = Label.new()
-	_hud_msg_sub.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_hud_msg_sub.offset_top = 64.0
-	_hud_msg_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hud_msg_sub.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_hud_msg_sub.add_theme_font_size_override("font_size", 15)
-	_hud_msg_sub.add_theme_color_override("font_color", Color(0.93, 0.93, 0.86))
-	_hud_msg_sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hud_msg_sub.visible = false
-	layer.add_child(_hud_msg_sub)
 	_toast = Label.new()
 	_toast.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_toast.offset_bottom = -46.0
@@ -2905,10 +2900,7 @@ func _on_died() -> void:
 		_metro_clear_ride()
 	player.controls_enabled = false
 	var lm := _nearest_landmark(player.global_position)
-	_hud_msg.text = "DOWN & OUT"
-	_hud_msg.visible = true
-	_hud_msg_sub.text = "Health hit zero — the street knocked you out.\nRunning job dropped · cash safe · waking at the nearest landmark"
-	_hud_msg_sub.visible = true
+	_busted_card.show_wasted()
 	var tw := create_tween()
 	tw.tween_property(_fade, "color:a", 1.0, 0.7)
 	tw.tween_callback(_do_respawn.bind(lm))
@@ -2920,6 +2912,8 @@ func _on_died() -> void:
 
 
 func _do_respawn(lm: Dictionary) -> void:
+	_busted_card.hide_card()
+	_hud_msg.visible = true
 	_health.invulnerable = true
 	_health.respawn_reset()
 	player.global_position = lm.spawn
@@ -2930,7 +2924,7 @@ func _do_respawn(lm: Dictionary) -> void:
 
 func _respawn_done() -> void:
 	_hud_msg.visible = false
-	_hud_msg_sub.visible = false
+	_busted_card.hide_card()
 	_dead = false
 	player.controls_enabled = true
 	if _missions != null:
@@ -2977,10 +2971,7 @@ func _start_busted_flow() -> void:
 	_flash.color = Color(0.20, 0.35, 0.95, 0.45)
 	_flash_tween = create_tween()
 	_flash_tween.tween_property(_flash, "color:a", 0.0, 0.6)
-	_hud_msg.text = "BUSTED"
-	_hud_msg.visible = true
-	_hud_msg_sub.text = "Caught at %d-star heat — Rs %d seized from your job wallet.\nHeat cleared · released outside the police station" % [stars, fine]
-	_hud_msg_sub.visible = true
+	_busted_card.show_busted(stars, fine)
 	var tw := create_tween()
 	tw.tween_property(_fade, "color:a", 1.0, 0.7)
 	tw.tween_callback(_do_busted_respawn.bind(fine))
@@ -2992,6 +2983,8 @@ func _start_busted_flow() -> void:
 
 
 func _do_busted_respawn(fine: int) -> void:
+	_busted_card.hide_card()
+	_hud_msg.visible = true
 	_taxi.drop_fare("busted")
 	_courier.drop_parcel("busted")
 	var station := _police_station()
