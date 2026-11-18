@@ -25,6 +25,7 @@ const LANDMARKS := [
 const BUMP_SITES := [Vector2i(5, 5), Vector2i(4, 7)]  # CP, Chandni Chowk
 
 const STOP_OFFSET := 7.1  ## shelter center from road center (band 6.0..8.2)
+const CHAIR_PATH := "res://assets/props/furniture/Chair.obj"
 const BUMP_DIST := 11.5  ## strip center from intersection center
 const BUMP_HALF_SPAN := 5.6  ## strip reach across the road (lane band +-5.6)
 const BUMP_DEPTH := 2.4  ## strip length along the traffic direction
@@ -54,9 +55,10 @@ static func build(world: float, pitch: float, road_w: float,
 	var root := Node3D.new()
 	var added := false
 	if not stops.is_empty():
+		var bench_fallback := load(CHAIR_PATH) as Mesh == null
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = _stop_mesh()
+		mm.mesh = _stop_mesh(bench_fallback)
 		mm.instance_count = stops.size()
 		for i in stops.size():
 			mm.set_instance_transform(i, stops[i])
@@ -64,6 +66,7 @@ static func build(world: float, pitch: float, road_w: float,
 		mmi.multimesh = mm
 		root.add_child(mmi)
 		added = true
+		_bench_chairs(root, stops, bench_fallback)
 	if not bumps.is_empty():
 		var b := MeshTools.new()
 		for bump: Dictionary in bumps:
@@ -118,17 +121,19 @@ static func _put_stop(out: Array[Transform3D], seen: Dictionary,
 	return true
 
 
-static func _stop_mesh() -> ArrayMesh:
-	## One shelter: bench with backrest, two posts under a roof, a
-	## windbreak panel behind the bench and a route-sign pole with a
-	## striped board. Local front is -Z (toward the road); the origin
-	## sits on the sidewalk surface.
+static func _stop_mesh(bench_fallback: bool) -> ArrayMesh:
+	## One shelter: two posts under a roof, a windbreak panel behind
+	## the seats and a route-sign pole with a striped board. Local front
+	## is -Z (toward the road); the origin sits on the sidewalk surface.
+	## The seats are the CC0 chairs from _bench_chairs(); the old
+	## procedural slat bench returns ONLY when the chair asset is
+	## missing (loader fallback).
 	var b := MeshTools.new()
-	# bench
-	_sb(b, Vector3(1.8, 0.07, 0.45), Vector3(0, 0.45, -0.15), SLAT)
-	_sb(b, Vector3(0.07, 0.45, 0.40), Vector3(-0.75, 0.225, -0.15), FRAME)
-	_sb(b, Vector3(0.07, 0.45, 0.40), Vector3(0.75, 0.225, -0.15), FRAME)
-	_sb(b, Vector3(1.8, 0.35, 0.06), Vector3(0, 0.72, 0.10), SLAT)
+	if bench_fallback:
+		_sb(b, Vector3(1.8, 0.07, 0.45), Vector3(0, 0.45, -0.15), SLAT)
+		_sb(b, Vector3(0.07, 0.45, 0.40), Vector3(-0.75, 0.225, -0.15), FRAME)
+		_sb(b, Vector3(0.07, 0.45, 0.40), Vector3(0.75, 0.225, -0.15), FRAME)
+		_sb(b, Vector3(1.8, 0.35, 0.06), Vector3(0, 0.72, 0.10), SLAT)
 	# shelter — four posts, not two: thicker sticks at the back plus a
 	# matching pair at the road-side corners, so the roof never reads as
 	# a floating slab at capture distance (issue #103 sweep finding)
@@ -150,6 +155,45 @@ static func _stop_mesh() -> ArrayMesh:
 static func _sb(b: MeshTools, size: Vector3, pos: Vector3, color: Color) -> void:
 	## Box lifted onto the sidewalk surface (CURB_H from roads.gd).
 	b.add_box(size, Vector3(pos.x, Roads.CURB_H + pos.y, pos.z), color)
+
+
+static func _bench_chairs(root: Node3D, stops: Array[Transform3D],
+		bench_fallback: bool) -> void:
+	## Issue #293 bus-shelter bench swap: two vendored CC0 chairs
+	## (Quaternius furniture set, CC0 — assets/props/furniture/
+	## LICENSE.txt) replace the procedural slat bench at every stop —
+	## the same asset the railway platforms ride. One MultiMesh for all
+	## shelters keeps it a single draw call; native scale, shadows off,
+	## deterministic offsets (DE-BOX directive: no new box seating).
+	if bench_fallback:
+		return  # _stop_mesh() already carries the fallback bench.
+	var mesh := load(CHAIR_PATH) as Mesh
+	if mesh == null:
+		return
+	var cm := MultiMesh.new()
+	cm.transform_format = MultiMesh.TRANSFORM_3D
+	cm.mesh = mesh
+	cm.instance_count = stops.size() * 2
+	var i := 0
+	for t: Transform3D in stops:
+		for off: Transform3D in _chair_offsets():
+			cm.set_instance_transform(i, t * off)
+			i += 1
+	var cmi := MultiMeshInstance3D.new()
+	cmi.multimesh = cm
+	cmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(cmi)
+
+
+static func _chair_offsets() -> Array[Transform3D]:
+	## Two chairs where the bench sat: spaced along the shelter length,
+	## lifted onto the sidewalk, both facing the road (local -Z; the
+	## model faces -Z natively, bbox 0.44 x 0.99 x 0.43 m).
+	var out: Array[Transform3D] = []
+	for x in [-0.45, 0.45]:
+		out.append(Transform3D(Basis(),
+				Vector3(x, Roads.CURB_H, -0.10)))
+	return out
 
 
 # ------------------------------------------------------------ speed bumps

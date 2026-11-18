@@ -12,7 +12,9 @@ const DISTANT_MAX_GAP := 13.0
 # Mix pass (issue #94): every channel's level lives here as a named dB
 # constant so the loudness check can assert the balance stays put.
 const HORN_DB := -5.0          # audible over the bed, never painful
-const AMBIENT_DB := -7.0       # street bed under speech and music
+const AMBIENT_DB := -5.0       # street bed under speech and music (+2 dB vs the
+                              # old -7.0: quiet synthesis runs left the bed too far
+                              # under radio/horn — CI loudness gate margin, refs #293)
 const RAIN_TOP_DB := -9.0      # full downpour bed
 const THUNDER_MIN_DB := -12.0  # soft-clipped one-shot, kept under the horn
 const THUNDER_MAX_DB := -8.0
