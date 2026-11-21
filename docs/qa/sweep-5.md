@@ -1125,3 +1125,36 @@ on street shelters; no cost from it is visible here (all gates hold
 scope unchanged** — full post-wave audit leg still gated on #293
 landing and #292 adjudication (blocked-on-owner per the Nov 9 Lane A
 handoff).
+
+## Interim refresh on master `ad26943` (2026-11-21, post-#361)
+
+The `31a2388` refresh (merged as #360) was the last documented
+baseline. Since then the loop merged #361 (Kaali-Peeli garage slice 1 —
+15-rung vehicle ladder data + headless garage_check gate; runtime is
+data-only until the garage UI slice consumes it). This leg re-runs the
+pinned gate series, import/smoke, and save round-trip on the current
+tree so the wave-gated final audit leg starts from a fresh baseline.
+Method identical to the `31a2388` leg: sequential headless boots,
+weather pinned clear, `WEATHER_STATE` audit line checked in every
+perf log.
+
+| Gate (pinned clear) | avg | p95 | budget | verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 10.10 ms | 14.99 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 9.73 ms | 14.03 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 10.50 ms | 14.92 ms | 22.0 ms | PASS |
+
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Save round-trip (`save_check.tscn`): `verdict=PASS`, exit 0.
+- Hygiene grep (repo-wide, usual exclusions): clean.
+
+Reading: both default runs sit inside the pinned host band (10.10 /
+9.73 ms) — the same sequential-boot spread every leg since `caf9985`
+has shown and closed as host-load. #361's ladder data is inert until
+the garage UI slice lands, and no cost from it is visible here (all
+gates hold 11+ ms headroom under budget, zero error lines anywhere).
+
+**Acceptance: interim refresh fully green on `ad26943`; remaining #296
+scope unchanged** — full post-wave audit leg still gated on #293
+landing and #292 adjudication (blocked-on-owner per the Nov 9 Lane A
+handoff).
