@@ -221,7 +221,11 @@ static func build(world: float, pitch: float, road_w: float) -> Node3D:
 			Vector3(1.3, 0.9, 1.0))
 	_prop(root, _sack_mesh(JUTE_DARK), [sacks[1], sacks[4]],
 			Vector3(1.3, 0.9, 1.0))
-	_prop(root, _tray_mesh(), trays, Vector3(0.7, 1.0, 0.7))
+	var cc0_tray := _cc0_tray_mesh()
+	if cc0_tray != null:
+		_prop(root, cc0_tray, trays, Vector3(0.7, 1.0, 0.7))
+	else:
+		_prop(root, _tray_mesh(), trays, Vector3(0.7, 1.0, 0.7))
 	# Issue 293 first CC0 slice: a Quaternius stool (CC0, LICENSES.md)
 	# beside each chai point — extra seating, same multimesh + collider
 	# pattern as everything else in this file.
@@ -550,9 +554,39 @@ static func _sack_mesh(jute: Color) -> ArrayMesh:
 	return b.build_mesh()
 
 
+static func _cc0_tray_mesh() -> ArrayMesh:
+	## Issue 293 CC0 swap: chai point rebuilt from vendored CC0 pieces —
+	## Quaternius Stool base with a KayKit Restaurant Bits kettle, bowl
+	## and plate set on top (hand-placed yaw jitter). Returns null when
+	## any asset is missing so callers keep the procedural composite.
+	var stool := load("res://assets/props/furniture/Stool.obj") as ArrayMesh
+	var kettle := _kaykit_first_mesh(
+			"res://assets/props/marketgoods/pot_large.gltf")
+	var bowl := _kaykit_first_mesh(
+			"res://assets/props/marketgoods/bowl_small.gltf")
+	var plate := _kaykit_first_mesh(
+			"res://assets/props/marketgoods/plate_small.gltf")
+	if stool == null or kettle == null or bowl == null or plate == null:
+		return null
+	const TOP := 0.533  # measured Stool.obj AABB top, native scale
+	var out := ArrayMesh.new()
+	_add_crate_surfaces(out, stool,
+			Transform3D(Basis(Vector3.UP, 0.05), Vector3.ZERO), 1.0)
+	_add_crate_surfaces(out, kettle,
+			Transform3D(Basis(Vector3.UP, 0.18),
+					Vector3(0.0, TOP, -0.12)), 0.30)
+	_add_crate_surfaces(out, plate,
+			Transform3D(Basis(Vector3.UP, -0.50),
+					Vector3(0.12, TOP, 0.14)), 0.34)
+	_add_crate_surfaces(out, bowl,
+			Transform3D(Basis(Vector3.UP, 0.70),
+					Vector3(-0.12, TOP, 0.14)), 0.34)
+	return out
+
+
 static func _tray_mesh() -> ArrayMesh:
 	## Chai point: wooden stool, steel tray, six glasses, thermos.
-	## Chai point: wooden stool, steel tray, six glasses, thermos.
+	## Procedural fallback when the CC0 chai props fail to load.
 	var b := MeshTools.new()
 	for lx in [-0.16, 0.16]:
 		for lz in [-0.16, 0.16]:
