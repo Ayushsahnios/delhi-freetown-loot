@@ -1033,6 +1033,44 @@ func _wardrobe(holder: Node3D, id: Dictionary) -> void:
 		return
 	var gear := Node3D.new()
 	holder.add_child(gear)
+	# Issue #292 wardrobe audit: candidate bodies (modeled faces)
+	# ship authored garments — the box/capsule outfit overlays layered
+	# over modeled cloth are exactly the robot tells this issue strips,
+	# so they attach on legacy primitive rigs only. The porter head-load
+	# below stays on every body: it reads well at gameplay distance and
+	# carries the role's silhouette; tint + prints (dress) keep the
+	# seeded variety on candidates.
+	var modeled := _has_modeled_face(holder)
+	if not modeled:
+		_outfit_overlays(gear, id, h)
+	if int(id.get("role", 0)) == 1:
+		# Porter head-load: a cloth-wrapped bundle balanced on a ring, in
+		# world units off the rendered height (the same holder-fixed
+		# pattern as the skirts — head-bone space proved unreliable for
+		# this offset, the wardrobe gate measures the result instead).
+		var bundle := SphereMesh.new()
+		bundle.radius = 0.055 * h
+		bundle.height = 0.11 * h
+		_held_mesh(gear, bundle, _solid(BUNDLE_CLOTH),
+				Transform3D(Basis().scaled(Vector3(1.15, 0.62, 1.15)),
+						Vector3(0.0, 0.975 * h, 0.0)))
+		var ring := TorusMesh.new()
+		ring.inner_radius = 0.033 * h
+		ring.outer_radius = 0.046 * h
+		ring.rings = 36
+		ring.ring_segments = 8
+		_held_mesh(gear, ring, _solid(BUNDLE_CLOTH),
+				Transform3D(Basis().scaled(Vector3(1.0, 0.5, 1.0)),
+						Vector3(0.0, 0.925 * h, 0.0)))
+
+
+## Issue #292 — procedural garment overlays: kurta skirt +
+## contrast collar, lungi wrap, saree petticoat + pallu (issues
+## #134/#182). Legacy primitive rigs only: the CC0 candidates ship
+## authored garments, and these box/capsule slabs layered over
+## modeled cloth are the robot tells this issue strips; dress()
+## keeps tint + prints + the porter bundle for candidate variety.
+func _outfit_overlays(gear: Node3D, id: Dictionary, h: float) -> void:
 	match int(id.get("outfit", W_WESTERN)):
 		W_KURTA:
 			# Kurta/kameez: loose tunic skirt from waist to the knees.
@@ -1088,25 +1126,6 @@ func _wardrobe(holder: Node3D, id: Dictionary) -> void:
 			var xf := Transform3D(Basis(Vector3(0.0, 0.0, 1.0), 0.55)
 					* Basis(Vector3.UP, 0.5), Vector3(0.0, 0.56 * h, 0.0))
 			_held_mesh(gear, pallu, smat, xf)
-	if int(id.get("role", 0)) == 1:
-		# Porter head-load: a cloth-wrapped bundle balanced on a ring, in
-		# world units off the rendered height (the same holder-fixed
-		# pattern as the skirts — head-bone space proved unreliable for
-		# this offset, the wardrobe gate measures the result instead).
-		var bundle := SphereMesh.new()
-		bundle.radius = 0.055 * h
-		bundle.height = 0.11 * h
-		_held_mesh(gear, bundle, _solid(BUNDLE_CLOTH),
-				Transform3D(Basis().scaled(Vector3(1.15, 0.62, 1.15)),
-						Vector3(0.0, 0.975 * h, 0.0)))
-		var ring := TorusMesh.new()
-		ring.inner_radius = 0.033 * h
-		ring.outer_radius = 0.046 * h
-		ring.rings = 36
-		ring.ring_segments = 8
-		_held_mesh(gear, ring, _solid(BUNDLE_CLOTH),
-				Transform3D(Basis().scaled(Vector3(1.0, 0.5, 1.0)),
-						Vector3(0.0, 0.925 * h, 0.0)))
 
 
 ## Footwear (issue 158): every walker gets defined shoes so feet stop
