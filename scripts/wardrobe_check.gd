@@ -81,6 +81,23 @@ const LINEUP := [
 		"over": {"outfit": Chars.W_KURTA, "role": 0, "collar": true,
 			"hat": Color(0.85, 0.72, 0.20)},
 		"want": "kurta skirt", "collar": true},
+	# Issue #292 wardrobe audit — Worker-pair candidate slots: the CC0
+	# bodies ship authored garments, so kurta/lungi/saree overlays must
+	# NOT attach (box/capsule slabs over modeled cloth were the robot
+	# tells); the porter head-load bundle stays on every body.
+	{"model": Chars.WORKER_M, "seed": 211, "female": false,
+		"over": {"outfit": Chars.W_KURTA, "role": 0, "collar": true},
+		"want": "", "want_none": true},
+	{"model": Chars.WORKER_F, "seed": 223, "female": true,
+		"over": {"outfit": Chars.W_SAREE, "role": 0},
+		"want": "", "want_none": true},
+	{"model": Chars.WORKER_M, "seed": 227, "female": false,
+		"over": {"outfit": Chars.W_LUNGI, "role": 0},
+		"want": "", "want_none": true},
+	{"model": Chars.WORKER_M, "seed": 229, "female": false,
+		"over": {"outfit": Chars.W_KURTA, "role": 1,
+			"shirt": Color(0.62, 0.16, 0.12)},
+		"want": "porter bundle", "want_top": 1.35},
 ]
 
 
@@ -106,6 +123,9 @@ func _ready() -> void:
 		if String(spec["want"]) != "" and not _has_wardrobe_mesh(holder):
 			_problems.append("lineup %d (%s) missing wardrobe mesh for: %s"
 				% [i, String(spec["model"]).get_file(), String(spec["want"])])
+		if spec.get("want_none", false) and _has_wardrobe_mesh(holder):
+			_problems.append("lineup %d (%s) candidate body carries wardrobe overlays (issue #292 gate failed)"
+				% [i, String(spec["model"]).get_file()])
 		if spec.get("print", false) and not _has_print_mat(holder):
 			_problems.append("lineup %d missing print material (print %s)"
 				% [i, str((spec["over"] as Dictionary).get("print", 0))])
@@ -179,9 +199,9 @@ func _has_collar_meshes(holder: Node3D) -> bool:
 ## Camera + light + ground so the capture reads at gameplay scale.
 func _stage() -> void:
 	var cam := Camera3D.new()
-	# Issue 182: 13 lineup slots — pulled back so the full wardrobe row
-	# (and its prints) frames at a gameplay-distance camera.
-	cam.position = Vector3(0.0, 1.2, -7.6)
+	# Issue 182 + #292: 17 lineup slots — pulled back so the full
+	# wardrobe row (and its prints) frames at a gameplay-distance camera.
+	cam.position = Vector3(0.0, 1.2, -9.4)
 	cam.look_at_from_position(cam.position, Vector3(0.0, 0.95, 0.0), Vector3.UP)
 	add_child(cam)
 	cam.make_current()
