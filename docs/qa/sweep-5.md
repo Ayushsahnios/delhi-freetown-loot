@@ -1158,3 +1158,40 @@ gates hold 11+ ms headroom under budget, zero error lines anywhere).
 scope unchanged** — full post-wave audit leg still gated on #293
 landing and #292 adjudication (blocked-on-owner per the Nov 9 Lane A
 handoff).
+
+## Interim refresh on master `79e862a` (2026-11-21, post-#363)
+
+The `ad26943` refresh (merged as #362) was the last documented
+baseline. Since then the loop merged #363 (wardrobe audit — box/capsule
+outfit overlays now attach on legacy rigs only, porter bundle stays on
+every body; refs #292). That is a runtime-visible character-dressing
+change, so this leg re-runs the pinned gate series, import/smoke, and
+save round-trip on the current tree so the wave-gated final audit leg
+starts from a fresh baseline. Method identical to the `ad26943` leg:
+sequential headless boots, weather pinned clear, `WEATHER_STATE` audit
+line checked in every perf log.
+
+| Gate (pinned clear) | avg | p95 | budget | verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 8.27 ms | 12.94 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 8.39 ms | 11.07 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 9.83 ms | 14.30 ms | 22.0 ms | PASS |
+
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Save round-trip (`save_check.tscn`): `verdict=PASS`, exit 0. The two
+  `ERROR: Parse JSON` lines in its log are the harness's own
+  deliberate garbage/corruption inputs (issue 169 design), not
+  regressions.
+- Hygiene grep (repo-wide, usual exclusions): clean.
+
+Reading: both default runs sit inside the pinned host band (8.27 /
+8.39 ms) — the same sequential-boot spread every leg since `caf9985`
+has shown and closed as host-load. #363's overlay gating removes
+per-frame dressing work (legacy rigs only) rather than adding it, and
+no cost is visible here (all gates hold 12+ ms headroom under budget,
+zero error lines anywhere).
+
+**Acceptance: interim refresh fully green on `79e862a`; remaining #296
+scope unchanged** — full post-wave audit leg still gated on #293
+landing and #292 adjudication (blocked-on-owner per the Nov 9 Lane A
+handoff).
