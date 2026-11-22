@@ -1195,3 +1195,34 @@ zero error lines anywhere).
 scope unchanged** — full post-wave audit leg still gated on #293
 landing and #292 adjudication (blocked-on-owner per the Nov 9 Lane A
 handoff).
+
+## Interim refresh on master `ab2f77d` (2026-11-22, post-#365)
+
+The `79e862a` refresh (merged as #364) was the last documented
+baseline. Since then the loop merged #365 (chai-point CC0 swap —
+Quaternius stool base + KayKit kettle/bowl/plate replace the
+procedural chai props; refs #293). That is a runtime-visible
+world-content change, so this leg re-runs the pinned gate series,
+import/smoke, and save round-trip on the current tree. Method
+identical to the `79e862a` leg: sequential headless boots, weather
+pinned clear, `WEATHER_STATE` audit line checked in every perf log.
+
+| Gate (pinned clear) | avg | p95 | budget | verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 9.82 ms | 14.07 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 8.70 ms | 13.32 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 8.78 ms | 13.04 ms | 22.0 ms | PASS |
+
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Save round-trip (`save_check.tscn`): `verdict=PASS`, exit 0.
+- Hygiene grep (repo-wide, usual exclusions): clean.
+
+Reading: all three gates sit inside the sequential-boot spread every
+leg since `caf9985` has shown and closed as host-load (8.70–9.82 ms
+avg, 12+ ms headroom under budget). #365 swaps four static props at
+one chai point for modeled GLBs; no measurable simulation cost.
+
+**Acceptance: interim refresh fully green on `ab2f77d`; remaining #296
+scope unchanged** — full post-wave audit leg still gated on #293
+landing and #292 adjudication (blocked-on-owner per the Nov 9 Lane A
+handoff).
