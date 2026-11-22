@@ -115,6 +115,21 @@ static func unlock_of(id: String) -> int:
 	return int(entry.get("unlock", 0)) if not entry.is_empty() else -1
 
 
+static func auto_kind(body: String) -> String:
+	## Ladder body name -> auto.gd builder kind. The ladder speaks
+	## showroom (rickshaw/hatch); the street fleet speaks chassis
+	## (auto/car). Unknown bodies map to "" so callers can gate.
+	match body:
+		"rickshaw":
+			return "auto"
+		"hatch":
+			return "car"
+		"scooter", "van", "tempo", "truck", "tanker":
+			return body
+		_:
+			return ""
+
+
 func buy_gate(id: String, cash: int, missions_done: int) -> String:
 	## "" = buyable. Reasons: "unknown" id, "locked" (unlock gate),
 	## "broke" (wallet short), "owned" (already in the garage).

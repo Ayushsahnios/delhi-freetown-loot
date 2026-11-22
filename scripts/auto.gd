@@ -33,6 +33,10 @@ const ShadowBlob := preload("res://scripts/shadowblob.gd")
 const Exhaust := preload("res://scripts/exhaust.gd")
 
 var driver_inside := false
+## Garage-specified paint index (issue #347): -1 keeps the random
+## paint the street fleet rolls on. Set BEFORE setup() so the body
+## builder picks it up.
+var _forced_paint := -1
 ## Traction 0..1 — monsoon wetness lowers it: wider turns, longer
 ## brake slides and momentum that keeps drifting through the turn.
 var grip := 1.0
@@ -179,7 +183,24 @@ func _build_tanker() -> void:
 
 
 func _random_paint() -> Color:
+	if _forced_paint >= 0 and _forced_paint < Vehicles.PAINTS.size():
+		return Vehicles.PAINTS[_forced_paint]
 	return Vehicles.PAINTS[_rng.randi_range(0, Vehicles.PAINTS.size() - 1)]
+
+
+func set_paint(idx: int) -> void:
+	## Garage rung paint (issue #347): pin this ride to a ladder colour
+	## instead of the lottery. Invalid indexes fall back to random.
+	_forced_paint = idx
+
+
+func tune(top: float, pickup: float) -> void:
+	## Garage rung multipliers (issue #347): scale this ride's top speed
+	## and acceleration off the stock kind spec. Call after setup();
+	## the spec is duplicated so the shared KINDS table stays untouched.
+	_spec = _spec.duplicate()
+	_spec["max_speed"] = float(_spec["max_speed"]) * top
+	_spec["accel"] = float(_spec["accel"]) * pickup
 
 
 func _body_node(b: MeshTools) -> MeshInstance3D:
