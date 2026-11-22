@@ -18,6 +18,8 @@ const START_CASH := 80
 
 const PlayerScript := preload("res://scripts/player.gd")
 const AutoScript := preload("res://scripts/auto.gd")
+const Garage := preload("res://scripts/garage.gd")
+const GaragePad := preload("res://scripts/garage_pad.gd")
 const TrafficScript := preload("res://scripts/traffic.gd")
 const VehiclesScript := preload("res://scripts/vehicles.gd")
 const PedestrianScript := preload("res://scripts/pedestrians.gd")
@@ -120,6 +122,10 @@ var day_t := 0.32
 ## -1.0 = unset, so a fresh boot or save load never fires it falsely.
 var _prev_day_t := -1.0
 var current_auto: CharacterBody3D = null
+## Kaali-Peeli garage (issue #347): the ladder data + owned-vehicle
+## state rides every save; the pad below is its street presence.
+var _garage := Garage.new()
+var _garage_pad: Node3D = null
 var _autos: Array[CharacterBody3D] = []
 var _speed_bumps: Array = []
 var _rng := RandomNumberGenerator.new()
@@ -1922,6 +1928,16 @@ func _start_game(def: Dictionary, save: Dictionary = {}) -> void:
 		a.bump_hit.connect(_on_bump_hit)
 		_autos.append(a)
 
+	# Kaali-Peeli garage pad (issue #347, slice 2): the showroom kerb by
+	# the spawn row. Foot traffic only — browse with [ ], buy/ride with G;
+	# purchases checkpoint through the shared silent autosave.
+	_garage_pad = GaragePad.new()
+	add_child(_garage_pad)
+	_garage_pad.setup(player, _missions, _garage,
+			Callable(self, "_garage_rollout"), Callable(self, "_riding_vehicle"),
+			Callable(self, "_autosave_silent"))
+	_garage_pad.place(Vector3(ROAD / 2.0 + 5.5, 0.0, 2.0 * PITCH - BLOCK + 2.0))
+
 	_playing = true
 	# AUTO preset arms the FPS watcher once play starts (issue 270); a
 	# pinned HIGH/LOW session never spawns it.
@@ -2208,6 +2224,40 @@ func _toggle_vehicle() -> void:
 		_audio.door_chime()
 		_audio.engine_start(current_auto.kind)
 		_radio_on()
+
+
+func _riding_vehicle() -> bool:
+	## Garage-pad probe (issue #347): true while the player sits behind
+	## a windscreen or queues at a metro gate — the pad sells to foot
+	## traffic only.
+	return current_auto != null or _metro_riding or _metro_wait >= 0
+
+
+func _garage_rollout(rung: Dictionary) -> void:
+	## Garage pad rollout (issue #347): park whatever is current, roll
+	## the bought rung out kerbside through the same builder path the
+	## street fleet uses — pinned paint, ladder tune — and hand over
+	## the keys.
+	if current_auto != null:
+		current_auto.driver_inside = false
+		current_auto = null
+		_radio_off()
+		_audio.engine_stop()
+	var ride := AutoScript.new()
+	ride.set_paint(int(rung.get("paint", -1)))
+	ride.setup(_garage_pad.rollout_pos(), _garage_pad.rollout_heading(),
+			Garage.auto_kind(String(rung.get("body", ""))))
+	ride.tune(float(rung.get("top", 1.0)), float(rung.get("pickup", 1.0)))
+	add_child(ride)
+	ride.set_speed_bumps(_speed_bumps)
+	ride.bump_hit.connect(_on_bump_hit)
+	_autos.append(ride)
+	current_auto = ride
+	ride.driver_inside = true
+	player.visible = false
+	_audio.door_chime()
+	_audio.engine_start(ride.kind)
+	_radio_on()
 
 
 func _metro_board(idx: int) -> void:
@@ -3075,6 +3125,8 @@ func _collect_save() -> Dictionary:
 			"heading": float(st["heading"]), "pos": [p.x, p.y, p.z]}
 	data["chars"] = chars
 	data["wardrobe"] = _wardrobe.snapshot()
+	# Garage (issue #347): owned rides + the selected one ride the save.
+	data["garage"] = _garage.snapshot()
 	# Issue #271: checklist state rides every save; {} means the card
 	# never activated (pre-#271 saves keep that shape forever).
 	if _onboarding != null and is_instance_valid(_onboarding):
@@ -3086,6 +3138,11 @@ func _apply_save(save: Dictionary) -> void:
 	# Worn wardrobe first (issue #223) — the rebuild below re-dresses the
 	# live model if the save carries outfits.
 	_wardrobe.restore(save.get("wardrobe", {}))
+	# Garage (issue #347): restore() is junk-tolerant; pre-slice-2 saves
+	# simply carry no key and start with an empty garage.
+	var garage_saved = save.get("garage", {})
+	if typeof(garage_saved) == TYPE_DICTIONARY:
+		_garage.restore(garage_saved)
 	if not save.get("wardrobe", {}).is_empty():
 		player.swap_character(_wardrobe.dress_def(Game.selected_character))
 	day_t = clampf(float(save.get("day_t", day_t)), 0.0, 1.0)

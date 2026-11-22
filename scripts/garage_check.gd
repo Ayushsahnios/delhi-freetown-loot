@@ -10,6 +10,7 @@ extends Node
 ##   godot --headless --path . res://scenes/garage_check.tscn
 
 const Garage := preload("res://scripts/garage.gd")
+const AutoScript := preload("res://scripts/auto.gd")
 
 const BODIES := ["scooter", "rickshaw", "hatch", "van", "tempo", "truck", "tanker"]
 
@@ -22,10 +23,12 @@ func _ready() -> void:
 	_lookup_helpers()
 	_buy_gate_verdicts()
 	_purchase_and_select()
+	_auto_kind_mapping()
+	_buy_spawn_save_reload()
 	_save_round_trip()
 
 	if _problems.is_empty():
-		print("garage_check: PASS %d rungs, gates + save round-trip green" \
+		print("garage_check: PASS %d rungs, gates + rollout + save round-trip green" \
 				% Garage.rung_count())
 	else:
 		for problem in _problems:
@@ -131,6 +134,46 @@ func _purchase_and_select() -> void:
 		_fail("select of an owned ride must switch")
 	if garage.select("matka_tanker"):
 		_fail("select of an unowned ride must fail")
+
+
+func _auto_kind_mapping() -> void:
+	## Slice 2: every ladder body must resolve onto a real auto.gd
+	## KINDS spec — the pad rolls rungs out through that builder table.
+	for i in Garage.rung_count():
+		var entry: Dictionary = Garage.rung(i)
+		var kind := Garage.auto_kind(String(entry["body"]))
+		if not AutoScript.KINDS.has(kind):
+			_fail("rung %d body '%s' has no auto.gd kind" % [i, String(entry["body"])])
+	if Garage.auto_kind("no_such_ride") != "":
+		_fail("unknown body must map to an empty kind")
+
+
+func _buy_spawn_save_reload() -> void:
+	## Slice-2 contract the pad + main save fold rely on: gate passes
+	## -> sale recorded -> the rung rolls out through the street-fleet
+	## builder (paint pin, kind map, tune multipliers) -> snapshot ->
+	## restore keeps the garage.
+	var garage := Garage.new()
+	if garage.buy_gate("dhaak_kaali_peeli", 7000, 4) != "":
+		_fail("hatch rung at cash 7000 / 4 missions must be buyable")
+	if not garage.purchase("dhaak_kaali_peeli"):
+		_fail("purchase of the hatch rung must succeed")
+	var rung: Dictionary = Garage.by_id("dhaak_kaali_peeli")
+	var ride := AutoScript.new()
+	ride.set_paint(int(rung["paint"]))
+	ride.setup(Vector3(6.0, 1.0, 58.0), 0.0,
+			Garage.auto_kind(String(rung["body"])))
+	ride.tune(float(rung["top"]), float(rung["pickup"]))
+	if ride.kind != "car":
+		_fail("hatch rung must roll out on the 'car' builder, got '%s'" % ride.kind)
+	ride.free()
+	var reloaded := Garage.new()
+	reloaded.restore(garage.snapshot())
+	if not reloaded.owned.has("dhaak_kaali_peeli") \
+				or reloaded.selected != "dhaak_kaali_peeli":
+		_fail("restore must keep the bought ride owned and selected")
+	if not reloaded.select("dhaak_kaali_peeli"):
+		_fail("re-select of the restored ride must succeed")
 
 
 func _save_round_trip() -> void:
