@@ -1226,3 +1226,44 @@ one chai point for modeled GLBs; no measurable simulation cost.
 scope unchanged** — full post-wave audit leg still gated on #293
 landing and #292 adjudication (blocked-on-owner per the Nov 9 Lane A
 handoff).
+
+## Interim refresh on master `a2c88cc` (2026-11-23, post-#367)
+
+The `ab2f77d` refresh (merged as #366) was the last documented
+baseline. Since then the loop merged #367 (Kaali-Peeli garage pad
+slice 2 — kerbside buy/ride rollout + save fold; refs #347). That is
+a runtime gameplay change on the economy + save surface, so this leg
+re-runs the pinned gate series, import/smoke, and save round-trip on
+the current tree, plus the garage-pad gate (15 rungs) as a targeted
+regression for the new system. Method identical to the `ab2f77d` leg:
+sequential headless boots, weather pinned clear, `WEATHER_STATE`
+audit line checked in every perf log.
+
+| Gate (pinned clear) | avg | p95 | budget | verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 12.79 ms | 20.70 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 10.69 ms | 16.09 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 11.27 ms | 14.79 ms | 22.0 ms | PASS |
+
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Save round-trip (`save_check.tscn`): `verdict=PASS`, all 21
+  expectations, exit 0. The log's two `ERROR: Parse JSON failed`
+  lines sit on the deliberate corrupt-save fixtures (garbage /
+  unreadable-primary rungs) — expected engine parse output on those
+  tests, not regressions.
+- Garage pad gate (`garage_check.tscn`, new with #347 slice 2):
+  `garage_check: PASS 15 rungs, gates + rollout + save round-trip
+  green`, exit 0.
+- Hygiene grep (repo-wide, usual exclusions): clean.
+
+Reading: all three perf gates hold 9+ ms headroom under budget.
+Averages sit above the `ab2f77d` leg's band (8.70–9.82 ms) —
+consistent with a busier shared host this cycle rather than a code
+cost: p95 stays ≤ 20.7 ms, the #367 delta (kerbside interaction +
+save fold) adds no per-frame simulation work at the gate site, and
+the targeted garage gate covers the new system directly.
+
+**Acceptance: interim refresh fully green on `a2c88cc`; remaining
+#296 scope unchanged** — full post-wave audit leg still gated on
+#293 landing and #292 adjudication (blocked-on-owner per the Nov 9
+Lane A handoff).
