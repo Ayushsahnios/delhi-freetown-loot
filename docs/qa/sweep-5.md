@@ -1304,3 +1304,41 @@ surface, tighter numbers, no regression signal anywhere.
 #296 scope unchanged** — full post-wave audit leg still gated on
 #293 landing and #292 adjudication (blocked-on-owner per the Nov 9
 Lane A handoff).
+
+## Interim refresh on master `c0c63aa` (2026-11-23, post-#369)
+
+The `5e95b07` refresh (merged as #369) was the last documented
+baseline. Since then the loop merged #369 itself — this sweep's own
+refresh PR — so master sits at `c0c63aa` with zero gameplay deltas
+since the `5e95b07` leg. This leg re-pins the documented baseline on
+the exact commit every future leg diffs against. Method identical:
+sequential headless boots, weather pinned clear, `WEATHER_STATE`
+audit line checked in every perf log.
+
+| Gate (pinned clear) | avg | p95 | budget | verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 12.87 ms | 19.47 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 10.55 ms | 14.18 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 11.55 ms | 14.66 ms | 22.0 ms | PASS |
+
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Save round-trip (`save_check.tscn`): `verdict=PASS`, all 21
+  expectations met, exit 0. The log's two `ERROR: Parse JSON failed`
+  lines sit on the deliberate corrupt-save fixtures (garbage /
+  unreadable-primary rungs) — expected engine parse output, same as
+  the `5e95b07` leg.
+- Garage pad gate (`garage_check.tscn`, #347): `garage_check: PASS 15
+  rungs, gates + rollout + save round-trip green`, exit 0.
+- Hygiene grep (repo-wide, usual exclusions): clean.
+
+Reading: all three perf gates hold 9+ ms headroom under budget. The
+spread across the two default runs (10.55–12.87 ms avg) and run 1's
+p95 (19.47 ms) read as shared-host load — identical shape to the
+`a2c88cc` leg's story and the opposite of a code cost: the code
+surface is byte-identical to the `5e95b07` leg (which measured
+8.68–9.03 ms avg), so no regression signal anywhere.
+
+**Acceptance: interim refresh fully green on `c0c63aa`; remaining
+#296 scope unchanged** — full post-wave audit leg still gated on
+#293 landing and #292 adjudication (blocked-on-owner per the Nov 9
+Lane A handoff).
