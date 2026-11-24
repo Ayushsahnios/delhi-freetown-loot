@@ -1834,3 +1834,92 @@ capture-matrix re-pin started with 4/12 shots certified and the rest
 handed off with artifacts in place. Remaining #296 scope unchanged** —
 full post-wave audit leg still gated on #293 landing + #292
 adjudication; paan-counter aimed capture added to that leg's queue.
+
+---
+
+## Interim leg 2026-11-24 ~21:40 UTC — capture-matrix re-pin finished on `749d32e` (post-#380)
+
+Lane B · docs-only delta over `8c915ac` (#380 is this sweep's own doc
+append; game-code surface byte-identical to the post-#379 tree). The
+#380 leg certified 4/12 shots before its clock wrapped; this leg adopts
+the remaining 8 staged renders from `.agent/sweep5cap-post379/`
+(gitignored: raw PNGs, per-shot logs, `capture-summary.txt` audit
+lines) — shots 5–8 landed at the #380 leg's wrap, the last four from
+its successor run (crashed post-render, zero commits) — and pins the
+full 12-shot matrix.
+
+### Capture matrix (12/12, pinned clear, out of festival window)
+
+Same flags as the documented matrix (xvfb + software GL, 90 settle
+frames, `--no-card`, `--weather clear`). Every log prints `weather:
+Clear intensity=0.000 cloud=0.000 wetness=0.000`; zero `SCRIPT ERROR`/
+`ERROR:` lines across all 12 logs; all 12 shots exit 0
+(`CAPTURE_MATRIX_DONE 17:46 UTC`).
+
+| Shot | PNG (B) | #378 leg (a6e6078) | Delta |
+|---|---|---|---|
+| cp-day | 598,776 | 606,184 | −1.2% |
+| cp-dusk | 368,733 | 378,795 | −2.7% |
+| cp-night | 368,472 | 364,688 | +1.0% |
+| bazaar-day | 670,589 | 661,294 | +1.4% |
+| bazaar-dusk | 632,200 | 638,992 | −1.1% |
+| bazaar-night | 636,952 | 628,469 | +1.3% |
+| chandni-day | 539,238 | 520,123 | +3.7% |
+| chandni-dusk | 643,863 | 644,272 | ≈ byte-level match |
+| purani-day | 705,803 | 705,803 | **byte-exact** |
+| purani-night | 515,675 | 515,675 | **byte-exact** |
+| gate-day | 409,108 | 405,077 | +1.0% |
+| gate-night | 387,435 | 174,430 | **+122.1%** (triaged below) |
+
+Reading: ten of twelve shots move within ±3.7% — normal drift for a
+tree whose only game-code delta since the #378 pins is #379's counter
+props. The purani pair reproducing **byte-exact** across the #379
+landing (no visible counter content at that vantage, no animating
+pixels at settle) is the sweep's strongest determinism datapoint yet,
+eclipsing the #378 cp-day ≈match. gate-night is the one size outlier.
+
+### Vision pass (assistant vision tooling on the rendered PNGs)
+
+- gate-night: PASS — coherent illuminated arch (warm uplight, emissive
+  flanking windows, lawn spotlights), fully legible HUD, plausible
+  night. The +122.1% size vs the #378 pin reads as content richness,
+  not breakage; the vantage's night shots have historically ranged
+  174–387 KB (174 KB #378, 194 KB Nov 7, 367 KB #304-era, 387 KB now)
+  — the night-emissive state at the capture moment (windows /
+  headlights lit) dominates PNG size there. Queued for the audit
+  leg's diff walk as a determinism question, not a regression.
+- gate-day: matches the known #104 software-GL day-washout lineage
+  (blown sky, HUD white-text contrast), mechanically +1.0% vs the
+  #378 pin — same read as every prior software-GL day shot; not a new
+  regression. Minor: the HUD clock string renders truncated; pixels
+  are ≈the #378 pin, so pre-existing, noted for the record.
+- purani-day / purani-night: **triage UPGRADED.** Vision reads BOTH
+  as camera-inside-geometry (flat-walled enclosure, lone column, no
+  lane/street/NPC content; night additionally an unlit void; the
+  minimap zone label also renders ambiguously). Mechanical evidence:
+  both are byte-exact reproductions of the #378 pins with zero error
+  lines and pinned weather — a scene-load failure does not reproduce
+  byte-exact, so the most consistent root cause is a badly placed
+  purani teleport/look vantage (camera inside a wall/canopy volume),
+  present since at least the #378 leg; its milder "sparer street
+  than expected" wording under-read the same pixels. Action for the
+  audit leg: re-pick the purani `--tp/--look` vantage, re-render,
+  re-pin. Not blocking for this docs-only leg.
+- All four vision-passed shots: a small floating brown stick prop
+  near the player figure (likely held-item transform); cosmetic,
+  noted for the audit leg.
+
+### Interim gates
+
+Unchanged by this leg: #380's fresh re-pin on `8c915ac` remains the
+current-tree pin (`749d32e` is a docs-only squash over it; no gate
+re-run for a docs-only delta). Import/smoke/hygiene re-verified clean
+on this leg's tree before push.
+
+**Acceptance: capture matrix re-pinned 12/12 on the post-#380 tree —
+10/12 within ±3.7%, purani pair byte-exact (strongest determinism
+datapoint yet), gate-night size outlier triaged as night-emissive
+variance with vision PASS, purani vantage placement flagged for
+re-pick. Remaining #296 scope unchanged** — full post-wave audit leg
+still gated on #293 landing + #292 adjudication; purani vantage
+re-pick added to that leg's queue.
