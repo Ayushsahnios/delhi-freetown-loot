@@ -1595,6 +1595,51 @@ the post-wave audit leg, not a blocker.
 leg still gated on #293 landing and #292 adjudication (blocked-on-
 owner per the Nov 9 Lane A handoff).
 
+## Interim refresh on master `a6e6078` (2026-11-24, post-#376)
+
+The `75986a0` soak+refresh leg landed as #376 (squash `a6e6078`);
+since then the loop merged #376 itself — its own docs+soak-record
+append — so the game-code surface is unchanged and this leg is pure
+cadence + re-measurement on the exact post-merge hash. The soak
+verdicts are current from the #376 leg (recomputed-PASS 2026-11-24);
+gates re-pinned here as usual.
+
+### Perf gates (pinned clear, post-#376)
+
+| Gate | avg | p95 | Budget | Verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 7.68 ms | 11.94 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 11.05 ms | 16.55 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 7.66 ms | 12.66 ms | 22.0 ms | PASS |
+
+- `WEATHER_STATE` audit line: `Clear intensity=0.000 cloud=0.000
+  wetness=0.000` in all three logs (pins held).
+- Worst p95 (16.55 ms) leaves 5.45 ms headroom under the 22.0 ms
+  budget. The run-1→run-2 default spread (7.68→11.05 avg) matches
+  the documented shared-host load signature from the earlier
+  `a2c88cc`–`b73f43a` legs; game-code surface is byte-identical to
+  the `5e95b07` leg, so no regression signal.
+
+### Other gates
+
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Save round-trip (`save_check.tscn`): all 21 expectations met,
+  `verdict=PASS`, exit 0.
+- Garage pad gate (`garage_check.tscn`, #347): `garage_check: PASS
+  15 rungs, gates + rollout + save round-trip green`, exit 0.
+- Hygiene grep (repo-wide, usual exclusions): clean.
+
+**Acceptance: interim refresh fully green on `a6e6078`; remaining
+#296 scope unchanged** — soak verdicts current (recomputed-PASS
+2026-11-24, #376 leg); full post-wave audit leg still gated on #293
+landing and #292 adjudication (blocked-on-owner per the Nov 9 Lane A
+handoff).
+
+Note: #377 — another docs-only interim refresh on `a6e6078` —
+merged while this leg's captures were rendering; the game-code
+surface is unchanged by it, so this section's baseline references
+stay as written at leg start.
+
 ## Capture-matrix refresh + interim gates on master `a6e6078` (2026-11-24, post-#376)
 
 The `75986a0` soak leg (merged as #376, squash `a6e6078`) was the last
