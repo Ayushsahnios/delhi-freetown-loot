@@ -1519,3 +1519,78 @@ to the `5e95b07` leg, so no regression signal anywhere.
 #296 scope unchanged** — full post-wave audit leg still gated on
 #293 landing and #292 adjudication (blocked-on-owner per the Nov 9
 Lane A handoff).
+
+## Soak + interim refresh on master `75986a0` (2026-11-24, post-#375)
+
+The `b73f43a` refresh (merged as #375, squash `75986a0`) was the last
+documented baseline; since then the loop merged #375 itself — again
+this sweep's own docs-only refresh PR — so master sits at `75986a0`
+with zero gameplay-code deltas since the `5e95b07` leg (every merge
+since #368 touched only this file). With the refresh cadence pinned
+five consecutive times on a byte-identical game-code surface, this
+leg spends its budget on the #296 acceptance item with the stalest
+data: the 30-minute soak. Its last recorded runs are from 2026-11-08
+(the `8cca373` recompute legs and the formal SUMMARY run on
+`d515bd5`, pre-#319 body swap) — 16 days and ~50 merges of
+world/characters/QA work ago. Gates re-pinned on the exact commit
+as usual.
+
+### Soak (post-#375 tree, recomputed verdicts)
+
+Vendored `tools/qa/soak273.tscn` driver, headless on master `75986a0`
+(runtime = master; branch diff docs-only), hosted solo in a background
+session with no parallel gate load — the engine kept real-time pace
+throughout (ticks tracked wall-clock 1:1). The session was reaped by
+an external SIGTERM at engine t=1740 s — the same wrap point as the
+three documented 2026-11-08 reaps; verdicts recomputed from ticks per
+the sweep-4 / post-#311 precedent.
+
+- 25 ticks t=60→1740 s, zero `SCRIPT ERROR`/`ERROR:` lines in the log.
+- Player alive and playing through the last tick (`player_sane=true`
+  at every sample) — PASS at 29 min.
+- Orphan nodes **0 at every tick** — drift 0 → PASS.
+- Static-memory drift 218,244 → 219,214 KB over t=60→1740 s =
+  **+970 KB over 28 min** vs the 200,000 KB drift budget (<0.5%
+  used) — PASS; flat in the 218.2–219.2 MB band the whole run. Same
+  warmup order as the 2026-11-08 legs (+2,163 KB on the formal run)
+  and tighter than all of them.
+- Walkers steady at 66 the whole run; day_t cycling coherently
+  (0.08→0.83 wraps).
+
+Recompute note: this is the fourth soak stopped at exactly t=1740 s
+(three 2026-11-08 reaps + this one) — the wrap point is an external
+session-reap signature, not an engine-side fault; every recomputed
+verdict agrees with the formal SUMMARY run on the same code lineage.
+A SUMMARY-printing run on a post-#375 tree remains a nice-to-have for
+the post-wave audit leg, not a blocker.
+
+### Perf gates (pinned clear, post-#375)
+
+| Gate | avg | p95 | Budget | Verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 8.21 ms | 12.69 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 8.69 ms | 12.95 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 8.05 ms | 12.72 ms | 22.0 ms | PASS |
+
+- `WEATHER_STATE` audit line: `Clear intensity=0.000 cloud=0.000
+  wetness=0.000` in all three logs (pins held).
+- Worst p95 (12.95 ms) leaves 9.05 ms headroom under the 22.0 ms
+  budget. Tightest default spread of the refresh series so far
+  (8.21/8.69 avg vs 7.73–11.06 across the `a2c88cc`–`b73f43a` legs);
+  the solo-session no-parallel-load method gives cleaner numbers than
+  the documented shared-host load signature. Game-code surface
+  byte-identical to the `5e95b07` leg, so no regression signal.
+
+### Other gates
+
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Save round-trip (`save_check.tscn`): all 21 expectations met,
+  `verdict=PASS`, exit 0.
+- Garage pad gate (`garage_check.tscn`, #347): `garage_check: PASS
+  15 rungs, gates + rollout + save round-trip green`, exit 0.
+- Hygiene grep (repo-wide, usual exclusions): clean.
+
+**Acceptance: soak recomputed-PASS + interim refresh fully green on
+`75986a0`; remaining #296 scope unchanged** — full post-wave audit
+leg still gated on #293 landing and #292 adjudication (blocked-on-
+owner per the Nov 9 Lane A handoff).
