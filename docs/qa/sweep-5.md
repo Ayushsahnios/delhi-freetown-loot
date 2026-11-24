@@ -1448,3 +1448,38 @@ to the `5e95b07` leg, so no regression signal anywhere.
 #296 scope unchanged** — full post-wave audit leg still gated on
 #293 landing and #292 adjudication (blocked-on-owner per the Nov 9
 Lane A handoff).
+
+## Interim refresh on master `0b88030` (2026-11-24, post-#373)
+
+The `ded4988` refresh (merged as #373) was the last documented
+baseline. Since then the loop merged #373 itself — again this
+sweep's own docs-only refresh PR — so master sits at `0b88030`
+with zero gameplay-code deltas since the `5e95b07` leg (every
+merge since #368 touched only this file). This leg re-pins the
+documented baseline on the exact commit every future leg diffs
+against. Method identical: sequential headless boots, weather
+pinned clear, `WEATHER_STATE` audit line checked in every perf log.
+
+| Gate (pinned clear) | avg | p95 | budget | verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 11.06 ms | 16.56 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 7.73 ms | 11.87 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 7.69 ms | 10.66 ms | 22.0 ms | PASS |
+
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Save round-trip (`save_check.tscn`): `verdict=PASS`, exit 0.
+- Garage pad gate (`garage_check.tscn`, #347): `garage_check: PASS 15
+  rungs, gates + rollout + save round-trip green`, exit 0.
+- Hygiene grep (repo-wide, usual exclusions): clean.
+
+Reading: all three perf gates pass; worst p95 leaves 5.44 ms
+headroom under the 22.0 ms budget. The default-run spread
+(7.73–11.06 ms avg) repeats the shared-host load signature
+documented on the `a2c88cc`/`c0c63aa`/`0bf11f4`/`9384c09`/
+`ded4988` legs; the game code surface is byte-identical to the
+`5e95b07` leg, so no regression signal anywhere.
+
+**Acceptance: interim refresh fully green on `0b88030`; remaining
+#296 scope unchanged** — full post-wave audit leg still gated on
+#293 landing and #292 adjudication (blocked-on-owner per the Nov 9
+Lane A handoff).
