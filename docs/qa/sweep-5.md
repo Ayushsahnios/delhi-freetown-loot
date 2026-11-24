@@ -1640,7 +1640,7 @@ merged while this leg's captures were rendering; the game-code
 surface is unchanged by it, so this section's baseline references
 stay as written at leg start.
 
-## Capture-matrix refresh + interim gates on master `a6e6078` (2026-11-24, post-#376)
+## Capture-matrix refresh + interim gates (2026-11-24; captures on `a6e6078`, gates re-pinned post-#377)
 
 The `75986a0` soak leg (merged as #376, squash `a6e6078`) was the last
 documented baseline; since then the loop merged #376 itself — again this
@@ -1653,7 +1653,10 @@ day/dusk/night capture matrix. Its last full pinned-clear refresh was
 #352, #354, #356 (stall goods), #357, #359 (bus-shelter benches), #361,
 #365 (chai-point CC0 swap) and #367 landed, i.e. the world-geometry
 drift was never captured since. Gates re-pinned on the exact commit
-as usual.
+as usual — and when #377 (this sweep's own docs-only refresh) landed
+mid-leg, the leg merged master in (game-code surface still
+byte-identical) and re-ran the full gate set fresh on the merged
+tree; the numbers below are that re-run.
 
 ### Capture matrix (12/12, pinned clear, out of festival window)
 
@@ -1689,9 +1692,9 @@ visible delta at that vantage is nil (cp geometry unchanged since
 Nov 8 (#356 stall goods, #359 benches, #365 chai-point CC0 swap) —
 more visible geometry = less compressible pixels; the vision pass
 below reads it as a richer, coherent market lane. chandni/purani/gate
-moves are single-digit %. Raw PNGs + logs in
-`.agent/sweep5cap-nov24/` (gitignored); reproduce with the flags
-table above.
+moves are single-digit %. Raw PNGs + gate logs in
+`.agent/sweep5cap-nov24/` (gitignored; gate logs under `logs/` from
+the post-#377 re-pin); reproduce with the flags table above.
 
 ### Pixel-diff vs `docs/screenshots/` baselines (Oct 26 vintage)
 
@@ -1734,21 +1737,21 @@ regression signal, and it is clean.
   animating ticker mid-capture. Queued for the post-wave audit leg's
   eyeball; not blocking.
 
-### Interim gates (pinned clear, post-#376)
+### Interim gates (pinned clear, re-pinned on the post-#377 merged tree)
 
 | Gate | avg | p95 | Budget | Verdict |
 |---|---|---|---|---|
-| Default `--frames 240 --warmup 90`, run 1 | 9.10 ms | 13.62 ms | 22.0 ms | PASS |
-| Default `--frames 240 --warmup 90`, run 2 | 10.50 ms | 14.66 ms | 22.0 ms | PASS |
-| Festival `--frames 120 --warmup 45` (`--festival` forced) | 9.55 ms | 14.24 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 1 | 8.36 ms | 11.88 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 10.86 ms | 15.43 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 8.97 ms | 13.75 ms | 22.0 ms | PASS |
 
 - `WEATHER_STATE` audit line: Clear 0.000/0.000/0.000 in all three
-  logs. Worst p95 14.66 ms → 7.34 ms headroom.
+  logs. Worst p95 15.43 ms → 6.57 ms headroom.
 - Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
 - Save round-trip: all 21 expectations met, `verdict=PASS`, exit 0.
-- Garage pad gate: `PASS 15 rungs`, exit 0. (perf run 2 printed a
-  benign engine-shutdown `ObjectDB instances leaked` warning — exit 0,
-  verdict PASS; perf_check teardown noise, not a gate signal.)
+- Garage pad gate: `PASS 15 rungs`, exit 0. (the festival run printed
+  a benign engine-shutdown `ObjectDB instances leaked` warning — exit
+  0, verdict PASS; perf_check teardown noise, not a gate signal.)
 - Hygiene grep (usual exclusions): clean.
 
 ### Hygiene rider
@@ -1761,7 +1764,8 @@ other 23 under `docs/captures/`.
 
 **Acceptance: capture matrix refreshed on `a6e6078` (12/12 pinned
 clear, determinism + drift baselines recorded, vision findings
-triaged); interim gates fully green. Remaining #296 scope unchanged**
+triaged); interim gates fully green — re-pinned fresh on the
+post-#377 merged tree. Remaining #296 scope unchanged**
 — full post-wave audit leg still gated on #293 landing + #292
 adjudication; add the purani-day eyeball and the bazaar-vista diff
 walk to that leg.
