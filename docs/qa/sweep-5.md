@@ -1923,3 +1923,35 @@ variance with vision PASS, purani vantage placement flagged for
 re-pick. Remaining #296 scope unchanged** — full post-wave audit leg
 still gated on #293 landing + #292 adjudication; purani vantage
 re-pick added to that leg's queue.
+
+---
+
+## Interim leg 2026-11-24 ~23:05 UTC — gates re-pinned on `380b091` (post-#381 capture-matrix re-pin)
+
+Lane B · master `380b091` = the #381 capture-matrix re-pin (12/12
+shots, purani pair byte-exact, gate-night triaged as night-emissive
+variance). Game-code surface byte-identical to the post-#379 tree —
+#380/#381 are this sweep's own doc legs — so this leg is cadence +
+re-measurement on the exact post-merge hash. Full interim gate set
+re-run fresh on the merged tree:
+
+| Gate | avg | p95 | Budget | Verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 7.98 ms | 12.25 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 7.71 ms | 12.28 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 9.58 ms | 14.08 ms | 22.0 ms | PASS |
+
+- `WEATHER_STATE` audit line: Clear 0.000/0.000/0.000 in all three
+  logs. Worst p95 12.28 ms → 9.72 ms headroom. Averages sit below the
+  #380 pins (14.26/12.89) and inside the historical 8–12 ms band of
+  contention-free legs — consistent with a quieter host window, not a
+  code change (docs-only delta over `8c915ac`'s gated tree). Both
+  default runs PASS with tight run-to-run spread (7.98/7.71).
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero `SCRIPT ERROR`/
+  `ERROR:` lines. Save round-trip: 21/21 expectations, verdict=PASS.
+  Garage pad: `PASS 15 rungs`. Hygiene grep (usual exclusions): clean.
+
+**Acceptance: interim gates fully green, re-pinned fresh on `380b091`.
+Remaining #296 scope unchanged** — full post-wave audit leg still
+gated on #293 owner eyeball + #292 adjudication; purani vantage
+re-pick and paan-counter aimed capture stay queued for that leg.
