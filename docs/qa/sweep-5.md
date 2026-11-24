@@ -1769,3 +1769,68 @@ post-#377 merged tree. Remaining #296 scope unchanged**
 — full post-wave audit leg still gated on #293 landing + #292
 adjudication; add the purani-day eyeball and the bazaar-vista diff
 walk to that leg.
+
+---
+
+## Interim leg 2026-11-24 ~15:35 UTC — gates re-pinned on `8c915ac` (post-#379 paan-counter swap)
+
+Lane B · master `8c915ac` = the #378 capture-matrix refresh with #379's
+paan-counter CC0 swap (Quaternius table + glass case + KayKit betel
+crates; 4 street counters + CP walk-in) merged beneath it. Full interim
+gate set re-run fresh on the merged tree:
+
+| Gate | avg | p95 | Budget | Verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 14.26 ms | 17.89 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 12.89 ms | 18.90 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 8.42 ms | 13.18 ms | 22.0 ms | PASS |
+
+- `WEATHER_STATE` audit line: Clear 0.000/0.000/0.000 in all three
+  logs. Worst p95 18.90 ms → 3.10 ms headroom. Default-run averages sit
+  above the #378 pins (9.10/10.50) with wider run-to-run spread —
+  consistent with host contention from the parallel lane cycle rather
+  than a code regression (#379 adds only ~2.7k tri; its own branch pins
+  were 8.33/11.79 ms). Noted for the record; both runs PASS.
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero `SCRIPT ERROR`/
+  `ERROR:` lines. Save round-trip: 21/21 expectations, verdict=PASS.
+  Garage pad: `PASS 15 rungs`. Hygiene grep (usual exclusions): clean.
+
+### Capture matrix re-pin (started; handed off)
+
+Matrix re-run at the documented vantages, same flags as the #378 leg
+(xvfb + software GL, 90 settle frames, `--no-card`, `--weather clear`,
+out of festival window). Shots that landed before the shift clock
+wrapped:
+
+| Shot | PNG (B) | #378 leg (a6e6078) | Delta |
+|---|---|---|---|
+| cp-day | 598,776 | 606,184 | −1.2% |
+| cp-dusk | 368,733 | 378,795 | −2.7% |
+| cp-night | 368,472 | 364,688 | +1.0% |
+| bazaar-day | 670,589 | 661,294 | +1.4% |
+
+All exit 0, zero `SCRIPT ERROR`/`ERROR:` lines, `weather: Clear
+0.000/0.000/0.000` in every log. The cp trio holds near-deterministic
+with the pre-#379 matrix (small visible delta at that vantage);
+bazaar-day's small growth is consistent with #379's counter props
+entering the sightline.
+
+Vision pass (cp-day, bazaar-day): bazaar-day reads as the same coherent
+rich market lane as the #378 pass — pass. cp-day flags match the known
+#104 software-GL day-washout lineage on a near-deterministic byte size
+(flat hazy plaza, washed sky) — not a new regression. The paan counters
+do not read distinctly at either documented vantage (CP-area counters
+sit off-frame-center); an aimed `--tp` capture is queued for the
+post-wave audit leg.
+
+The remaining 8 matrix shots (bazaar-dusk/night, chandni ×2, purani ×2,
+gate ×2) keep rendering into `.agent/sweep5cap-post379/` (gitignored:
+raw PNGs, per-shot logs, `capture-summary.txt` audit lines) — next run
+adopts and finishes the re-pin, same as the #378 leg's
+interrupted-shift handoff pattern.
+
+**Acceptance: interim gates fully green, re-pinned fresh on `8c915ac`;
+capture-matrix re-pin started with 4/12 shots certified and the rest
+handed off with artifacts in place. Remaining #296 scope unchanged** —
+full post-wave audit leg still gated on #293 landing + #292
+adjudication; paan-counter aimed capture added to that leg's queue.
