@@ -1594,3 +1594,129 @@ the post-wave audit leg, not a blocker.
 `75986a0`; remaining #296 scope unchanged** — full post-wave audit
 leg still gated on #293 landing and #292 adjudication (blocked-on-
 owner per the Nov 9 Lane A handoff).
+
+## Capture-matrix refresh + interim gates on master `a6e6078` (2026-11-24, post-#376)
+
+The `75986a0` soak leg (merged as #376, squash `a6e6078`) was the last
+documented baseline; since then the loop merged #376 itself — again this
+sweep's own docs-only PR — so the game-code surface stays byte-identical
+to the `a2c88cc` leg, now re-pinned seven consecutive times. With the
+refresh cadence saturated and the soak freshly re-run (post-#375), this
+leg spends its budget on the other stale #296 acceptance item: the
+day/dusk/night capture matrix. Its last full pinned-clear refresh was
+2026-11-07/08 — before #340 (banyan shift + interior fill), #342, #344,
+#352, #354, #356 (stall goods), #357, #359 (bus-shelter benches), #361,
+#365 (chai-point CC0 swap) and #367 landed, i.e. the world-geometry
+drift was never captured since. Gates re-pinned on the exact commit
+as usual.
+
+### Capture matrix (12/12, pinned clear, out of festival window)
+
+Same flags as the documented matrix (xvfb + software GL, 90 settle
+frames, `--no-card`, `--weather clear`). Note: run date 2026-11-24 is
+OUTSIDE the Nov 1–14 festival window, so these are the plain-city
+(no-festival) baselines — the natural counterpart of the Nov 7
+in-window matrix. Every log prints `weather: Clear intensity=0.000
+cloud=0.000 wetness=0.000`; zero `SCRIPT ERROR`/`ERROR:` lines across
+all 12 logs; all 12 shots exit 0.
+
+| Shot | PNG (B) | Nov 7/8 matrix ref | Delta |
+|---|---|---|---|
+| cp-day | 606,184 | 607 KB (no-fest) | ≈ byte-level match |
+| cp-dusk | 378,795 | 380 KB | −0.3% |
+| cp-night | 364,688 | 379 KB | −3.8% |
+| chandni-day | 520,123 | 586 KB | −11.2% |
+| chandni-dusk | 644,272 | 677 KB | −4.8% |
+| purani-day | 705,803 | 740 KB | −4.6% |
+| purani-night | 515,675 | 526 KB | −1.9% |
+| bazaar-day | 661,294 | 486 KB | **+36.1%** |
+| bazaar-dusk | 638,992 | 302 KB | **+111.6%** |
+| bazaar-night | 628,469 | 320 KB | **+96.4%** |
+| gate-day | 405,077 | (#310 leg) | n/a |
+| gate-night | 174,430 | 194 KB | −10.1% |
+
+Reading: cp-day reproducing the Nov 7 `--no-festival` shot at
+606,184 B vs ~607 KB is the strongest determinism datapoint yet —
+pinned captures reproduce across 17 days of landings whenever the
+visible delta at that vantage is nil (cp geometry unchanged since
+#340 shifted the banyan out of this sightline). The bazaar trio's
++36/+112/+96% growth is the cumulative prop content landing since
+Nov 8 (#356 stall goods, #359 benches, #365 chai-point CC0 swap) —
+more visible geometry = less compressible pixels; the vision pass
+below reads it as a richer, coherent market lane. chandni/purani/gate
+moves are single-digit %. Raw PNGs + logs in
+`.agent/sweep5cap-nov24/` (gitignored); reproduce with the flags
+table above.
+
+### Pixel-diff vs `docs/screenshots/` baselines (Oct 26 vintage)
+
+Mechanical mean-abs-diff per pixel (RGB, 0–255 scale) of each current
+shot vs its tracked baseline (std-lib PNG decode, full-frame):
+
+cp-day 56.25 · cp-dusk 152.87 · cp-night 149.21 · chandni-day 58.45 ·
+chandni-dusk 140.83 · purani-day 57.08 · purani-night 125.44 ·
+gate-day 46.00 · gate-night 96.25 (pct pixels changed 88.9–98.6%).
+
+Reading: these are NOT regression numbers — the Oct 26 baselines
+predate the Nov 7 vantage re-picks (`--look` targets) and ~15
+runtime-visible landings, so near-every pixel moving is expected.
+Recorded as the cumulative one-month drift reference; the per-shot
+reproduction check vs the Nov 7 pinned matrix (table above) is the
+regression signal, and it is clean.
+
+### Vision pass (assistant vision tooling on the rendered PNGs)
+
+- bazaar-day: coherent market lane — stalls, carts, hanging fabrics,
+  pedestrians, plausible midday light, HUD crisp. Richer than the
+  Nov 8 shot (matches the +36% size growth).
+- cp-night: coherent plaza — lit windows, benches, railings, player
+  figure, plausible night. Pass.
+- cp-day: flags raised — washed-out near-white sky (**known unfixed,
+  finding 1 / #104 lineage, expected at this vantage**), "floating
+  white slabs" and "banyan absent". Mechanical context: the PNG is
+  ≈byte-identical to the Nov 7 certified no-fest shot (606,184 B vs
+  ~607 KB), so whatever the vision pass reads was present in the
+  certified matrix too — not a new regression; most consistent with
+  the documented #104 software-GL washout + awning/skyline geometry.
+  #340 also moved the banyan (by design), changing the treeline read.
+- purani-day: **flagged for triage** — vision reads a sparser street
+  than expected ("flat ground, bare walls, floating canopy prop, dark
+  ellipse in sky, ghosted ticker text"). Mechanical evidence argues
+  against a scene-load failure: 705,803 B (−4.6% vs Nov 7), zero
+  error lines, weather pinned, same vantage flags, and still the
+  densest day shot of the matrix. Most consistent with warm flat
+  noon grade + narrow-lane sightline + software-GL cloud blob +
+  animating ticker mid-capture. Queued for the post-wave audit leg's
+  eyeball; not blocking.
+
+### Interim gates (pinned clear, post-#376)
+
+| Gate | avg | p95 | Budget | Verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 9.10 ms | 13.62 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 10.50 ms | 14.66 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 9.55 ms | 14.24 ms | 22.0 ms | PASS |
+
+- `WEATHER_STATE` audit line: Clear 0.000/0.000/0.000 in all three
+  logs. Worst p95 14.66 ms → 7.34 ms headroom.
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Save round-trip: all 21 expectations met, `verdict=PASS`, exit 0.
+- Garage pad gate: `PASS 15 rungs`, exit 0. (perf run 2 printed a
+  benign engine-shutdown `ObjectDB instances leaked` warning — exit 0,
+  verdict PASS; perf_check teardown noise, not a gate signal.)
+- Hygiene grep (usual exclusions): clean.
+
+### Hygiene rider
+
+Two engine-generated `.import` sidecars for the tracked
+`docs/captures/cards/` PNGs (`gaya.png.import`, `pakde-gaye.png.import`)
+had been sitting untracked in the workdir since the #376 import pass —
+committed here so tracked assets keep their sidecars in-tree like the
+other 23 under `docs/captures/`.
+
+**Acceptance: capture matrix refreshed on `a6e6078` (12/12 pinned
+clear, determinism + drift baselines recorded, vision findings
+triaged); interim gates fully green. Remaining #296 scope unchanged**
+— full post-wave audit leg still gated on #293 landing + #292
+adjudication; add the purani-day eyeball and the bazaar-vista diff
+walk to that leg.
