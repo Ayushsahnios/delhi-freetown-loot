@@ -1413,3 +1413,38 @@ leg, so no regression signal anywhere.
 #296 scope unchanged** — full post-wave audit leg still gated on
 #293 landing and #292 adjudication (blocked-on-owner per the Nov 9
 Lane A handoff).
+
+## Interim refresh on master `ded4988` (2026-11-24, post-#372)
+
+The `9384c09` refresh (merged as #372) was the last documented
+baseline. Since then the loop merged #372 itself — again this
+sweep's own docs-only refresh PR — so master sits at `ded4988`
+with zero gameplay-code deltas since the `5e95b07` leg (every
+merge since #368 touched only this file). This leg re-pins the
+documented baseline on the exact commit every future leg diffs
+against. Method identical: sequential headless boots, weather
+pinned clear, `WEATHER_STATE` audit line checked in every perf log.
+
+| Gate (pinned clear) | avg | p95 | budget | verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 8.52 ms | 13.10 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 10.47 ms | 19.75 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 8.57 ms | 11.40 ms | 22.0 ms | PASS |
+
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Save round-trip (`save_check.tscn`): `verdict=PASS`, exit 0.
+- Garage pad gate (`garage_check.tscn`, #347): `garage_check: PASS 15
+  rungs, gates + rollout + save round-trip green`, exit 0.
+- Hygiene grep (repo-wide, usual exclusions): clean.
+
+Reading: all three perf gates pass; worst p95 leaves 2.25 ms
+headroom under the 22.0 ms budget. The default-run spread
+(8.52–10.47 ms avg) and the run-2 p95 spike repeat the
+shared-host load signature documented on the `a2c88cc`/`c0c63aa`/
+`0bf11f4`/`9384c09` legs; the game code surface is byte-identical
+to the `5e95b07` leg, so no regression signal anywhere.
+
+**Acceptance: interim refresh fully green on `ded4988`; remaining
+#296 scope unchanged** — full post-wave audit leg still gated on
+#293 landing and #292 adjudication (blocked-on-owner per the Nov 9
+Lane A handoff).
