@@ -169,6 +169,8 @@ var _hud_hp_text: Label
 var _hud_stars: Label
 var _hud_paan: Label
 var _paan_shops: Array[Vector3] = []
+var _paan_table_mesh: Mesh
+var _paan_crate_mesh: Mesh
 var _hawker_spots: Array[Dictionary] = []
 var _hud_stam_bg: ColorRect
 var _hud_stam_fill: ColorRect
@@ -2862,20 +2864,56 @@ func _build_paan_shops() -> void:
 
 
 func _add_paan_shop(pos: Vector3) -> void:
-	## One counter: wood base, glass display, betel crates and the green
-		## signboard every Delhi wall knows. Purely decorative + a bribe spot.
+	## One counter (issue #293 CC0 street slice): the Quaternius
+	## furniture table is the counter body with the glass display on
+	## top and KayKit crate stacks of betel stock flanking it; poles,
+	## green signboard and the PAAN label stay from the original
+	## design. Purely decorative + a bribe spot — no collider, exactly
+	## like the primitive counter it replaces, so the paan-eater pause
+	## behavior is untouched (interiors2 owns the walk-in shop and its
+	## colliders). CC0: assets/props/furniture/LICENSE.txt,
+	## assets/props/marketgoods/LICENSE.txt, LICENSES.md.
 	var root := Node3D.new()
 	root.position = pos
 	add_child(root)
-	root.add_child(_static_box(Vector3(1.9, 0.95, 0.85), Color(0.42, 0.28, 0.16), Vector3(0, 0.48, 0)))
-	var glass := _static_box(Vector3(1.7, 0.3, 0.66), Color(0.75, 0.92, 0.95, 0.55), Vector3(0, 1.1, 0))
-	glass.get_active_material(0).transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	root.add_child(glass)
-	root.add_child(_static_box(Vector3(0.55, 0.3, 0.4), Color(0.18, 0.5, 0.2), Vector3(1.35, 0.15, 0.3)))
-	root.add_child(_static_box(Vector3(0.55, 0.3, 0.4), Color(0.16, 0.45, 0.18), Vector3(-1.35, 0.15, -0.25)))
-	root.add_child(_static_box(Vector3(0.12, 2.6, 0.12), Color(0.35, 0.22, 0.12), Vector3(1.0, 1.3, -0.5)))
-	root.add_child(_static_box(Vector3(0.12, 2.6, 0.12), Color(0.35, 0.22, 0.12), Vector3(-1.0, 1.3, -0.5)))
-	root.add_child(_static_box(Vector3(2.2, 0.62, 0.1), Color(0.05, 0.38, 0.14), Vector3(0, 2.6, -0.5)))
+	if _paan_table_mesh == null:
+		_paan_table_mesh = load(
+				"res://assets/props/furniture/Table.obj") as Mesh
+	var top := 0.95
+	if _paan_table_mesh != null:
+		var tm := MeshInstance3D.new()
+		tm.mesh = _paan_table_mesh
+		tm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		tm.transform = Transform3D(Basis(Vector3.UP, 0.35), Vector3.ZERO)
+		root.add_child(tm)
+		top = 0.72
+	else:
+		root.add_child(_static_box(Vector3(1.9, 0.95, 0.85),
+				Color(0.42, 0.28, 0.16), Vector3(0, 0.48, 0)))
+	root.add_child(_paan_glass(top))
+	if _paan_crate_mesh == null:
+		_paan_crate_mesh = ClutterScript._kaykit_stack(
+				"res://assets/props/marketgoods/crate.gltf")
+	if _paan_crate_mesh != null:
+		for side: float in [-1.35, 1.35]:
+			var mi := MeshInstance3D.new()
+			mi.mesh = _paan_crate_mesh
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.transform = Transform3D(
+					Basis(Vector3.UP, 0.22 * signf(side)),
+					Vector3(side, 0.0, 0.3 if side > 0.0 else -0.25))
+			root.add_child(mi)
+	else:
+		root.add_child(_static_box(Vector3(0.55, 0.3, 0.4),
+				Color(0.18, 0.5, 0.2), Vector3(1.35, 0.15, 0.3)))
+		root.add_child(_static_box(Vector3(0.55, 0.3, 0.4),
+				Color(0.16, 0.45, 0.18), Vector3(-1.35, 0.15, -0.25)))
+	root.add_child(_static_box(Vector3(0.12, 2.6, 0.12),
+			Color(0.35, 0.22, 0.12), Vector3(1.0, 1.3, -0.5)))
+	root.add_child(_static_box(Vector3(0.12, 2.6, 0.12),
+			Color(0.35, 0.22, 0.12), Vector3(-1.0, 1.3, -0.5)))
+	root.add_child(_static_box(Vector3(2.2, 0.62, 0.1),
+			Color(0.05, 0.38, 0.14), Vector3(0, 2.6, -0.5)))
 	var sign := Label3D.new()
 	sign.text = "PAAN"
 	sign.font_size = 40
@@ -2883,6 +2921,16 @@ func _add_paan_shop(pos: Vector3) -> void:
 	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sign.position = Vector3(0, 2.6, -0.42)
 	root.add_child(sign)
+
+
+func _paan_glass(top: float) -> MeshInstance3D:
+	## Glass display case sitting on the counter top — procedural by
+	## design: it is the signature piece of a Delhi paan counter and no
+	## CC0 pack ships a display case. Alpha glass, no collider.
+	var glass := _static_box(Vector3(1.0, 0.28, 0.62),
+			Color(0.75, 0.92, 0.95, 0.55), Vector3(0, top + 0.16, 0))
+	glass.get_active_material(0).transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	return glass
 
 
 func _static_box(size: Vector3, color: Color, pos: Vector3) -> MeshInstance3D:
