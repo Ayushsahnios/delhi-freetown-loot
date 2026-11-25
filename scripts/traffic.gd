@@ -156,9 +156,11 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 	if "bd-now" in OS.get_cmdline_user_args():
 		_bd_timer = 0.5
 	# Jam events (issue #348): first gridlock after the opening gap.
-	# Hooks: `--jam-now` fires one at once for the headless gate;
-	# `--jam-auto` arms the timer without waiting for the player to
-	# step out (for scenes that script the player around).
+	# Hooks: `--jam-now` fires one at once for hand probes and capture
+	# audits; the headless gate scripts its own moment via
+	# fire_jam_now() so its lull baseline reads first; `--jam-auto`
+	# arms the timer without waiting for the player to step out (for
+	# scenes that script the player around).
 	_jam_timer = _rng.randf_range(JAM_FIRST_GAP.x, JAM_FIRST_GAP.y)
 	# Hook spellings: the gate invokes `-- --jam-now` (dashed) while
 	# hand probes may type it bare — accept both so the hook always lands.
@@ -596,6 +598,15 @@ func _on_jam_road(v: Dictionary) -> bool:
 func jam_active() -> bool:
 	## Horn-crescendo input (audio.gd, issue #348).
 	return not _jam.is_empty()
+
+func fire_jam_now() -> void:
+	## Gate/probe hook (issue #348): the next gridlock starts on the
+	## next physics tick, bypassing the arm guard. Called by the
+	## headless gate AFTER its pre-jam lull read — a setup-time
+	## pre-arm fires during the slow boot frames and pins the
+	## "pre-jam" target at the ceiling before the baseline lands.
+	_jam_timer = 0.0
+	_jam_forced = true
 
 func jam_debug() -> Dictionary:
 	## Issue #348 read-back for the headless gate + capture audits.

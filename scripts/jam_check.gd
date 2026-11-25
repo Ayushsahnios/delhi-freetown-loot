@@ -1,8 +1,8 @@
 extends Node
 ## Jam event gate (issue #348) — headless check that one arterial
-## gridlocks on cue. Boots the real game, forces the first jam with
-## --jam-now and asserts the full cycle:
-##   1. The jam fires within 8 s of start (--jam-now).
+## gridlocks on cue. Boots the real game, reads the pre-jam lull,
+## then fires the jam with fire_jam_now() and asserts the full cycle:
+##   1. The jam fires within 8 s of the fire_jam_now() call.
 ##   2. The name comes from the parody list (locality + -style).
 ##   3. The wave target pins at the rush ceiling (32) even at the
 ##      midday lull, and the fleet rolls up to it on ONE road.
@@ -12,7 +12,7 @@ extends Node
 ##   6. end_jam() clears the flags and the target falls back to the
 ##      clock curve (19 at noon).
 ## Usage:
-##   godot --headless --path . res://scenes/jam_check.tscn -- --jam-now
+##   godot --headless --path . res://scenes/jam_check.tscn
 ## Exits 0 with verdict=PASS when the whole cycle holds, 2 otherwise.
 
 const MAIN_SCENE := preload("res://scenes/main.tscn")
@@ -48,7 +48,10 @@ func _ready() -> void:
 		problems.append("lull target %d — expected 19 pre-jam"
 				% lull["target"])
 
-	# --jam-now: the first gridlock lands within 8 s.
+	# fire_jam_now(): the first gridlock lands within 8 s. Called here,
+	# after the lull read — a setup-time pre-arm fires during the slow
+	# boot frames and pins the "pre-jam" target at the ceiling.
+	traffic.fire_jam_now()
 	var fired: Dictionary = {}
 	var deadline := Time.get_ticks_msec() + 8000
 	while Time.get_ticks_msec() < deadline:

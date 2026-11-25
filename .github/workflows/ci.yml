@@ -70,9 +70,10 @@ jobs:
       - name: Jam event gate (issue 348)
         run: |
           set -o pipefail
-          # --jam-now forces the first gridlock at once so the full
-          # jam cycle (fire, pin, gap-run, release) is asserted.
-          timeout 180 godot --headless --path . res://scenes/jam_check.tscn -- --jam-now 2>&1 | tee /tmp/jam.log
+          # The gate reads its pre-jam lull first, then fires the jam
+          # via fire_jam_now() — no --jam-now pre-arm, which would
+          # race the lull baseline during the slow boot frames.
+          timeout 180 godot --headless --path . res://scenes/jam_check.tscn 2>&1 | tee /tmp/jam.log
           grep -q "verdict=PASS" /tmp/jam.log
 
       - name: Hygiene scan (no addresses or leaks in committed files)
