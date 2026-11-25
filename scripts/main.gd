@@ -181,6 +181,13 @@ var _hud_radio: Label
 var _police: Node
 var _missions: Node
 var _chaos_cd := 0.0
+## Issue #348: wrong-side escape pricing during a live jam —
+## position-delta velocity across frames, per-vehicle reset, and the
+## ping cadence; the e-challan lands once per jam.
+const JAM_FINE_RS := 60
+var _drive_prev := Vector3.INF
+var _drive_auto_id := 0
+var _jam_side_cd := 0.0
 var _flash: ColorRect
 var _fade: ColorRect
 var _hud_msg: Label
@@ -319,6 +326,9 @@ func _ready() -> void:
 	add_child(_traffic)
 	_traffic.setup(WORLD, PITCH, ROAD, GRID + 1)
 	_traffic.set_speed_bumps(_speed_bumps)
+	# Issue #348: jam events announce themselves on the HUD toast.
+	_traffic.jam_started.connect(
+			func(n: String): _show_toast("JAM · " + n))
 	# Monsoon street dressing (issue #225): pooling puddles, awning
 	# drips and wheel spray — pooled instances driven by the weather.
 	_monsoon = MonsoonScript.new()
@@ -2046,6 +2056,7 @@ func _process(delta: float) -> void:
 		return
 	_impact_cd = maxf(_impact_cd - delta, 0.0)
 	_chaos_cd = maxf(_chaos_cd - delta, 0.0)
+	_jam_side_cd = maxf(_jam_side_cd - delta, 0.0)
 	# Silent checkpoint save on a slow clock (issue 169): a browser
 	# refresh can never cost more than ~90 seconds of progress.
 	_autosave_t += delta
@@ -2120,6 +2131,27 @@ func _process(delta: float) -> void:
 			elif _traffic.ram_speed_at(current_auto.global_position) > 3.0:
 				_police.chaos_ram()
 				_chaos_cd = 0.5
+		# Issue #348: wrong-side gap-running through a live jam —
+		# heat per pass, an e-challan for the first one per jam.
+		if current_auto.get_instance_id() != _drive_auto_id:
+			_drive_auto_id = current_auto.get_instance_id()
+			_drive_prev = Vector3.INF
+		if _drive_prev == Vector3.INF:
+			_drive_prev = player.global_position
+		elif _jam_side_cd <= 0.0:
+			var drive_vel: Vector3 = (player.global_position - _drive_prev) \
+					/ maxf(delta, 0.016)
+			if _traffic.player_wrong_side(player.global_position, drive_vel):
+				_police.wrong_side_ping()
+				_jam_side_cd = 1.5
+				if _traffic.jam_fine_unpaid():
+					if _missions.spend(JAM_FINE_RS):
+						_traffic.jam_fine_paid()
+						_show_toast("WRONG SIDE · Rs %d e-challan" % JAM_FINE_RS)
+					else:
+						_show_toast("WRONG SIDE · challan unpaid — heat rising")
+			_drive_prev = player.global_position
+		_drive_prev = player.global_position
 	elif _metro_riding:
 		player.global_position = _metro.carriage_floor_pos()
 	_update_camera(delta)

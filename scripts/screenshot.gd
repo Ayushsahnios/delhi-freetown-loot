@@ -259,6 +259,13 @@ func _ready() -> void:
 				" intensity=%.3f" % wstate.get("intensity"),
 				" cloud=%.3f" % wstate.get("cloud"),
 				" wetness=%.3f" % wstate.get("wetness"))
+	var jsrc: Node = main.get("_traffic")
+	if jsrc != null and jsrc.has_method("jam_debug"):
+		var jd: Dictionary = jsrc.jam_debug()
+		print("jam: active=%s name=%s gaprun=%d on_jam_road=%d target=%d fleet=%d"
+				% [str(jd.get("active", false)), jd.get("name", ""),
+				int(jd.get("gaprun", 0)), int(jd.get("on_jam_road", 0)),
+				int(jd.get("target", 0)), int(jd.get("fleet", 0))])
 	get_tree().quit()
 
 

@@ -67,6 +67,14 @@ jobs:
           timeout 420 godot --headless --path . res://scenes/perf_check.tscn -- --frames 120 --warmup 45 --festival 2>&1 | tee /tmp/perf.log
           grep -q "verdict=PASS" /tmp/perf.log
 
+      - name: Jam event gate (issue 348)
+        run: |
+          set -o pipefail
+          # --jam-now forces the first gridlock at once so the full
+          # jam cycle (fire, pin, gap-run, release) is asserted.
+          timeout 180 godot --headless --path . res://scenes/jam_check.tscn -- --jam-now 2>&1 | tee /tmp/jam.log
+          grep -q "verdict=PASS" /tmp/jam.log
+
       - name: Hygiene scan (no addresses or leaks in committed files)
         run: |
           if grep -rEn '([0-9]{1,3}\.){3}[0-9]{1,3}|toke[n]|passwor[d]|secre[t]' \

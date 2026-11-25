@@ -650,14 +650,21 @@ func _update_context() -> void:
 	var pos: Vector3 = _player.global_position
 	_traffic_swell_db = 0.0
 	if _traffic != null and _traffic.has_method("near_horns"):
-		var near: Array = _traffic.near_horns(pos, 24.0, 3)
+		# Jam crescendo (issue #348): while traffic reports a live jam
+		# the reactive horn bed widens and fires fast — the gridlock
+		# honk wall. No new voices, the existing bed just pushed.
+		var jamming: bool = _traffic.has_method("jam_active") \
+				and _traffic.jam_active()
+		var near: Array = _traffic.near_horns(pos,
+				34.0 if jamming else 24.0, 5 if jamming else 3)
 		if not near.is_empty():
 			var d_near := pos.distance_to(near[0]["pos"])
 			_traffic_swell_db = lerpf(TRAFFIC_SWELL_MAX_DB, 0.0,
 					clampf((d_near - 4.0) / 18.0, 0.0, 1.0))
 			_reactive_cd -= 0.2
 			if _reactive_cd <= 0.0 and d_near < 18.0:
-				_reactive_cd = _rng.randf_range(3.0, 7.0)
+				_reactive_cd = _rng.randf_range(0.8, 2.0) if jamming \
+						else _rng.randf_range(3.0, 7.0)
 				_horn_at(near[_rng.randi_range(0, near.size() - 1)])
 	var d_bazaar := pos.distance_to(_bazaar_center)
 	var attn := 1.0 - clampf((d_bazaar - MURMUR_FULL_M)

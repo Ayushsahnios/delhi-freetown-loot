@@ -64,6 +64,28 @@ const BD_FIRST_GAP := Vector2(50.0, 110.0)
 const BD_GAP := Vector2(170.0, 340.0)
 const BD_KERB_IN := 0.45    # metres in from the kerb line — half on, half off
 
+# Delhi jam events (issue #348): a periodic gridlock moment on one
+# arterial — density pins at the rush ceiling, the fleet slow-rolls,
+# a share of the queue squeezes past on the wrong side and the horn
+# bed swells into a crescendo (audio.gd reads jam_active()).
+signal jam_started(tag: String)
+const JAM_FIRST_GAP := Vector2(60.0, 90.0)
+const JAM_GAP := Vector2(240.0, 420.0)
+const JAM_DUR := Vector2(60.0, 120.0)
+const JAM_SLOW := 0.45       # queued traffic crawls at this share of cruise
+const JAM_GAPRUN_SHARE := 0.22  # wrong-side overtakers in the queue
+const JAM_GAPRUN_SPEED := 0.6   # overtakers creep past, they don't race
+const JAM_GAPRUN_LANE := 0.75   # lateral squeeze past the stopped queue
+const JAM_ARM_M := 6.0       # auto jams wait for the player to move this far
+const JAM_NAMES := [
+	"ITO Mor-style gridlock",
+	"Anand Vihar-style snarl",
+	"DND-style toll crawl",
+]
+## Check scenes can silence jams entirely (daily_life_check asserts
+## the plain commute rhythm); --jam-now still fires for the gate.
+var jams_enabled := true
+
 var _vehicles: Array[Dictionary] = []
 var _player: Node3D = null
 var _rng := RandomNumberGenerator.new()
@@ -87,6 +109,11 @@ var _amb = null
 var _amb_timer := 60.0
 var _bd: Node3D = null
 var _bd_timer := 90.0
+var _jam := {}                 # active jam: name/along_z/road_i/road/left
+var _jam_timer := 60.0         # countdown to the next gridlock
+var _jam_forced := false       # --jam-now: fire regardless of the arm guard
+var _jam_auto := false         # --jam-auto: arm without player movement
+var _jam_spawn := Vector3.INF  # registration snapshot for the arm guard
 var _density_mult := 1.0
 var _target_n := COUNT
 var _wave_cd := 0.0
@@ -128,10 +155,25 @@ func setup(world_size: float, pitch: float, road_width: float, road_count: int) 
 	# once so headless checks can exercise pull-in/dwell/despawn.
 	if "bd-now" in OS.get_cmdline_user_args():
 		_bd_timer = 0.5
+	# Jam events (issue #348): first gridlock after the opening gap.
+	# Hooks: `--jam-now` fires one at once for the headless gate;
+	# `--jam-auto` arms the timer without waiting for the player to
+	# step out (for scenes that script the player around).
+	_jam_timer = _rng.randf_range(JAM_FIRST_GAP.x, JAM_FIRST_GAP.y)
+	# Hook spellings: the gate invokes `-- --jam-now` (dashed) while
+	# hand probes may type it bare — accept both so the hook always lands.
+	var jam_args := OS.get_cmdline_user_args()
+	if jam_args.has("--jam-now") or jam_args.has("jam-now"):
+		_jam_timer = 0.5
+		_jam_forced = true
+	_jam_auto = jam_args.has("--jam-auto") or jam_args.has("jam-auto")
 
 
 func register_player(p: Node3D) -> void:
 	_player = p
+	# Arm snapshot (issue #348): auto jams wait until the player has
+	# actually moved — static-player check scenes never see one fire.
+	_jam_spawn = p.global_position
 
 
 func set_hours(h: float) -> void:
@@ -162,6 +204,12 @@ func _spawn(roll_in := false) -> Dictionary:
 	var along_z := _rng.randf() < 0.5
 	var road_i := _rng.randi_range(0, _roads - 1)
 	var road := -_world / 2.0 + road_i * _pitch - (_pitch - _road_w) / 2.0
+	# Jam roll-in (issue #348): while one arterial is gridlocked, new
+	# traffic joins THAT street so the density spike reads on one road.
+	if not _jam.is_empty():
+		along_z = _jam["along_z"]
+		road_i = _jam["road_i"]
+		road = _jam["road"]
 	var dir := 1 if _rng.randf() < 0.5 else -1
 	var t := _rng.randf_range(-_world / 2.0, _world / 2.0)
 	# Rush roll-in (issue #268): the surplus joins near the player so a
@@ -206,6 +254,13 @@ func _spawn(roll_in := false) -> Dictionary:
 		"t": t, "speed": cruise, "cruise": cruise, "bob": 0.0,
 		"kerb_n": 0.0, "amb_yield": false, "leave_s": 0.0,
 	}
+	# Jam runners (issue #348): a share of the roll-in squeezes past
+	# the queue; need_runner guarantees at least one overtaker.
+	if not _jam.is_empty():
+		if _rng.randf() < JAM_GAPRUN_SHARE \
+				or bool(_jam.get("need_runner", false)):
+			v["gaprun"] = true
+			_jam["need_runner"] = false
 	_apply_transform(v)
 	return v
 
@@ -218,6 +273,11 @@ func _physics_process(delta: float) -> void:
 		target = minf(target, _bump_limit(v))
 		if v.amb_yield:
 			target = minf(target, v.cruise * AMB_SLOW)
+		if not _jam.is_empty() and _on_jam_road(v):
+			# Gridlock slow-roll (issue #348): the queue crawls; the
+			# wrong-side runners creep past a little quicker.
+			target = minf(target, v.cruise * (JAM_GAPRUN_SPEED
+					if v.get("gaprun", false) else JAM_SLOW))
 		v.bob = maxf(v.bob - delta / 0.5, 0.0)
 		var rate := BRAKE if target < v.speed else ACCEL
 		v.speed = move_toward(v.speed, target, rate * delta)
@@ -231,6 +291,7 @@ func _physics_process(delta: float) -> void:
 	_idle_exhaust(delta)
 	_tick_ambulance(delta)
 	_tick_breakdown(delta)
+	_tick_jam(delta)
 
 
 func _tick_wave(delta: float) -> void:
@@ -274,10 +335,15 @@ func _tick_wave(delta: float) -> void:
 
 
 func _wave_target() -> void:
-	## Fleet target for the current clock hour + preset scale.
+	## Fleet target for the current clock hour + preset scale. A live
+	## jam (issue #348) pins the ceiling whatever the hour — a gridlock
+	## reads as gridlock — until end_jam() releases it.
 	_density_mult = _wave_mult(_hours)
 	_target_n = clampi(roundi(float(COUNT) * _density_mult
 			* density_scale), MIN_FLEET, PEAK_COUNT)
+	if not _jam.is_empty():
+		_target_n = clampi(roundi(float(PEAK_COUNT) * density_scale),
+				MIN_FLEET, PEAK_COUNT)
 
 
 func _wave_mult(h: float) -> float:
@@ -332,6 +398,10 @@ func _apply_transform(v: Dictionary) -> void:
 	# kerb_n grows while yielding to the ambulance (issue #215): the
 	# lane offset eases outward from the road centre, never inward.
 	var lane: float = (LANE + float(v.kerb_n)) * v.dir
+	# Wrong-side overtake (issue #348): flagged runners squeeze past
+	# the stopped queue on the opposite side at a shallower offset.
+	if v.get("gaprun", false):
+		lane = -(LANE * JAM_GAPRUN_LANE) * v.dir
 	if v.along_z:
 		v.pos = Vector3(v.road + lane, y, v.t)
 		v.heading = PI if v.dir > 0 else 0.0
@@ -446,6 +516,127 @@ func _spawn_breakdown() -> void:
 	_bd = Breakdown.new()
 	add_child(_bd)
 	_bd.setup(along_z, road, dir, start_t, _road_w / 2.0 - BD_KERB_IN)
+
+# ---------------------------------------------------------------- jam events
+
+func _tick_jam(delta: float) -> void:
+	## Issue #348 lifecycle: gap → pick one arterial near the player →
+	## pin the fleet at the rush ceiling → clear after the duration.
+	## Auto jams arm only once the player has left the registration
+	## snapshot, so static-player check scenes never see one; --jam-now
+	## (forced) and --jam-auto bypass that guard.
+	if not jams_enabled:
+		return
+	if _jam.is_empty():
+		if not _jam_forced and not _jam_auto:
+			if _player == null:
+				return
+			if _jam_spawn.is_finite() \
+						and _player.global_position.distance_to(
+						_jam_spawn) < JAM_ARM_M:
+					return
+		_jam_timer -= delta
+		if _jam_timer <= 0.0:
+			_start_jam()
+		return
+	_jam["left"] = float(_jam["left"]) - delta
+	if float(_jam["left"]) <= 0.0:
+		end_jam()
+
+func _start_jam() -> void:
+	## One arterial goes solid. The road picks near the player when one
+	## is live so the gridlock reads on YOUR street; the queue gets its
+	## wrong-side runners; the name goes out on jam_started.
+	var along_z := _rng.randf() < 0.5
+	var road_i := _rng.randi_range(0, _roads - 1)
+	if _player != null:
+		var pc: float = _player.global_position.x if along_z \
+				else _player.global_position.z
+		var want := clampf(pc + _rng.randf_range(-30.0, 30.0),
+				-_world / 2.0, _world / 2.0)
+		road_i = clampi(roundi((want + _world / 2.0) / _pitch),
+				0, _roads - 1)
+	var road := -_world / 2.0 + road_i * _pitch - (_pitch - _road_w) / 2.0
+	var tag: String = JAM_NAMES[_rng.randi_range(0, JAM_NAMES.size() - 1)]
+	_jam = {"name": tag, "along_z": along_z, "road_i": road_i,
+			"road": road, "left": _rng.randf_range(JAM_DUR.x, JAM_DUR.y)}
+	# Runners (issue #348): a share of the on-road queue flips to the
+	# wrong side. The share roll can miss on a thin road, so the first
+	# roll-in spawn is forced when nobody took the bait — a jam always
+	# shows at least one overtake.
+	var flagged := false
+	for v in _vehicles:
+		if v.along_z != along_z or absf(float(v.road) - road) > 1.0:
+			continue
+		v["gaprun"] = _rng.randf() < JAM_GAPRUN_SHARE
+		if bool(v["gaprun"]):
+			flagged = true
+	if not flagged:
+		_jam["need_runner"] = true
+	jam_started.emit(tag)
+	_wave_target()
+
+func end_jam() -> void:
+	## Queue dissolves: runners merge back, flags clear, the fleet falls
+	## back to the hour's density and the timer re-arms. Public — the
+	## headless gate calls it to prove the release.
+	for v in _vehicles:
+		v.erase("gaprun")
+	_jam = {}
+	_jam_timer = _rng.randf_range(JAM_GAP.x, JAM_GAP.y)
+	_wave_target()
+
+func _on_jam_road(v: Dictionary) -> bool:
+	## True when v runs on the jammed arterial (either direction).
+	if _jam.is_empty():
+		return false
+	return v.along_z == _jam["along_z"] \
+			and absf(float(v.road) - float(_jam["road"])) <= 1.0
+
+func jam_active() -> bool:
+	## Horn-crescendo input (audio.gd, issue #348).
+	return not _jam.is_empty()
+
+func jam_debug() -> Dictionary:
+	## Issue #348 read-back for the headless gate + capture audits.
+	var on_road := 0
+	var gaprun := 0
+	if not _jam.is_empty():
+		for v in _vehicles:
+			if _on_jam_road(v):
+				on_road += 1
+				if v.get("gaprun", false):
+					gaprun += 1
+	return {"active": not _jam.is_empty(),
+			"name": String(_jam.get("name", "")),
+			"along_z": bool(_jam.get("along_z", false)),
+			"road": float(_jam.get("road", 0.0)),
+			"ends_s": float(_jam.get("left", 0.0)),
+			"gaprun": gaprun, "on_jam_road": on_road,
+			"target": _target_n, "fleet": _vehicles.size()}
+
+func player_wrong_side(pos: Vector3, vel: Vector3) -> bool:
+	## The escape mechanic (issue #348): true while the PLAYER drives
+	## against the flow on the jammed arterial — a clear lateral sign
+	## flip inside the strip, past the centreline. Ambient convention:
+	## dir+1 rides road+LANE on z-roads, road−LANE on x-roads.
+	if _jam.is_empty() or vel.length() < 3.0:
+		return false
+	var along_z: bool = _jam["along_z"]
+	var road: float = _jam["road"]
+	var lateral: float = (pos.x if along_z else pos.z) - road
+	if absf(lateral) > _road_w / 2.0 or absf(lateral) < 1.2:
+		return false
+	var dir := 1 if (vel.z if along_z else vel.x) > 0.0 else -1
+	return signf(lateral) != float(dir if along_z else -dir)
+
+func jam_fine_unpaid() -> bool:
+	## True once per jam: the first wrong-side ping still owes the
+	## e-challan. main.gd charges it through the wallet and confirms.
+	return not _jam.is_empty() and not bool(_jam.get("fined", false))
+
+func jam_fine_paid() -> void:
+	_jam["fined"] = true
 
 
 func _amb_yield(delta: float) -> void:
