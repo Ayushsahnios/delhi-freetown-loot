@@ -1955,3 +1955,56 @@ re-run fresh on the merged tree:
 Remaining #296 scope unchanged** — full post-wave audit leg still
 gated on #293 owner eyeball + #292 adjudication; purani vantage
 re-pick and paan-counter aimed capture stay queued for that leg.
+
+---
+
+## Soak leg on master `42df3cc` (2026-11-25, post-#382)
+
+The #382 interim leg re-pinned every short gate fresh on `380b091`
+(the exact runtime game-code surface of current master) about an
+hour before this run; re-measuring them again on a byte-identical
+surface would be pure churn. This leg spends its budget on the #296
+acceptance item whose data is stalest relative to real asset deltas:
+the 30-minute soak. Its last recorded run is the post-#375 leg
+(`75986a0`) — which predates the #379 paan-counter CC0 swap
+(Quaternius table + KayKit betel crates, merged 13:46 UTC); every
+other merge between was this sweep's own doc appendage, so the soak
+had not yet exercised the new street-corner props in a long run.
+
+### Soak (post-#379 paan-counter runtime, `42df3cc` tree)
+
+Vendored `tools/qa/soak273.tscn` driver, headless, setsid-detached,
+hosted solo in a background session with no parallel gate load. The
+run reached its own t=1800 s verdict block — a formal SUMMARY-
+printing run (the second in the sweep's history, after the `d515bd5`
+2026-11-08 run) rather than an externally reaped one.
+
+- 23 ticks t=60→1740 s (a few 60-s tick gaps — wall-clock slowdowns,
+  benign), zero `SCRIPT ERROR`/`ERROR:` lines in the log.
+- Player alive and playing through the last tick (`player_sane=true`
+  at every sample) — PASS after 30 min.
+- Orphan nodes **0 at every tick** — drift +0 (start 0 → end 0) →
+  PASS.
+- Static-memory drift 219,229 → 221,187 KB over t=60→1740 s =
+  **+1,958 KB over 28 min** vs the 200,000 KB drift budget (~1.0%
+  used) — PASS; flat in the 219.2–221.2 MB band, settling after
+  t≈1500 s. Same warmup order as the post-#375 leg (+970 KB) and
+  the 2026-11-08 lineage (+2,163 KB on the formal run).
+- Walkers steady at 66 the whole run; day_t cycling coherently
+  (0.08→0.83 wraps).
+- `SOAK273 SUMMARY passes=3 fails=0 ticks=23` — the driver's own
+  verdict block, not a recompute.
+
+### Gates (this leg)
+
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero error lines.
+- Hygiene grep (repo-wide, usual exclusions): clean.
+- Perf gates, save round-trip, and garage pad are current from the
+  #382 re-pin on the same game-code surface (`380b091`); not re-run
+  this leg, to keep the soak hosted solo (no parallel gate load).
+
+**Acceptance: soak re-PASS — formal SUMMARY, first post-#379 soak —
+the 30-min acceptance item is current again. Remaining #296 scope
+unchanged** — full post-wave audit leg still gated on #293 owner
+eyeball + #292 adjudication (purani vantage re-pick + paan-counter
+aimed capture queued for it).
