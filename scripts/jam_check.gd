@@ -35,8 +35,11 @@ func _ready() -> void:
 		get_tree().quit(2)
 		return
 
-	# Noon lull: the clock curve alone says 19.
+	# Noon lull: the clock curve alone says 19. The hour is pinned on
+	# traffic directly — main's daily-life fan-out can lag a beat at
+	# boot, and the pre-jam baseline must not race it.
 	main.day_t = 0.5
+	traffic.set_hours(12.0)
 	await _settle(12)
 	var lull: Dictionary = traffic.wave_debug()
 	print("lull    fleet %d target %d — midday before the jam"
