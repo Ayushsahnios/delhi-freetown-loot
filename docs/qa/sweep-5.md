@@ -2008,3 +2008,64 @@ the 30-min acceptance item is current again. Remaining #296 scope
 unchanged** — full post-wave audit leg still gated on #293 owner
 eyeball + #292 adjudication (purani vantage re-pick + paan-counter
 aimed capture queued for it).
+
+---
+
+## Interim leg 2026-11-25 ~16:05 UTC — gates + formal soak re-pinned on `5a5d189` (post-#384 jam events)
+
+Lane A · master `5a5d189` = #384 (issue #348 Delhi jam events:
+traffic.gd +204, main.gd +32, audio.gd/police.gd/daily_life_check.gd
+touches, new scripts/jam_check.gd + scenes/jam_check.tscn + the CI
+jam-gate step). First real game-code delta since the #379 paan-counter
+leg — every gate re-measured first-hand on the post-merge hash, the
+NEW jam_check gate added to the sweep, and the formal 30-min soak
+re-run on the jam-events runtime, all in this leg.
+
+| Gate | avg | p95 | Budget | Verdict |
+|---|---|---|---|---|
+| Default `--frames 240 --warmup 90`, run 1 | 12.64 ms | 17.83 ms | 22.0 ms | PASS |
+| Default `--frames 240 --warmup 90`, run 2 | 14.79 ms | 23.14 ms | 22.0 ms | PASS |
+| Festival `--frames 120 --warmup 45` (`--festival` forced) | 14.07 ms | 45.98 ms | 22.0 ms | PASS |
+
+- All three are the driver-printed verdicts on the live host (both
+  lanes active — contention window). Averages sit above the
+  contention-free 8–12 ms band, consistent with host load plus the
+  jam dressing (events pin +13 fleet vehicles on the jam road); every
+  verdict PASS with headroom on the average.
+- **jam_check (new #348 gate, first sweep-5 measurement):** lull
+  fleet 19 → jam fired on road 52.0 (ITO Mor-style gridlock) → peak
+  fleet 32, on_jam_road 14, gap-runners 4 (wrong-side), perf avg
+  16.11 ms / 22.0 budget over 120 jam frames, clean release (fleet
+  19, gaprun 0), zero error lines, `verdict=PASS`. Avg is above the
+  #384 branch reference (12.46 ms) under contention, inside budget.
+- Import: exit 0. Smoke `--quit-after 5`: exit 0, zero
+  `SCRIPT ERROR`/`ERROR:` lines. Save round-trip: 21/21 expectations,
+  `verdict=PASS`. Garage pad: `PASS 15 rungs, gates + rollout + save
+  round-trip green`. Hygiene grep (usual exclusions): clean.
+
+### Soak (formal, post-#384 jam-events runtime, `5a5d189` tree)
+
+Driver `tools/qa/soak273.tscn`, headless, setsid-detached, hosted solo
+— no parallel gate load from this run during its window. Reached the
+driver's own t=1740 s verdict block: a formal SUMMARY-printing run
+(third in the sweep's history, after 2026-11-08 and #383).
+
+- 21 ticks t=60→1740 s (~29 min; a few 60-s tick gaps — wall-clock
+  slowdowns, benign, same lineage as #383's soak). Zero
+  `SCRIPT ERROR`/`ERROR:` lines in the log.
+- `SOAK273 PASS — player alive and playing after 30 min`
+  (`player_sane=true` at every tick).
+- Orphan nodes **0 at every tick** — drift +0 → PASS.
+- Static-memory drift **+2014 KB** (219,136 → 221,151 KB) vs the
+  200,000 KB drift budget — PASS; same warmup profile as the #383
+  soak (+1,958 KB).
+- Walkers steady at 66 the whole run; day_t cycling coherently
+  (0.08→0.83 wraps).
+- `SOAK273 SUMMARY passes=3 fails=0 ticks=21` — the driver's own
+  verdict block, not a recompute.
+
+**Acceptance: interim gates + jam gate + formal soak re-pinned fresh
+on `5a5d189` — the jam-events runtime is now the measured surface.
+Remaining #296 scope unchanged** — full post-wave audit leg still
+gated on #293 owner eyeball + #292 adjudication (purani vantage
+re-pick + paan-counter aimed capture queued for it).
