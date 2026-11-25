@@ -176,6 +176,11 @@ func bat_ping(pos: Vector3) -> bool:
 			return true
 	return false
 
+func wrong_side_ping() -> void:
+	## Issue #348: the player gap-ran the wrong side of a live jam —
+	## half a star of heat, the same register as the bat ping.
+	_raise(0.5)
+
 
 func _raise(amount: float) -> void:
 	if respect:

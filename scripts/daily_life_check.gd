@@ -48,6 +48,10 @@ func _ready() -> void:
 		print("FAILED: daily life wiring missing (life/peds/food/traffic)")
 		get_tree().quit(2)
 		return
+	# Issue #348: jam events pin the fleet at the rush ceiling on a
+	# random road — this gate asserts the plain commute rhythm, so
+	# jams stay silent for its whole run.
+	traffic.jams_enabled = false
 
 	# Noon: shutters open to lintel slats, full crowd, bulbs dark.
 	main.day_t = 0.5
