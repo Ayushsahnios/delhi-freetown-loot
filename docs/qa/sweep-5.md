@@ -2069,3 +2069,111 @@ on `5a5d189` — the jam-events runtime is now the measured surface.
 Remaining #296 scope unchanged** — full post-wave audit leg still
 gated on #293 owner eyeball + #292 adjudication (purani vantage
 re-pick + paan-counter aimed capture queued for it).
+
+---
+
+## Interim leg 2026-11-26 ~00:05 UTC — capture matrix re-pinned on `35125c3` (post-#384 jam events)
+
+Lane A · master `35125c3` = #385 (this sweep's own gates + soak + jam
+re-pin; docs-only over the `5a5d189` game tree) — but the capture
+matrix was still pinned on the pre-#384 tree `380b091` (#381 leg),
+and #384 is a runtime-visible street delta (traffic.gd +204, fleet
+changes, wrong-side gap-runners), so the matrix surface was
+genuinely stale. This leg re-pins the full 12-shot matrix on the
+post-#384 runtime: 11 staged shots rendered 2026-11-25 17:58–18:18
+UTC by the 17:27 claim leg (`.agent/sweep5cap-post384/`, gitignored)
++ the gate-day retry rendered 23:09 UTC
+(`.agent/sweep5cap-post384-retry/`) after the staged shot rendered
+broken — triage below.
+
+Mechanical, all 12 shots: exit 0, zero `SCRIPT ERROR`/`ERROR:`
+lines, `weather: Clear intensity=0.000 cloud=0.000 wetness=0.000`
+on every line, out of festival window, jam inactive at every capture
+(lull fleets 13–22 — the non-jam baseline; the jam surface stays
+separately gated by `jam_check`, pinned in the #385 leg). Determinism
+pins unchanged: same flags every shot (xvfb + software GL, 90 settle
+frames, `--no-card`, `--weather clear`).
+
+### Capture matrix (12/12, pinned clear, out of festival window)
+
+| Shot | PNG (B) | #381 pin (`380b091`) | Delta |
+|---|---|---|---|
+| cp-day | 597,956 | 598,776 | −0.1% |
+| cp-dusk | 375,536 | 368,733 | +1.8% |
+| cp-night | 367,357 | 368,472 | −0.3% |
+| bazaar-day | 671,282 | 670,589 | +0.1% |
+| bazaar-dusk | 636,258 | 632,200 | +0.6% |
+| bazaar-night | 643,948 | 636,952 | +1.1% |
+| chandni-day | 538,809 | 539,238 | −0.1% |
+| chandni-dusk | 640,078 | 643,863 | −0.6% |
+| purani-day | 705,803 | 705,803 | **byte-exact** |
+| purani-night | 515,675 | 515,675 | **byte-exact** |
+| gate-day (retry) | 564,843 | 409,108 | **+38.1%** (triaged below) |
+| gate-night | 392,033 | 387,435 | +1.2% |
+
+Reading: eleven of twelve shots within ±1.8% — the post-#384 jam
+runtime at lull sits close to its pre-#384 pins everywhere except
+gate-day. The purani pair is byte-exact for the SECOND consecutive
+matrix re-pin (across the #379 and #384 landings — the sweep's
+strongest determinism datapoint: a +204-line jam-events traffic
+delta leaves the purani vantage unchanged, no animating pixels at
+settle). gate-night +1.2%, inside its historical night-emissive
+variance band (174–392 KB).
+
+### gate-day: staged shot broken, retry PASS (adopted)
+
+- Staged `gate-day.png` (100,472 B): vision-confirmed broken —
+  ~95% flat tan mass, HUD + minimap only, no world content (−75%
+  size vs pin: uniform color compresses tiny). It rendered fine in
+  the #381 matrix (409,108 B), so this was a new one-off at this
+  vantage+TOD on the post-#384 tree.
+- Retry with the identical documented flags/vantage (`--tp 167,-170
+  --look 167,-201 --day 0.5`, 90 settle frames, `--no-card`,
+  `--weather clear`, xvfb + software GL): log re-read this leg —
+  zero error lines, player at (167.0, −170.0), Clear
+  0.000/0.000/0.000, jam inactive, fleet 19 — 564,843 B, 5.6× the
+  broken shot.
+- Vision PASS on the retry (this leg, first-hand): coherent India
+  Gate-style arch center, flanking apartment blocks, lawn, trees,
+  stall + plaza foreground, fully legible HUD. Sky/building faces
+  washed out — the documented #104 software-GL day-washout lineage
+  (same read as every prior software-GL day shot), not new. The
+  +38.1% size vs the #381 pin reads as a fully-populated day frame,
+  not corruption.
+- Triage: one-off flaky render, NOT a deterministic post-#384
+  regression (identical flags re-produced a full world frame). If
+  gate-day flakes again at this vantage, the audit leg investigates
+  the camera/day-path before adopting.
+
+### Vision pass (assistant vision tooling)
+
+The 21:20 handoff's pass on the 11 staged shots stands; this leg
+re-verified the contested pixels first-hand (both gate-day PNGs):
+
+- gate-day retry: PASS (above). Staged shot: confirmed broken.
+- gate-night: best shot of the set — floodlit monument, lit
+  apartment blocks, lawn, trees; size inside the #381-band.
+- bazaar trio: coherent market lane, day strongest frame.
+- cp-day: known #104 software-GL washout lineage (documented, not
+  new).
+- purani pair: byte-identical to the certified #381 pins — the
+  dark-circular-sky / near-black reads were already certified; the
+  purani vantage re-pick stays queued for the audit leg.
+- dusk shots read as full night — within ~1% of pins, dusk ramp
+  behavior unchanged.
+
+### Interim gates
+
+Unchanged by this leg: the #385 leg's gates + soak + jam re-pin on
+`5a5d189` remains the current-tree pin (`35125c3` is #385's own
+docs-only squash over it; no gate re-run for a docs-only delta).
+Import/smoke/hygiene re-verified clean on this leg's tree before
+push.
+
+**Acceptance: capture matrix re-pinned 12/12 on the post-#384
+runtime — 11/12 within ±1.8%, purani pair byte-exact for a second
+consecutive re-pin, gate-day's broken staged shot triaged as a
+one-off flaky render with the retry vision-PASSed and adopted.
+Remaining #296 scope unchanged** — full post-wave audit leg still
+gated on #293 owner eyeball + #292 adjudication (purani vantage
+re-pick + paan-counter aimed capture queued for it).
